@@ -506,9 +506,17 @@ impl ServeCommand {
                 if tokio::signal::ctrl_c().await.is_ok() {
                     tracing::info!(
                         target = "ironclaw::reborn::cli::serve",
-                        "ctrl-c received; signalling WebChat v2 graceful shutdown",
+                        "ctrl-c received; signalling graceful shutdown. Press Ctrl+C again to force exit.",
                     );
                     let _ = shutdown_tx.send(());
+                }
+
+                if tokio::signal::ctrl_c().await.is_ok() {
+                    tracing::warn!(
+                        target = "ironclaw::reborn::cli::serve",
+                        "second ctrl-c received; force exiting",
+                    );
+                    std::process::exit(1);
                 }
             });
 
