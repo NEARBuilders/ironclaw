@@ -28,21 +28,21 @@ use ironclaw_product_workflow::{
     RebornCancelRunResponse, RebornConnectableChannelListResponse, RebornCreateThreadResponse,
     RebornDeleteThreadRequest, RebornDeleteThreadResponse, RebornExtensionActionResponse,
     RebornExtensionListResponse, RebornExtensionRegistryResponse, RebornListAutomationsResponse,
-    RebornListThreadsResponse, RebornOperatorCommandPlaneResponse, RebornOperatorConfigGetResponse,
-    RebornOperatorConfigListResponse, RebornOperatorConfigSetRequest,
-    RebornOperatorConfigValidateRequest, RebornOperatorConfigValidateResponse,
-    RebornOperatorLogsQuery, RebornOperatorServiceLifecycleRequest, RebornOperatorSetupRequest,
-    RebornOperatorSetupResponse, RebornOutboundDeliveryTargetListResponse,
-    RebornOutboundPreferencesResponse, RebornResolveGateResponse, RebornServicesApi,
-    RebornServicesError, RebornServicesErrorCode, RebornServicesErrorKind,
-    RebornSetOutboundPreferencesRequest, RebornSetupExtensionResponse, RebornSkillActionResponse,
-    RebornSkillContentResponse, RebornSkillListResponse, RebornSkillSearchResponse,
-    RebornStreamEventsRequest, RebornSubmitTurnResponse, RebornTimelineRequest,
-    RebornTimelineResponse, SetActiveLlmRequest, UpsertLlmProviderRequest,
+    RebornListThreadsResponse,     RebornGetThreadStateRequest, RebornGetThreadStateResponse, RebornOperatorCommandPlaneResponse,
+    RebornOperatorConfigGetResponse, RebornOperatorConfigListResponse,
+    RebornOperatorConfigSetRequest, RebornOperatorConfigValidateRequest,
+    RebornOperatorConfigValidateResponse, RebornOperatorLogsQuery,
+    RebornOperatorServiceLifecycleRequest, RebornOperatorSetupRequest, RebornOperatorSetupResponse,
+    RebornOutboundDeliveryTargetListResponse, RebornOutboundPreferencesResponse,
+    RebornResolveGateResponse, RebornServicesApi, RebornServicesError, RebornServicesErrorCode,
+    RebornServicesErrorKind, RebornSetOutboundPreferencesRequest, RebornSetupExtensionResponse,
+    RebornSkillActionResponse, RebornSkillContentResponse, RebornSkillListResponse,
+    RebornSkillSearchResponse, RebornStreamEventsRequest, RebornSubmitTurnResponse,
+    RebornTimelineRequest, RebornTimelineResponse, SetActiveLlmRequest, UpsertLlmProviderRequest,
     WebUiAuthenticatedCaller, WebUiCancelRunRequest, WebUiCreateThreadRequest,
     WebUiInboundValidationCode, WebUiInboundValidationError, WebUiListAutomationsRequest,
-    WebUiListThreadsRequest, WebUiResolveGateRequest, WebUiSendMessageRequest,
-    WebUiSetupExtensionRequest,
+    WebUiListThreadsRequest, WebUiMintAccessSessionRequest, WebUiMintAccessSessionResponse,
+    WebUiResolveGateRequest, WebUiSendMessageRequest, WebUiSetupExtensionRequest,
 };
 use serde::{Deserialize, Serialize};
 
@@ -1245,6 +1245,38 @@ async fn ws_drain_loop(
             }
         }
     }
+}
+
+/// `GET /api/webchat/v2/threads/{thread_id}/state`
+///
+/// Returns the authoritative thread state for UI rebuild: all messages,
+/// summary artifacts, and thread metadata in a single response.
+pub async fn get_thread_state(
+    State(state): State<WebUiV2State>,
+    Extension(caller): Extension<WebUiAuthenticatedCaller>,
+    Path(thread_id): Path<String>,
+) -> Result<Json<RebornGetThreadStateResponse>, WebUiV2HttpError> {
+    let response = state
+        .services()
+        .get_thread_state(caller, RebornGetThreadStateRequest { thread_id })
+        .await?;
+    Ok(Json(response))
+}
+
+/// `POST /api/webchat/v2/operator/access-sessions`
+///
+/// Mint a tenant-scoped signed session token. Only available on operator
+/// routes; the descriptor enforces operator auth.
+pub async fn operator_create_access_session(
+    State(state): State<WebUiV2State>,
+    Extension(caller): Extension<WebUiAuthenticatedCaller>,
+    Json(body): Json<WebUiMintAccessSessionRequest>,
+) -> Result<Json<WebUiMintAccessSessionResponse>, WebUiV2HttpError> {
+    let response = state
+        .services()
+        .mint_access_session(caller, body)
+        .await?;
+    Ok(Json(response))
 }
 
 /// Send a WS frame (or close, when `frame` is `None`) bounded by

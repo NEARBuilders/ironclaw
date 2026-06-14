@@ -81,6 +81,21 @@ export const TimelineSchema = z.object({
   }),
 });
 
+export const ThreadStateSchema = z.object({
+  thread: ThreadSchema,
+  messages: z.array(TimelineEntrySchema),
+  summaryArtifacts: z.array(
+    z.object({
+      summaryId: z.string(),
+      threadId: z.string(),
+      startSequence: z.number(),
+      endSequence: z.number(),
+      summaryKind: z.string(),
+      content: z.string(),
+    }),
+  ),
+});
+
 export const AcceptedResponseSchema = z.object({
   outcome: z.string(),
   threadId: z.string(),
@@ -94,118 +109,173 @@ export const AcceptedResponseSchema = z.object({
   eventCursor: z.number().optional(),
 });
 
+export const AguiChunkSchema = z.object({
+  type: z.string(),
+  threadId: z.string().optional(),
+  runId: z.string().optional(),
+  messageId: z.string().optional(),
+  toolCallId: z.string().optional(),
+  toolCallName: z.string().optional(),
+  delta: z.string().optional(),
+  content: z.string().optional(),
+  result: z.any().optional(),
+  state: z.string().optional(),
+  finishReason: z.string().optional(),
+  name: z.string().optional(),
+  value: z.any().optional(),
+  input: z.any().optional(),
+  role: z.string().optional(),
+  messages: z.array(z.any()).optional(),
+  message: z.string().optional(),
+  code: z.string().optional(),
+});
+
 export const GateResolutionSchema = z.enum([
-  "approved", "denied", "credential_provided", "cancelled",
+  "approved",
+  "denied",
+  "credential_provided",
+  "cancelled",
 ]);
 
 export const ChatEventSchema = z.object({
   cursor: z.string().optional(),
   type: z.enum([
-    "accepted", "running", "capability_progress", "capability_activity",
-    "capability_display_preview", "gate", "auth_required",
-    "final_reply", "cancelled", "failed",
-    "projection_snapshot", "projection_update", "keep_alive",
+    "accepted",
+    "running",
+    "capability_progress",
+    "capability_activity",
+    "capability_display_preview",
+    "gate",
+    "auth_required",
+    "final_reply",
+    "cancelled",
+    "failed",
+    "projection_snapshot",
+    "projection_update",
+    "keep_alive",
   ]),
-  ack: z.object({
-    outcome: z.string(),
-    threadId: z.string(),
-    runId: z.string().optional(),
-    activeRunId: z.string().optional(),
-    acceptedMessageRef: z.string(),
-    status: z.string(),
-    turnId: z.string().optional(),
-    eventCursor: z.number().optional(),
-  }).optional(),
-  progress: z.object({
-    kind: z.string(),
-    turnRunId: z.string().optional(),
-    generatedAt: z.string().optional(),
-  }).optional(),
-  activity: z.object({
-    invocationId: z.string(),
-    turnRunId: z.string().optional(),
-    threadId: z.string().optional(),
-    capabilityId: z.string(),
-    status: z.string(),
-    provider: z.string().optional(),
-    runtime: z.string().optional(),
-    processId: z.string().optional(),
-    outputBytes: z.number().optional(),
-    errorKind: z.string().optional(),
-    updatedAt: z.string(),
-  }).optional(),
-  preview: z.object({
-    timelineMessageId: z.string().optional(),
-    invocationId: z.string(),
-    turnRunId: z.string().optional(),
-    threadId: z.string().optional(),
-    capabilityId: z.string(),
-    status: z.string(),
-    title: z.string(),
-    subtitle: z.string().optional(),
-    inputSummary: z.string().optional(),
-    outputSummary: z.string().optional(),
-    outputPreview: z.string().optional(),
-    outputKind: z.string().optional(),
-    outputBytes: z.number().optional(),
-    resultRef: z.string().optional(),
-    truncated: z.boolean(),
-    updatedAt: z.string(),
-  }).optional(),
-  reply: z.object({
-    text: z.string(),
-    turnRunId: z.string(),
-    generatedAt: z.string(),
-  }).optional(),
-  prompt: z.object({
-    turnRunId: z.string(),
-    gateRef: z.string(),
-    headline: z.string(),
-    body: z.string(),
-    allowAlways: z.boolean().optional(),
-      approvalContext: z.object({
-        toolName: z.string(),
-        action: z.string(),
-        scope: z.string(),
-        reason: z.string().optional(),
-        destination: z.unknown().optional(),
-        details: z.array(z.unknown()).optional(),
-      }).optional(),
-  }).optional(),
-  authPrompt: z.object({
-    turnRunId: z.string(),
-    authRequestRef: z.string(),
-    headline: z.string(),
-    body: z.string(),
-    challengeKind: z.string().optional(),
-    provider: z.string().optional(),
-    accountLabel: z.string().optional(),
-    authorizationUrl: z.string().optional(),
-    expiresAt: z.string().optional(),
-  }).optional(),
-  response: z.object({
-    runId: z.string(),
-    status: z.string(),
-    eventCursor: z.number(),
-    alreadyTerminal: z.boolean(),
-  }).optional(),
-  runState: z.object({
-    turnId: z.string(),
-    runId: z.string(),
-    status: z.string(),
-    eventCursor: z.number(),
-    acceptedMessageRef: z.string(),
-    resolvedRunProfileId: z.string(),
-    resolvedRunProfileVersion: z.number(),
-    receivedAt: z.string(),
-    checkpointId: z.string().optional(),
-    gateRef: z.string().optional(),
-    failure: z.unknown().optional(),
-  }).optional(),
-  state: z.object({
-    threadId: z.string(),
-    items: z.array(z.unknown()),
-  }).optional(),
+  ack: z
+    .object({
+      outcome: z.string(),
+      threadId: z.string(),
+      runId: z.string().optional(),
+      activeRunId: z.string().optional(),
+      acceptedMessageRef: z.string(),
+      status: z.string(),
+      turnId: z.string().optional(),
+      eventCursor: z.number().optional(),
+    })
+    .optional(),
+  progress: z
+    .object({
+      kind: z.string(),
+      turnRunId: z.string().optional(),
+      generatedAt: z.string().optional(),
+    })
+    .optional(),
+  activity: z
+    .object({
+      invocationId: z.string(),
+      turnRunId: z.string().optional(),
+      threadId: z.string().optional(),
+      capabilityId: z.string(),
+      status: z.string(),
+      provider: z.string().optional(),
+      runtime: z.string().optional(),
+      processId: z.string().optional(),
+      outputBytes: z.number().optional(),
+      errorKind: z.string().optional(),
+      updatedAt: z.string(),
+    })
+    .optional(),
+  preview: z
+    .object({
+      timelineMessageId: z.string().optional(),
+      invocationId: z.string(),
+      turnRunId: z.string().optional(),
+      threadId: z.string().optional(),
+      capabilityId: z.string(),
+      status: z.string(),
+      title: z.string(),
+      subtitle: z.string().optional(),
+      inputSummary: z.string().optional(),
+      outputSummary: z.string().optional(),
+      outputPreview: z.string().optional(),
+      outputKind: z.string().optional(),
+      outputBytes: z.number().optional(),
+      resultRef: z.string().optional(),
+      truncated: z.boolean(),
+      updatedAt: z.string(),
+    })
+    .optional(),
+  reply: z
+    .object({
+      text: z.string(),
+      turnRunId: z.string(),
+      generatedAt: z.string(),
+    })
+    .optional(),
+  prompt: z
+    .object({
+      turnRunId: z.string(),
+      gateRef: z.string(),
+      headline: z.string(),
+      body: z.string(),
+      allowAlways: z.boolean().optional(),
+      approvalContext: z
+        .object({
+          toolName: z.string(),
+          action: z.string(),
+          scope: z.string(),
+          reason: z.string().optional(),
+          destination: z.unknown().optional(),
+          details: z.array(z.unknown()).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+  authPrompt: z
+    .object({
+      turnRunId: z.string(),
+      authRequestRef: z.string(),
+      headline: z.string(),
+      body: z.string(),
+      challengeKind: z.string().optional(),
+      provider: z.string().optional(),
+      accountLabel: z.string().optional(),
+      authorizationUrl: z.string().optional(),
+      expiresAt: z.string().optional(),
+    })
+    .optional(),
+  response: z
+    .object({
+      runId: z.string(),
+      status: z.string(),
+      eventCursor: z.number(),
+      alreadyTerminal: z.boolean(),
+    })
+    .optional(),
+  runState: z
+    .object({
+      turnId: z.string(),
+      runId: z.string(),
+      status: z.string(),
+      eventCursor: z.number(),
+      acceptedMessageRef: z.string(),
+      resolvedRunProfileId: z.string(),
+      resolvedRunProfileVersion: z.number(),
+      receivedAt: z.string(),
+      checkpointId: z.string().optional(),
+      gateRef: z.string().optional(),
+      failure: z.unknown().optional(),
+    })
+    .optional(),
+  state: z
+    .object({
+      threadId: z.string(),
+      items: z.array(z.unknown()),
+    })
+    .optional(),
 });
 
 export const AuthProviderSchema = z.object({
@@ -243,12 +313,14 @@ export const AutomationSchema = z.object({
 });
 
 export const OutboundPreferencesSchema = z.object({
-  finalReplyTarget: z.object({
-    targetId: z.string(),
-    channel: z.string(),
-    displayName: z.string(),
-    description: z.string().optional(),
-  }).optional(),
+  finalReplyTarget: z
+    .object({
+      targetId: z.string(),
+      channel: z.string(),
+      displayName: z.string(),
+      description: z.string().optional(),
+    })
+    .optional(),
   status: z.string().optional(),
   modality: z.string().optional(),
 });
@@ -290,11 +362,13 @@ export const ExtensionSchema = z.object({
   activationError: z.string().optional(),
   version: z.string().optional(),
   onboardingState: z.string().optional(),
-  onboarding: z.object({
-    credentialInstructions: z.string().optional(),
-    setupUrl: z.string().optional(),
-    credentialNextStep: z.string().optional(),
-  }).optional(),
+  onboarding: z
+    .object({
+      credentialInstructions: z.string().optional(),
+      setupUrl: z.string().optional(),
+      credentialNextStep: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const ExtensionRegistryEntrySchema = z.object({
@@ -315,11 +389,13 @@ export const ExtensionActionResponseSchema = z.object({
   awaitingToken: z.boolean().optional(),
   instructions: z.string().optional(),
   onboardingState: z.string().optional(),
-  onboarding: z.object({
-    credentialInstructions: z.string().optional(),
-    setupUrl: z.string().optional(),
-    credentialNextStep: z.string().optional(),
-  }).optional(),
+  onboarding: z
+    .object({
+      credentialInstructions: z.string().optional(),
+      setupUrl: z.string().optional(),
+      credentialNextStep: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const ExtensionSetupSchema = z.object({
@@ -332,34 +408,40 @@ export const ExtensionSetupDetailSchema = z.object({
   phase: z.string(),
   blockers: z.array(z.unknown()),
   payload: z.unknown().optional(),
-  secrets: z.array(z.object({
-    name: z.string(),
-    provider: z.string(),
-    prompt: z.string(),
-    optional: z.boolean(),
-    provided: z.boolean(),
-    setup: z.union([
-      z.literal("manual_token"),
-      z.object({
-        kind: z.literal("oauth"),
-        accountLabel: z.string(),
-        scopes: z.array(z.string()),
-        invocationId: z.string(),
-      }),
-    ]),
-    credentialRef: z.string().optional(),
-  })),
-  fields: z.array(z.object({
-    name: z.string(),
-    prompt: z.string(),
-    optional: z.boolean(),
-    placeholder: z.string().optional(),
-  })),
-  onboarding: z.object({
-    credentialInstructions: z.string().optional(),
-    setupUrl: z.string().optional(),
-    credentialNextStep: z.string().optional(),
-  }).optional(),
+  secrets: z.array(
+    z.object({
+      name: z.string(),
+      provider: z.string(),
+      prompt: z.string(),
+      optional: z.boolean(),
+      provided: z.boolean(),
+      setup: z.union([
+        z.literal("manual_token"),
+        z.object({
+          kind: z.literal("oauth"),
+          accountLabel: z.string(),
+          scopes: z.array(z.string()),
+          invocationId: z.string(),
+        }),
+      ]),
+      credentialRef: z.string().optional(),
+    }),
+  ),
+  fields: z.array(
+    z.object({
+      name: z.string(),
+      prompt: z.string(),
+      optional: z.boolean(),
+      placeholder: z.string().optional(),
+    }),
+  ),
+  onboarding: z
+    .object({
+      credentialInstructions: z.string().optional(),
+      setupUrl: z.string().optional(),
+      credentialNextStep: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const SkillSchema = z.object({
@@ -412,9 +494,9 @@ export const ConnectableChannelSchema = z.object({
 });
 
 export const contract = oc.router({
-  ping: oc.route({ method: "GET", path: "/ping", summary: "Health check" }).output(
-    z.object({ status: z.literal("ok"), timestamp: z.iso.datetime() }),
-  ),
+  ping: oc
+    .route({ method: "GET", path: "/ping", summary: "Health check" })
+    .output(z.object({ status: z.literal("ok"), timestamp: z.iso.datetime() })),
 
   session: oc
     .route({ method: "GET", path: "/session", summary: "Get current ironclaw session" })
@@ -424,18 +506,22 @@ export const contract = oc.router({
   threads: {
     list: oc
       .route({ method: "GET", path: "/threads", summary: "List threads" })
-      .input(z.object({
-        limit: z.number().optional(),
-        cursor: z.string().optional(),
-      }))
+      .input(
+        z.object({
+          limit: z.number().optional(),
+          cursor: z.string().optional(),
+        }),
+      )
       .output(ThreadListSchema)
       .errors(Errors),
 
     create: oc
       .route({ method: "POST", path: "/threads", summary: "Create a new thread" })
-      .input(z.object({
-        clientActionId: z.string().optional(),
-      }))
+      .input(
+        z.object({
+          clientActionId: z.string().optional(),
+        }),
+      )
       .output(ThreadCreateSchema)
       .errors(Errors),
 
@@ -447,37 +533,45 @@ export const contract = oc.router({
 
     sendMessage: oc
       .route({ method: "POST", path: "/threads/{id}/messages", summary: "Send a message" })
-      .input(z.object({
-        id: z.string(),
-        content: z.string(),
-        clientActionId: z.string().optional(),
-      }))
+      .input(
+        z.object({
+          id: z.string(),
+          content: z.string(),
+          clientActionId: z.string().optional(),
+        }),
+      )
       .output(AcceptedResponseSchema)
       .errors(Errors),
 
     getTimeline: oc
       .route({ method: "GET", path: "/threads/{id}/timeline", summary: "Get thread timeline" })
-      .input(z.object({
-        id: z.string(),
-        limit: z.number().optional(),
-        cursor: z.string().optional(),
-      }))
+      .input(
+        z.object({
+          id: z.string(),
+          limit: z.number().optional(),
+          cursor: z.string().optional(),
+        }),
+      )
       .output(TimelineSchema)
       .errors(Errors),
 
     cancelRun: oc
       .route({ method: "POST", path: "/threads/{id}/runs/{runId}/cancel", summary: "Cancel a run" })
-      .input(z.object({
-        id: z.string(),
-        runId: z.string(),
-      }))
-      .output(z.object({
-        success: z.boolean(),
-        runId: z.string().optional(),
-        status: z.string().optional(),
-        eventCursor: z.number().optional(),
-        alreadyTerminal: z.boolean().optional(),
-      }))
+      .input(
+        z.object({
+          id: z.string(),
+          runId: z.string(),
+        }),
+      )
+      .output(
+        z.object({
+          success: z.boolean(),
+          runId: z.string().optional(),
+          status: z.string().optional(),
+          eventCursor: z.number().optional(),
+          alreadyTerminal: z.boolean().optional(),
+        }),
+      )
       .errors(Errors),
 
     resolveGate: oc
@@ -486,13 +580,15 @@ export const contract = oc.router({
         path: "/threads/{id}/runs/{runId}/gates/{gateRef}/resolve",
         summary: "Resolve an approval gate",
       })
-      .input(z.object({
-        id: z.string(),
-        runId: z.string(),
-        gateRef: z.string(),
-        resolution: GateResolutionSchema,
-        always: z.boolean().optional(),
-      }))
+      .input(
+        z.object({
+          id: z.string(),
+          runId: z.string(),
+          gateRef: z.string(),
+          resolution: GateResolutionSchema,
+          always: z.boolean().optional(),
+        }),
+      )
       .output(z.object({ success: z.boolean() }))
       .errors(Errors),
 
@@ -502,21 +598,59 @@ export const contract = oc.router({
         path: "/threads/{id}/events",
         summary: "Stream chat events via SSE",
       })
-      .input(z.object({
-        id: z.string(),
-        afterCursor: z.string().optional(),
-      }))
+      .input(
+        z.object({
+          id: z.string(),
+          afterCursor: z.string().optional(),
+        }),
+      )
       .output(eventIterator(ChatEventSchema))
+      .errors(Errors),
+
+    getState: oc
+      .route({
+        method: "GET",
+        path: "/threads/{id}/state",
+        summary: "Get authoritative thread state for UI rebuild",
+      })
+      .input(z.object({ id: z.string() }))
+      .output(ThreadStateSchema)
+      .errors(Errors),
+
+    chatStream: oc
+      .route({
+        method: "POST",
+        path: "/threads/{id}/chat-stream",
+        summary: "Send message and stream AG-UI events for TanStack AI useChat",
+      })
+      .input(
+        z.object({
+          id: z.string(),
+          content: z.string(),
+          clientActionId: z.string().optional(),
+          messages: z
+            .array(
+              z.object({
+                role: z.string(),
+                content: z.string(),
+              }),
+            )
+            .optional(),
+        }),
+      )
+      .output(eventIterator(AguiChunkSchema))
       .errors(Errors),
   },
 
   automations: {
     list: oc
       .route({ method: "GET", path: "/automations", summary: "List automations" })
-      .input(z.object({
-        limit: z.number().optional(),
-        runLimit: z.number().optional(),
-      }))
+      .input(
+        z.object({
+          limit: z.number().optional(),
+          runLimit: z.number().optional(),
+        }),
+      )
       .output(z.object({ data: z.array(AutomationSchema) }))
       .errors(Errors),
   },
@@ -535,7 +669,12 @@ export const contract = oc.router({
 
     listTargets: oc
       .route({ method: "GET", path: "/outbound/targets", summary: "List delivery targets" })
-      .output(z.object({ data: z.array(OutboundTargetSchema), nextCursor: z.string().nullable().optional() }))
+      .output(
+        z.object({
+          data: z.array(OutboundTargetSchema),
+          nextCursor: z.string().nullable().optional(),
+        }),
+      )
       .errors(Errors),
   },
 
@@ -557,7 +696,11 @@ export const contract = oc.router({
       .errors(Errors),
 
     activate: oc
-      .route({ method: "POST", path: "/extensions/{name}/activate", summary: "Activate an extension" })
+      .route({
+        method: "POST",
+        path: "/extensions/{name}/activate",
+        summary: "Activate an extension",
+      })
       .input(z.object({ name: z.string() }))
       .output(ExtensionActionResponseSchema)
       .errors(Errors),
@@ -569,7 +712,11 @@ export const contract = oc.router({
       .errors(Errors),
 
     getSetup: oc
-      .route({ method: "GET", path: "/extensions/{name}/setup", summary: "Get extension setup state" })
+      .route({
+        method: "GET",
+        path: "/extensions/{name}/setup",
+        summary: "Get extension setup state",
+      })
       .input(z.object({ name: z.string() }))
       .output(ExtensionSetupDetailSchema)
       .errors(Errors),
@@ -580,11 +727,13 @@ export const contract = oc.router({
         path: "/extensions/{name}/setup",
         summary: "Setup/configure an extension",
       })
-      .input(z.object({
-        name: z.string(),
-        action: z.string(),
-        payload: z.record(z.string(), z.unknown()).optional(),
-      }))
+      .input(
+        z.object({
+          name: z.string(),
+          action: z.string(),
+          payload: z.record(z.string(), z.unknown()).optional(),
+        }),
+      )
       .output(ExtensionSetupSchema)
       .errors(Errors),
   },
@@ -634,6 +783,29 @@ export const contract = oc.router({
         summary: "List connectable channels",
       })
       .output(z.object({ data: z.array(ConnectableChannelSchema) }))
+      .errors(Errors),
+  },
+
+  operator: {
+    createAccessSession: oc
+      .route({
+        method: "POST",
+        path: "/operator/access-sessions",
+        summary: "Mint a tenant-scoped access session token",
+      })
+      .input(
+        z.object({
+          tenantId: z.string(),
+          agentId: z.string().optional(),
+          projectId: z.string().optional(),
+        }),
+      )
+      .output(
+        z.object({
+          token: z.string(),
+          expiresAt: z.iso.datetime(),
+        }),
+      )
       .errors(Errors),
   },
 

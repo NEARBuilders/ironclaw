@@ -2,23 +2,17 @@ import { EventSource as NodeEventSource } from "eventsource";
 import { Effect } from "every-plugin/effect";
 import type { z } from "every-plugin/zod";
 
-function onEvent(
-  es: NodeEventSource,
-  type: string,
-  handler: (e: MessageEvent) => void,
-): void {
+function onEvent(es: NodeEventSource, type: string, handler: (e: MessageEvent) => void): void {
   es.addEventListener(type, handler);
 }
 
-function offEvent(
-  es: NodeEventSource,
-  type: string,
-  handler: (e: MessageEvent) => void,
-): void {
+function offEvent(es: NodeEventSource, type: string, handler: (e: MessageEvent) => void): void {
   es.removeEventListener(type, handler);
 }
+
 import type {
   AcceptedResponseSchema,
+  AguiChunkSchema,
   AutomationSchema,
   ChatEventSchema,
   ConnectableChannelSchema,
@@ -36,6 +30,7 @@ import type {
   ThreadCreateSchema,
   ThreadListSchema,
   ThreadSchema,
+  ThreadStateSchema,
   TimelineEntrySchema,
   TimelineSchema,
 } from "./contract";
@@ -46,6 +41,7 @@ type ThreadCreate = z.infer<typeof ThreadCreateSchema>;
 type Timeline = z.infer<typeof TimelineSchema>;
 type AcceptedResponse = z.infer<typeof AcceptedResponseSchema>;
 type ChatEvent = z.infer<typeof ChatEventSchema>;
+type AguiChunk = z.infer<typeof AguiChunkSchema>;
 type OutboundPreferences = z.infer<typeof OutboundPreferencesSchema>;
 type Automation = z.infer<typeof AutomationSchema>;
 type Extension = z.infer<typeof ExtensionSchema>;
@@ -56,6 +52,7 @@ type SkillSearchResponse = z.infer<typeof SkillSearchResponseSchema>;
 type SkillContentResponse = z.infer<typeof SkillContentResponseSchema>;
 type SkillActionResponse = z.infer<typeof SkillActionResponseSchema>;
 type ConnectableChannel = z.infer<typeof ConnectableChannelSchema>;
+type ThreadState = z.infer<typeof ThreadStateSchema>;
 
 const BODY_METHODS = new Set(["POST", "PUT", "PATCH"]);
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -556,6 +553,9 @@ export class IronclawService {
         return base as ChatEvent;
       };
 
+      let retryDelayMs = 1_000;
+      const MAX_RETRY_DELAY_MS = 30_000;
+
       while (true) {
         const url = `${baseUrl}/api/webchat/v2/threads/${encodeURIComponent(id)}/events?token=${encodeURIComponent(token)}${cursor ? `&after_cursor=${encodeURIComponent(cursor)}` : ""}`;
         const es = new NodeEventSource(url);
@@ -618,6 +618,205 @@ export class IronclawService {
           for (const type of eventTypes) {
             offEvent(es, type, handlers[type]!);
           }
+        }
+
+        // Exponential backoff with jitter to avoid reconnect storms.
+        await new Promise((res) => setTimeout(res, retryDelayMs));
+        retryDelayMs = Math.min(retryDelayMs * 2, MAX_RETRY_DELAY_MS);
+      }
+    })();
+
+    return generator;
+  }
+
+  streamAguiChat(
+    id: string,
+    content: string,
+    clientActionId?: string,
+    messages?: Array<{ role: string; content: string }>,
+  ): AsyncGenerator<AguiChunk> {
+    const svc = this;
+    const generator: AsyncGenerator<AguiChunk> = (async function* () {
+      const accepted = await Effect.runPromise(svc.sendMessage(id, content, clientActionId));
+
+      const replyMsgId = `reply-${accepted.runId || crypto.randomUUID()}`;
+      const runId = accepted.runId || accepted.activeRunId || crypto.randomUUID();
+      const pendingToolCalls = new Map<string, { name: string }>();
+      let toolCounter = 0;
+      let finished = false;
+      let firstEvent = true;
+
+      const eventCursor = (accepted as Record<string, unknown>).eventCursor;
+
+      const splitIntoDeltas = (text: string): string[] => {
+        if (text.length <= 150) return [text];
+        const deltas: string[] = [];
+        const sentences = text.match(/[^.!?\n]+[.!?\n]+\s*/g) || [text];
+        let current = "";
+        for (const sentence of sentences) {
+          if (current.length + sentence.length <= 150 && current.length > 0) {
+            current += sentence;
+          } else {
+            if (current) deltas.push(current);
+            current = sentence;
+          }
+        }
+        if (current) deltas.push(current);
+        if (deltas.length === 0) deltas.push(text);
+        return deltas;
+      };
+
+      const events = svc.streamEvents(id, eventCursor != null ? String(eventCursor) : undefined);
+
+      for await (const event of events) {
+        if (finished) break;
+
+        switch (event.type) {
+          case "accepted": {
+            if (firstEvent) {
+              yield { type: "RUN_STARTED", threadId: id, runId };
+              firstEvent = false;
+            }
+            break;
+          }
+
+          case "capability_progress": {
+            const toolCallId = event.progress?.turnRunId || `tc-${++toolCounter}`;
+            pendingToolCalls.set(toolCallId, { name: event.progress?.kind || "tool" });
+            yield {
+              type: "TOOL_CALL_START",
+              toolCallId,
+              toolCallName: event.progress?.kind || "tool",
+            };
+            break;
+          }
+
+          case "capability_activity": {
+            const act = event.activity;
+            if (act) {
+              pendingToolCalls.delete(act.invocationId);
+              yield {
+                type: "TOOL_CALL_END",
+                toolCallId: act.invocationId,
+                toolCallName: act.capabilityId,
+                state: act.status === "completed" ? "output-available" : "output-error",
+                result: act.status,
+              };
+            }
+            break;
+          }
+
+          case "capability_display_preview": {
+            const preview = event.preview;
+            if (preview) {
+              pendingToolCalls.delete(preview.invocationId);
+              yield {
+                type: "TOOL_CALL_END",
+                toolCallId: preview.invocationId,
+                toolCallName: preview.capabilityId,
+                state: "output-available",
+                result: preview.outputSummary || preview.title || "",
+              };
+            }
+            break;
+          }
+
+          case "final_reply": {
+            for (const [tcId, tc] of pendingToolCalls) {
+              yield {
+                type: "TOOL_CALL_END",
+                toolCallId: tcId,
+                toolCallName: tc.name,
+                state: "output-available",
+              };
+            }
+            pendingToolCalls.clear();
+
+            const replyText = event.reply?.text || "";
+            yield { type: "TEXT_MESSAGE_START", messageId: replyMsgId, role: "assistant" };
+
+            const deltas = splitIntoDeltas(replyText);
+            for (const delta of deltas) {
+              yield {
+                type: "TEXT_MESSAGE_CONTENT",
+                messageId: replyMsgId,
+                delta,
+                content: replyText,
+              };
+            }
+
+            yield { type: "TEXT_MESSAGE_END", messageId: replyMsgId };
+            yield { type: "RUN_FINISHED", runId, finishReason: "stop" };
+            finished = true;
+            break;
+          }
+
+          case "gate": {
+            const prompt = event.prompt;
+            if (prompt) {
+              yield {
+                type: "CUSTOM",
+                name: "approval-requested",
+                value: {
+                  toolCallId: prompt.gateRef,
+                  toolName: prompt.approvalContext?.toolName || "unknown",
+                  input: prompt.approvalContext || {},
+                  approval: { id: prompt.gateRef, needsApproval: true },
+                },
+              };
+            }
+            break;
+          }
+
+          case "auth_required": {
+            yield {
+              type: "CUSTOM",
+              name: "auth-required",
+              value: event.authPrompt || {},
+            };
+            break;
+          }
+
+          case "cancelled":
+            yield { type: "RUN_FINISHED", runId, finishReason: "stop" };
+            finished = true;
+            break;
+
+          case "failed":
+            yield {
+              type: "RUN_ERROR",
+              message:
+                typeof event.runState?.failure === "object" && event.runState?.failure !== null
+                  ? String(
+                      (event.runState.failure as Record<string, unknown>).message || "Run failed",
+                    )
+                  : "Run failed",
+              code: "run_failed",
+            };
+            finished = true;
+            break;
+
+          case "projection_snapshot":
+          case "projection_update": {
+            const state = event.state;
+            if (state?.items && Array.isArray(state.items)) {
+              const uiMessages = state.items
+                .filter((item: any) => item.kind === "User" || item.kind === "Assistant")
+                .map((item: any) => ({
+                  id: item.message_id || item.messageId || crypto.randomUUID(),
+                  role: (item.kind === "User" ? "user" : "assistant") as "user" | "assistant",
+                  parts: [{ type: "text" as const, text: item.content || "" }],
+                  createdAt: item.created_at || item.createdAt,
+                }));
+              if (uiMessages.length > 0) {
+                yield { type: "MESSAGES_SNAPSHOT", messages: uiMessages };
+              }
+            }
+            break;
+          }
+
+          case "keep_alive":
+            break;
         }
       }
     })();
@@ -1033,6 +1232,51 @@ export class IronclawService {
       try: () => this.request<void>("POST", "/auth/logout"),
       catch: (error: unknown) =>
         new Error(`Failed to logout: ${error instanceof Error ? error.message : String(error)}`),
+    });
+  }
+
+  getThreadState(id: string): Effect.Effect<ThreadState, Error> {
+    return Effect.tryPromise({
+      try: async () => {
+        const raw: any = await this.request(
+          "GET",
+          `/api/webchat/v2/threads/${encodeURIComponent(id)}/state`,
+        );
+        return {
+          thread: mapThreadRecord(raw.thread),
+          messages: (raw.messages ?? []).map(mapThreadEntry),
+          summaryArtifacts: raw.summary_artifacts ?? [],
+        } as ThreadState;
+      },
+      catch: (error: unknown) => {
+        if (error instanceof IronclawUpstreamError) return error;
+        return new Error(
+          `Failed to get thread state: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      },
+    });
+  }
+
+  createAccessSession(
+    tenantId: string,
+    agentId?: string,
+    projectId?: string,
+  ): Effect.Effect<{ token: string; expiresAt: string }, Error> {
+    return Effect.tryPromise({
+      try: async () => {
+        const raw: any = await this.request("POST", "/api/webchat/v2/operator/access-sessions", {
+          tenant_id: tenantId,
+          agent_id: agentId,
+          project_id: projectId,
+        });
+        return { token: raw.token, expiresAt: raw.expires_at };
+      },
+      catch: (error: unknown) => {
+        if (error instanceof IronclawUpstreamError) return error;
+        return new Error(
+          `Failed to create access session: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      },
     });
   }
 }

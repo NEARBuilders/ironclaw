@@ -21,6 +21,7 @@ export default createPlugin({
 
   secrets: z.object({
     IRONCLAW_API_TOKEN: z.string().optional(),
+    IRONCLAW_BASE_URL: z.string().optional(),
   }),
 
   context: z.object({
@@ -48,17 +49,15 @@ export default createPlugin({
       ? config.secrets.IRONCLAW_API_TOKEN
       : undefined;
 
-    const resolveService = (reqCtx: {
-      baseUrl?: string;
-      apiToken?: string;
-    }) => {
-      const baseUrl = reqCtx.baseUrl ?? config.variables.baseUrl;
+    const resolveService = (reqCtx: { baseUrl?: string; apiToken?: string }) => {
+      const baseUrl =
+        reqCtx.baseUrl ?? config.secrets.IRONCLAW_BASE_URL ?? config.variables.baseUrl;
       const apiToken = reqCtx.apiToken ?? defaultToken;
       if (!isConfigured(apiToken)) {
         throw new ORPCError("PRECONDITION_FAILED", {
           message:
-            "IronClaw is not configured. Set the API token in Settings → IronClaw, "
-            + "or provide IRONCLAW_API_TOKEN via the plugin secrets configuration.",
+            "IronClaw is not configured. Set the API token in Settings → IronClaw, " +
+            "or provide IRONCLAW_API_TOKEN via the plugin secrets configuration.",
         });
       }
       return new IronclawService(baseUrl, apiToken);
@@ -73,10 +72,15 @@ export default createPlugin({
 
     const toOrpcError = (error: unknown): never => {
       if (error instanceof IronclawUpstreamError) {
-        const code: any = (
-          { 400: "BAD_REQUEST", 401: "UNAUTHORIZED", 403: "FORBIDDEN",
-            404: "NOT_FOUND", 409: "CONFLICT", 412: "PRECONDITION_FAILED" }
-        )[error.status] ?? "GATEWAY_ERROR";
+        const code: any =
+          {
+            400: "BAD_REQUEST",
+            401: "UNAUTHORIZED",
+            403: "FORBIDDEN",
+            404: "NOT_FOUND",
+            409: "CONFLICT",
+            412: "PRECONDITION_FAILED",
+          }[error.status] ?? "GATEWAY_ERROR";
         throw new ORPCError(code, {
           message: error.message,
           data: {
@@ -95,7 +99,8 @@ export default createPlugin({
       });
     };
 
-    const r = (fn: (svc: IronclawService, ctx: any) => any) =>
+    const r =
+      (fn: (svc: IronclawService, ctx: any) => any) =>
       async ({ context: ctx }: any) => {
         try {
           return await fn(resolveService(ctx), ctx);
@@ -104,7 +109,8 @@ export default createPlugin({
         }
       };
 
-    const ri = (fn: (svc: IronclawService, input: any, ctx: any) => any) =>
+    const ri =
+      (fn: (svc: IronclawService, input: any, ctx: any) => any) =>
       async ({ input, context: ctx }: any) => {
         try {
           return await fn(resolveService(ctx), input, ctx);
@@ -130,18 +136,20 @@ export default createPlugin({
     return {
       ping: builder.ping.handler(r((svc) => Effect.runPromise(svc.ping()))),
 
-      session: builder.session.use(requireAuth).handler(
-        r((svc) => Effect.runPromise(svc.getSession())),
-      ),
+      session: builder.session
+        .use(requireAuth)
+        .handler(r((svc) => Effect.runPromise(svc.getSession()))),
 
       threads: {
-        list: builder.threads.list.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.listThreads(input.limit, input.cursor))),
-        ),
+        list: builder.threads.list
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) => Effect.runPromise(svc.listThreads(input.limit, input.cursor))),
+          ),
 
-        create: builder.threads.create.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.createThread(input.clientActionId))),
-        ),
+        create: builder.threads.create
+          .use(requireAuth)
+          .handler(ri((svc, input) => Effect.runPromise(svc.createThread(input.clientActionId)))),
 
         delete: builder.threads.delete.use(requireAuth).handler(
           ri(async (svc, input) => {
@@ -150,21 +158,25 @@ export default createPlugin({
           }),
         ),
 
-        sendMessage: builder.threads.sendMessage.use(requireAuth).handler(
-          ri((svc, input) =>
-            Effect.runPromise(svc.sendMessage(input.id, input.content, input.clientActionId)),
+        sendMessage: builder.threads.sendMessage
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) =>
+              Effect.runPromise(svc.sendMessage(input.id, input.content, input.clientActionId)),
+            ),
           ),
-        ),
 
-        getTimeline: builder.threads.getTimeline.use(requireAuth).handler(
-          ri((svc, input) =>
-            Effect.runPromise(svc.getTimeline(input.id, input.limit, input.cursor)),
+        getTimeline: builder.threads.getTimeline
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) =>
+              Effect.runPromise(svc.getTimeline(input.id, input.limit, input.cursor)),
+            ),
           ),
-        ),
 
-        cancelRun: builder.threads.cancelRun.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.cancelRun(input.id, input.runId))),
-        ),
+        cancelRun: builder.threads.cancelRun
+          .use(requireAuth)
+          .handler(ri((svc, input) => Effect.runPromise(svc.cancelRun(input.id, input.runId)))),
 
         resolveGate: builder.threads.resolveGate.use(requireAuth).handler(
           ri(async (svc, input) => {
@@ -175,23 +187,35 @@ export default createPlugin({
           }),
         ),
 
-        streamEvents: builder.threads.streamEvents.use(requireAuth).handler(
-          rStream((svc, input) => svc.streamEvents(input.id, input.afterCursor)),
-        ),
+        streamEvents: builder.threads.streamEvents
+          .use(requireAuth)
+          .handler(rStream((svc, input) => svc.streamEvents(input.id, input.afterCursor))),
+
+        getState: builder.threads.getState
+          .use(requireAuth)
+          .handler(ri((svc, input) => Effect.runPromise(svc.getThreadState(input.id)))),
+
+        chatStream: builder.threads.chatStream
+          .use(requireAuth)
+          .handler(
+            rStream((svc, input) =>
+              svc.streamAguiChat(input.id, input.content, input.clientActionId, input.messages),
+            ),
+          ),
       },
 
       automations: {
-        list: builder.automations.list.use(requireAuth).handler(
-          ri((svc, input) =>
-            Effect.runPromise(svc.listAutomations(input.limit, input.runLimit)),
+        list: builder.automations.list
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) => Effect.runPromise(svc.listAutomations(input.limit, input.runLimit))),
           ),
-        ),
       },
 
       outbound: {
-        getPreferences: builder.outbound.getPreferences.use(requireAuth).handler(
-          r((svc) => Effect.runPromise(svc.getOutboundPreferences())),
-        ),
+        getPreferences: builder.outbound.getPreferences
+          .use(requireAuth)
+          .handler(r((svc) => Effect.runPromise(svc.getOutboundPreferences()))),
 
         setPreferences: builder.outbound.setPreferences.use(requireAuth).handler(
           ri(async (svc, input) => {
@@ -200,73 +224,79 @@ export default createPlugin({
           }),
         ),
 
-        listTargets: builder.outbound.listTargets.use(requireAuth).handler(
-          r((svc) => Effect.runPromise(svc.listOutboundTargets())),
-        ),
+        listTargets: builder.outbound.listTargets
+          .use(requireAuth)
+          .handler(r((svc) => Effect.runPromise(svc.listOutboundTargets()))),
       },
 
       extensions: {
-        list: builder.extensions.list.use(requireAuth).handler(
-          r((svc) => Effect.runPromise(svc.listExtensions())),
-        ),
+        list: builder.extensions.list
+          .use(requireAuth)
+          .handler(r((svc) => Effect.runPromise(svc.listExtensions()))),
 
-        listRegistry: builder.extensions.listRegistry.use(requireAuth).handler(
-          r((svc) => Effect.runPromise(svc.listExtensionRegistry())),
-        ),
+        listRegistry: builder.extensions.listRegistry
+          .use(requireAuth)
+          .handler(r((svc) => Effect.runPromise(svc.listExtensionRegistry()))),
 
-        install: builder.extensions.install.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.installExtension(input.packageRef))),
-        ),
+        install: builder.extensions.install
+          .use(requireAuth)
+          .handler(ri((svc, input) => Effect.runPromise(svc.installExtension(input.packageRef)))),
 
-        activate: builder.extensions.activate.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.activateExtension(input.name))),
-        ),
+        activate: builder.extensions.activate
+          .use(requireAuth)
+          .handler(ri((svc, input) => Effect.runPromise(svc.activateExtension(input.name)))),
 
-        remove: builder.extensions.remove.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.removeExtension(input.name))),
-        ),
+        remove: builder.extensions.remove
+          .use(requireAuth)
+          .handler(ri((svc, input) => Effect.runPromise(svc.removeExtension(input.name)))),
 
-        getSetup: builder.extensions.getSetup.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.getExtensionSetup(input.name))),
-        ),
+        getSetup: builder.extensions.getSetup
+          .use(requireAuth)
+          .handler(ri((svc, input) => Effect.runPromise(svc.getExtensionSetup(input.name)))),
 
-        setup: builder.extensions.setup.use(requireAuth).handler(
-          ri((svc, input) =>
-            Effect.runPromise(svc.setupExtension(input.name, input.action, input.payload)),
+        setup: builder.extensions.setup
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) =>
+              Effect.runPromise(svc.setupExtension(input.name, input.action, input.payload)),
+            ),
           ),
-        ),
       },
 
       skills: {
-        list: builder.skills.list.use(requireAuth).handler(
-          r((svc) => Effect.runPromise(svc.listSkills())),
-        ),
+        list: builder.skills.list
+          .use(requireAuth)
+          .handler(r((svc) => Effect.runPromise(svc.listSkills()))),
 
-        search: builder.skills.search.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.searchSkills(input.query))),
-        ),
+        search: builder.skills.search
+          .use(requireAuth)
+          .handler(ri((svc, input) => Effect.runPromise(svc.searchSkills(input.query)))),
 
-        install: builder.skills.install.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.installSkill(input.name, input.content))),
-        ),
+        install: builder.skills.install
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) => Effect.runPromise(svc.installSkill(input.name, input.content))),
+          ),
 
-        get: builder.skills.get.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.getSkill(input.name))),
-        ),
+        get: builder.skills.get
+          .use(requireAuth)
+          .handler(ri((svc, input) => Effect.runPromise(svc.getSkill(input.name)))),
 
-        update: builder.skills.update.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.updateSkill(input.name, input.content))),
-        ),
+        update: builder.skills.update
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) => Effect.runPromise(svc.updateSkill(input.name, input.content))),
+          ),
 
-        remove: builder.skills.remove.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.removeSkill(input.name))),
-        ),
+        remove: builder.skills.remove
+          .use(requireAuth)
+          .handler(ri((svc, input) => Effect.runPromise(svc.removeSkill(input.name)))),
       },
 
       channels: {
-        listConnectable: builder.channels.listConnectable.use(requireAuth).handler(
-          r((svc) => Effect.runPromise(svc.listConnectableChannels())),
-        ),
+        listConnectable: builder.channels.listConnectable
+          .use(requireAuth)
+          .handler(r((svc) => Effect.runPromise(svc.listConnectableChannels()))),
       },
 
       auth: {
@@ -282,6 +312,16 @@ export default createPlugin({
           r(async (svc) => {
             await Effect.runPromise(svc.logout());
             return { success: true };
+          }),
+        ),
+      },
+
+      operator: {
+        createAccessSession: builder.operator.createAccessSession.handler(
+          ri(async (svc, input) => {
+            return Effect.runPromise(
+              svc.createAccessSession(input.tenantId, input.agentId, input.projectId),
+            );
           }),
         ),
       },

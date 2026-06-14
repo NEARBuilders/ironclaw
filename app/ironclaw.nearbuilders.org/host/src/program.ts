@@ -538,8 +538,7 @@ export const createStartServer = (onReady?: () => void) =>
         origin: (origin) => {
           if (!origin) return "*";
           if (allowedOrigins.includes(origin)) return origin;
-          if (origin.startsWith("https://")) return origin;
-          if (isDev && origin.startsWith("http://")) return origin;
+          if (isDev && origin.startsWith("http://localhost")) return origin;
           return null;
         },
         credentials: true,

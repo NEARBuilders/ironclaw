@@ -343,6 +343,7 @@ if [ "$MODE" = "local" ]; then
   echo "==> Starting ironclaw-reborn on http://$REBORN_HOST:$REBORN_PORT"
   "${CARGO[@]}" serve --confirm-host-access --host "$REBORN_HOST" --port "$REBORN_PORT" &
   REBORN_PID=$!
+  sleep 1
 
   cat << BANNER
 

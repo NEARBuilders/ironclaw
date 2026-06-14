@@ -30,7 +30,8 @@
     "api": {
       "development": "local:api",
       "secrets": [
-        "API_DATABASE_URL"
+        "API_DATABASE_URL",
+        "IRONCLAW_BASE_URL"
       ]
     }
   },

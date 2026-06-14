@@ -180,8 +180,9 @@ pub use input::{OAuthClientConfig, RebornBuildInput, RebornRuntimeProcessBinding
 #[cfg(feature = "webui-v2-beta")]
 pub use ironclaw_auth::GoogleOAuthRouteConfig;
 pub use ironclaw_product_workflow::{
-    LifecycleExtensionSource, LifecycleExtensionSummary, LifecyclePhase, LifecycleProductPayload,
-    LifecycleProductResponse,
+    AccessSessionService, LifecycleExtensionSource, LifecycleExtensionSummary, LifecyclePhase,
+    LifecycleProductPayload, LifecycleProductResponse, RebornServicesError, RebornServicesErrorCode,
+    RebornServicesErrorKind,
 };
 #[cfg(any(feature = "libsql", feature = "postgres"))]
 pub use ironclaw_runtime_policy::{

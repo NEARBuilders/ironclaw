@@ -1,16 +1,22 @@
+import type { ContractRouterClient } from "@orpc/contract";
 import { count, desc, eq } from "drizzle-orm";
 import { createPlugin } from "every-plugin";
 import { Effect } from "every-plugin/effect";
 import { ORPCError } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
+import type { ContractType as IronclawContract } from "../../plugins/ironclaw/src/contract";
 import { contract } from "./contract";
 import { loadMigrations } from "./db/load-migrations";
 import { migrate } from "./db/migrator";
-import { registrations, submissions, tenantCredentials } from "./db/schema";
+import {
+  ironclawConnections,
+  ironclawScopeBindings,
+  registrations,
+  submissions,
+  tenantCredentials,
+} from "./db/schema";
 import { createAuthMiddleware } from "./lib/auth";
 import type { PluginsClient } from "./lib/plugins-types.gen";
-import type { ContractRouterClient } from "@orpc/contract";
-import type { ContractType as IronclawContract } from "../../plugins/ironclaw/src/contract";
 
 function generateId(): string {
   return `hc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -18,19 +24,24 @@ function generateId(): string {
 
 type Ic = ContractRouterClient<IronclawContract>;
 
-const h0 = (services: { ironclaw: (ctx: any) => Ic }, select: (ic: Ic) => () => any) =>
+const h0 =
+  (services: { ironclaw: (ctx: any) => Ic }, select: (ic: Ic) => () => any) =>
   async ({ context }: any) => {
     const ic = services.ironclaw(context);
     return await select(ic)();
   };
 
-const h1 = (services: { ironclaw: (ctx: any) => Ic }, select: (ic: Ic) => (input: any) => any) =>
+const h1 =
+  (services: { ironclaw: (ctx: any) => Ic }, select: (ic: Ic) => (input: any) => any) =>
   async ({ input, context }: any) => {
     const ic = services.ironclaw(context);
     return await select(ic)(input);
   };
 
-const hStream = (services: { ironclaw: (ctx: any) => Ic }, select: (ic: Ic) => (input: any) => any) =>
+const hStream = (
+  services: { ironclaw: (ctx: any) => Ic },
+  select: (ic: Ic) => (input: any) => any,
+) =>
   async function* ({ input, signal, context }: any) {
     const ic = services.ironclaw(context);
     console.log("[stream] start", { input });
@@ -52,6 +63,7 @@ export default createPlugin.withPlugins<PluginsClient>()({
 
   secrets: z.object({
     API_DATABASE_URL: z.string().default("pglite:.bos/api/:memory:"),
+    IRONCLAW_BASE_URL: z.string().optional(),
   }),
 
   context: z.object({
@@ -83,7 +95,14 @@ export default createPlugin.withPlugins<PluginsClient>()({
       const { auth, ironclaw, ...restPlugins } = plugins;
       console.log("[API] Services Initialized");
 
-      return { ironclaw, auth, plugins: restPlugins, db: driver.db, driver };
+      return {
+        ironclaw,
+        auth,
+        plugins: restPlugins,
+        db: driver.db,
+        driver,
+        secrets: config.secrets,
+      };
     }),
 
   shutdown: (services) =>
@@ -99,17 +118,77 @@ export default createPlugin.withPlugins<PluginsClient>()({
     const resolveCredentials = builder.middleware(async ({ context, next }) => {
       const tenantId = context.organizationId ?? context.userId;
       if (tenantId && s.db) {
+        if (s.secrets?.IRONCLAW_BASE_URL) {
+          return next({ context });
+        }
+
         try {
-          const creds = await s.db
+          // Try new tables first (ironclaw_scope_bindings + ironclaw_connections),
+          // fall back to the legacy tenant_credentials table during migration.
+          let tunnelUrl: string | undefined;
+          let apiToken: string | undefined;
+
+          const bindings = await s.db
             .select()
-            .from(tenantCredentials)
-            .where(eq(tenantCredentials.tenantId, tenantId));
-          if (creds.length > 0) {
+            .from(ironclawScopeBindings)
+            .where(eq(ironclawScopeBindings.tenantId, tenantId));
+          if (bindings.length > 0) {
+            const conns = await s.db
+              .select()
+              .from(ironclawConnections)
+              .where(eq(ironclawConnections.id, bindings[0].connectionId));
+            if (conns.length > 0) {
+              tunnelUrl = conns[0].tunnelUrl;
+              apiToken = conns[0].apiToken;
+            }
+          }
+
+          // Fallback: legacy tenant_credentials table
+          if (!tunnelUrl || !apiToken) {
+            const creds = await s.db
+              .select()
+              .from(tenantCredentials)
+              .where(eq(tenantCredentials.tenantId, tenantId));
+            if (creds.length > 0) {
+              tunnelUrl = creds[0].tunnelUrl;
+              apiToken = creds[0].apiToken;
+            }
+          }
+
+          if (tunnelUrl && apiToken) {
+            // Mint a tenant-scoped session token instead of forwarding
+            // the operator token directly. This ensures the upstream
+            // binary scopes every request to this specific tenant.
+            let sessionToken = apiToken;
+            try {
+              const resp = await fetch(
+                `${tunnelUrl.replace(/\/+$/, "")}/api/webchat/v2/operator/access-sessions`,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${apiToken}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    tenant_id: tenantId,
+                  }),
+                  signal: AbortSignal.timeout(10_000),
+                },
+              );
+              if (resp.ok) {
+                const data = (await resp.json()) as { token?: string };
+                if (data.token) sessionToken = data.token;
+              }
+            } catch {
+              // Session mint failed; fall back to operator token.
+              // Downstream requests will still work but won't be
+              // tenant-scoped.
+            }
             return next({
               context: {
                 ...context,
-                baseUrl: creds[0].tunnelUrl,
-                apiToken: creds[0].apiToken,
+                baseUrl: tunnelUrl,
+                apiToken: sessionToken,
               },
             });
           }
@@ -161,52 +240,50 @@ export default createPlugin.withPlugins<PluginsClient>()({
             };
           }),
 
-        submit: builder.hackathon.submit
-          .use(requireAuth)
-          .handler(async ({ input, context }) => {
-            const db = (services as any).db;
+        submit: builder.hackathon.submit.use(requireAuth).handler(async ({ input, context }) => {
+          const db = (services as any).db;
 
-            const reg = await db
-              .select()
-              .from(registrations)
-              .where(eq(registrations.agentId, input.agentId));
+          const reg = await db
+            .select()
+            .from(registrations)
+            .where(eq(registrations.agentId, input.agentId));
 
-            if (reg.length === 0) {
-              throw new ORPCError("BAD_REQUEST", {
-                message: `Agent "${input.agentId}" is not registered. Register first.`,
-              });
-            }
-
-            const existing = await db
-              .select({ count: count() })
-              .from(submissions)
-              .where(eq(submissions.agentId, input.agentId));
-
-            if (existing[0]?.count > 0) {
-              throw new ORPCError("BAD_REQUEST", {
-                message: `Already submitted for "${input.agentId}". You can only submit once.`,
-              });
-            }
-
-            await db.insert(submissions).values({
-              id: generateId(),
-              agentId: input.agentId,
-              userId: context.userId!,
-              projectTitle: input.projectTitle,
-              description: input.description,
-              demoUrl: input.demoUrl,
-              githubUrl: input.githubUrl,
-              skillsList: input.skillsList,
-              demoNotes: input.demoNotes,
-              cid: "",
+          if (reg.length === 0) {
+            throw new ORPCError("BAD_REQUEST", {
+              message: `Agent "${input.agentId}" is not registered. Register first.`,
             });
+          }
 
-            return {
-              success: true,
-              cid: "pending-upload",
-              message: `Submission for "${input.agentId}" recorded. Use the nova-submit extension to upload your encrypted submission file.`,
-            };
-          }),
+          const existing = await db
+            .select({ count: count() })
+            .from(submissions)
+            .where(eq(submissions.agentId, input.agentId));
+
+          if (existing[0]?.count > 0) {
+            throw new ORPCError("BAD_REQUEST", {
+              message: `Already submitted for "${input.agentId}". You can only submit once.`,
+            });
+          }
+
+          await db.insert(submissions).values({
+            id: generateId(),
+            agentId: input.agentId,
+            userId: context.userId!,
+            projectTitle: input.projectTitle,
+            description: input.description,
+            demoUrl: input.demoUrl,
+            githubUrl: input.githubUrl,
+            skillsList: input.skillsList,
+            demoNotes: input.demoNotes,
+            cid: "",
+          });
+
+          return {
+            success: true,
+            cid: "pending-upload",
+            message: `Submission for "${input.agentId}" recorded. Use the nova-submit extension to upload your encrypted submission file.`,
+          };
+        }),
 
         leaderboard: builder.hackathon.leaderboard.handler(async () => {
           const db = (services as any).db;
@@ -228,9 +305,7 @@ export default createPlugin.withPlugins<PluginsClient>()({
             })
             .from(registrations);
 
-          const nameMap = new Map(
-            participantNames.map((r: any) => [r.agentId, r.participantName]),
-          );
+          const nameMap = new Map(participantNames.map((r: any) => [r.agentId, r.participantName]));
 
           return {
             entries: results.map((r: any) => ({
@@ -238,22 +313,19 @@ export default createPlugin.withPlugins<PluginsClient>()({
               participantName: nameMap.get(r.agentId) ?? r.agentId,
               projectTitle: r.projectTitle,
               submittedAt:
-                r.createdAt instanceof Date
-                  ? r.createdAt.toISOString()
-                  : String(r.createdAt),
+                r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
             })),
           };
         }),
       },
 
       ironclaw: {
-        ping: builder.ironclaw.ping.use(ic.credentials).handler(
-          h0(services, ic => ic.ping),
-        ),
+        ping: builder.ironclaw.ping.use(ic.credentials).handler(h0(services, (ic) => ic.ping)),
 
-        session: builder.ironclaw.session.use(requireAuth).use(ic.credentials).handler(
-          h0(services, ic => ic.session),
-        ),
+        session: builder.ironclaw.session
+          .use(requireAuth)
+          .use(ic.credentials)
+          .handler(h0(services, (ic) => ic.session)),
 
         settings: {
           get: builder.ironclaw.settings.get.use(requireAuth).handler(async ({ context }) => {
@@ -262,152 +334,256 @@ export default createPlugin.withPlugins<PluginsClient>()({
               throw new ORPCError("UNAUTHORIZED", { message: "No tenant or user context" });
             }
             const db = s.db;
-            const creds = await db
+            // Try new tables first, then fall back to legacy tenant_credentials.
+            let tunnelUrl: string | undefined;
+            let updatedAt: Date | undefined;
+            const bindings = await db
               .select()
-              .from(tenantCredentials)
-              .where(eq(tenantCredentials.tenantId, tenantId));
-            if (creds.length === 0) {
+              .from(ironclawScopeBindings)
+              .where(eq(ironclawScopeBindings.tenantId, tenantId));
+            if (bindings.length > 0) {
+              const conns = await db
+                .select()
+                .from(ironclawConnections)
+                .where(eq(ironclawConnections.id, bindings[0].connectionId));
+              if (conns.length > 0) {
+                tunnelUrl = conns[0].tunnelUrl;
+                updatedAt = conns[0].updatedAt;
+              }
+            }
+            if (!tunnelUrl) {
+              const creds = await db
+                .select()
+                .from(tenantCredentials)
+                .where(eq(tenantCredentials.tenantId, tenantId));
+              if (creds.length > 0) {
+                tunnelUrl = creds[0].tunnelUrl;
+                updatedAt = creds[0].updatedAt;
+              }
+            }
+            if (!tunnelUrl) {
               throw new ORPCError("NOT_FOUND", { message: "No ironclaw settings configured" });
             }
             return {
-              tunnelUrl: creds[0].tunnelUrl,
-              apiToken: creds[0].apiToken,
-              updatedAt: creds[0].updatedAt?.toISOString(),
+              tunnelUrl,
+              apiToken: "", // Never read back the stored token
+              hasToken: true,
+              updatedAt: updatedAt?.toISOString(),
             };
           }),
 
-          update: builder.ironclaw.settings.update.use(requireAuth).handler(async ({ input, context }) => {
-            const tenantId = context.organizationId ?? context.userId;
-            if (!tenantId) {
-              throw new ORPCError("UNAUTHORIZED", { message: "No tenant or user context" });
-            }
-            const db = s.db;
-            await db
-              .insert(tenantCredentials)
-              .values({
-                tenantId,
-                tunnelUrl: input.tunnelUrl,
-                apiToken: input.apiToken,
-                updatedBy: context.userId,
-              })
-              .onConflictDoUpdate({
-                target: tenantCredentials.tenantId,
-                set: {
+          update: builder.ironclaw.settings.update
+            .use(requireAuth)
+            .handler(async ({ input, context }) => {
+              const tenantId = context.organizationId ?? context.userId;
+              if (!tenantId) {
+                throw new ORPCError("UNAUTHORIZED", { message: "No tenant or user context" });
+              }
+              const db = s.db;
+              // Write to both the new tables and the legacy table during migration.
+              const connectionId = `conn_${tenantId}`;
+              await db
+                .insert(ironclawConnections)
+                .values({
+                  id: connectionId,
+                  name: `Default connection for ${tenantId}`,
+                  tunnelUrl: input.tunnelUrl,
+                  apiToken: input.apiToken,
+                  createdBy: context.userId,
+                })
+                .onConflictDoUpdate({
+                  target: ironclawConnections.id,
+                  set: {
+                    tunnelUrl: input.tunnelUrl,
+                    apiToken: input.apiToken,
+                    updatedBy: context.userId,
+                  },
+                });
+              await db
+                .insert(ironclawScopeBindings)
+                .values({
+                  tenantId,
+                  connectionId,
+                  createdBy: context.userId,
+                })
+                .onConflictDoUpdate({
+                  target: [
+                    ironclawScopeBindings.tenantId,
+                    ironclawScopeBindings.agentId,
+                    ironclawScopeBindings.projectId,
+                  ],
+                  set: { connectionId, createdBy: context.userId },
+                });
+              // Legacy table
+              await db
+                .insert(tenantCredentials)
+                .values({
+                  tenantId,
                   tunnelUrl: input.tunnelUrl,
                   apiToken: input.apiToken,
                   updatedBy: context.userId,
-                },
-              });
-            return { success: true };
-          }),
+                })
+                .onConflictDoUpdate({
+                  target: tenantCredentials.tenantId,
+                  set: {
+                    tunnelUrl: input.tunnelUrl,
+                    apiToken: input.apiToken,
+                    updatedBy: context.userId,
+                  },
+                });
+              return { success: true };
+            }),
         },
 
         threads: {
-          list: builder.ironclaw.threads.list.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.threads.list),
-          ),
-          create: builder.ironclaw.threads.create.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.threads.create),
-          ),
-          delete: builder.ironclaw.threads.delete.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.threads.delete),
-          ),
-          sendMessage: builder.ironclaw.threads.sendMessage.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.threads.sendMessage),
-          ),
-          getTimeline: builder.ironclaw.threads.getTimeline.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.threads.getTimeline),
-          ),
-          cancelRun: builder.ironclaw.threads.cancelRun.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.threads.cancelRun),
-          ),
-          resolveGate: builder.ironclaw.threads.resolveGate.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.threads.resolveGate),
-          ),
-          streamEvents: builder.ironclaw.threads.streamEvents.use(requireAuth).use(ic.credentials).handler(
-            hStream(services, ic => ic.threads.streamEvents),
-          ),
+          list: builder.ironclaw.threads.list
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.threads.list)),
+          create: builder.ironclaw.threads.create
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.threads.create)),
+          delete: builder.ironclaw.threads.delete
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.threads.delete)),
+          sendMessage: builder.ironclaw.threads.sendMessage
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.threads.sendMessage)),
+          getTimeline: builder.ironclaw.threads.getTimeline
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.threads.getTimeline)),
+          cancelRun: builder.ironclaw.threads.cancelRun
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.threads.cancelRun)),
+          resolveGate: builder.ironclaw.threads.resolveGate
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.threads.resolveGate)),
+          streamEvents: builder.ironclaw.threads.streamEvents
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(hStream(services, (ic) => ic.threads.streamEvents)),
+          getState: builder.ironclaw.threads.getState
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.threads.getState)),
+
+          chatStream: builder.ironclaw.threads.chatStream
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(hStream(services, (ic) => ic.threads.chatStream)),
         },
 
         automations: {
-          list: builder.ironclaw.automations.list.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.automations.list),
-          ),
+          list: builder.ironclaw.automations.list
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.automations.list)),
         },
 
         outbound: {
-          getPreferences: builder.ironclaw.outbound.getPreferences.use(requireAuth).use(ic.credentials).handler(
-            h0(services, ic => ic.outbound.getPreferences),
-          ),
-          setPreferences: builder.ironclaw.outbound.setPreferences.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.outbound.setPreferences),
-          ),
-          listTargets: builder.ironclaw.outbound.listTargets.use(requireAuth).use(ic.credentials).handler(
-            h0(services, ic => ic.outbound.listTargets),
-          ),
+          getPreferences: builder.ironclaw.outbound.getPreferences
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h0(services, (ic) => ic.outbound.getPreferences)),
+          setPreferences: builder.ironclaw.outbound.setPreferences
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.outbound.setPreferences)),
+          listTargets: builder.ironclaw.outbound.listTargets
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h0(services, (ic) => ic.outbound.listTargets)),
         },
 
         extensions: {
-          list: builder.ironclaw.extensions.list.use(requireAuth).use(ic.credentials).handler(
-            h0(services, ic => ic.extensions.list),
-          ),
-          listRegistry: builder.ironclaw.extensions.listRegistry.use(requireAuth).use(ic.credentials).handler(
-            h0(services, ic => ic.extensions.listRegistry),
-          ),
-          install: builder.ironclaw.extensions.install.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.extensions.install),
-          ),
-          activate: builder.ironclaw.extensions.activate.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.extensions.activate),
-          ),
-          remove: builder.ironclaw.extensions.remove.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.extensions.remove),
-          ),
-          getSetup: builder.ironclaw.extensions.getSetup.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.extensions.getSetup),
-          ),
-          setup: builder.ironclaw.extensions.setup.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.extensions.setup),
-          ),
+          list: builder.ironclaw.extensions.list
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h0(services, (ic) => ic.extensions.list)),
+          listRegistry: builder.ironclaw.extensions.listRegistry
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h0(services, (ic) => ic.extensions.listRegistry)),
+          install: builder.ironclaw.extensions.install
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.extensions.install)),
+          activate: builder.ironclaw.extensions.activate
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.extensions.activate)),
+          remove: builder.ironclaw.extensions.remove
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.extensions.remove)),
+          getSetup: builder.ironclaw.extensions.getSetup
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.extensions.getSetup)),
+          setup: builder.ironclaw.extensions.setup
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.extensions.setup)),
         },
 
         skills: {
-          list: builder.ironclaw.skills.list.use(requireAuth).use(ic.credentials).handler(
-            h0(services, ic => ic.skills.list),
-          ),
-          search: builder.ironclaw.skills.search.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.skills.search),
-          ),
-          install: builder.ironclaw.skills.install.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.skills.install),
-          ),
-          get: builder.ironclaw.skills.get.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.skills.get),
-          ),
-          update: builder.ironclaw.skills.update.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.skills.update),
-          ),
-          remove: builder.ironclaw.skills.remove.use(requireAuth).use(ic.credentials).handler(
-            h1(services, ic => ic.skills.remove),
-          ),
+          list: builder.ironclaw.skills.list
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h0(services, (ic) => ic.skills.list)),
+          search: builder.ironclaw.skills.search
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.skills.search)),
+          install: builder.ironclaw.skills.install
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.skills.install)),
+          get: builder.ironclaw.skills.get
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.skills.get)),
+          update: builder.ironclaw.skills.update
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.skills.update)),
+          remove: builder.ironclaw.skills.remove
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.skills.remove)),
         },
 
         channels: {
-          listConnectable: builder.ironclaw.channels.listConnectable.use(requireAuth).use(ic.credentials).handler(
-            h0(services, ic => ic.channels.listConnectable),
-          ),
+          listConnectable: builder.ironclaw.channels.listConnectable
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h0(services, (ic) => ic.channels.listConnectable)),
         },
 
         auth: {
-          listProviders: builder.ironclaw.auth.listProviders.use(ic.credentials).handler(
-            h0(services, ic => ic.auth.listProviders),
-          ),
-          exchangeLoginTicket: builder.ironclaw.auth.exchangeLoginTicket.use(ic.credentials).handler(
-            h1(services, ic => ic.auth.exchangeLoginTicket),
-          ),
-          logout: builder.ironclaw.auth.logout.use(requireAuth).use(ic.credentials).handler(
-            h0(services, ic => ic.auth.logout),
-          ),
+          listProviders: builder.ironclaw.auth.listProviders
+            .use(ic.credentials)
+            .handler(h0(services, (ic) => ic.auth.listProviders)),
+          exchangeLoginTicket: builder.ironclaw.auth.exchangeLoginTicket
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.auth.exchangeLoginTicket)),
+          logout: builder.ironclaw.auth.logout
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h0(services, (ic) => ic.auth.logout)),
+        },
+
+        operator: {
+          createAccessSession: builder.ironclaw.operator.createAccessSession
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.operator.createAccessSession)),
         },
       },
     };

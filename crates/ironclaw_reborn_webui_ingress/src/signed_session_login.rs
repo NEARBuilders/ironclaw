@@ -38,7 +38,9 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use hmac::{Hmac, Mac};
 use ironclaw_host_api::{AgentId, ProjectId, TenantId, UserId};
-use ironclaw_reborn_composition::{WebuiAuthentication, WebuiAuthenticator};
+use ironclaw_reborn_composition::{
+    AccessSessionService, WebuiAuthentication, WebuiAuthenticator,
+};
 use parking_lot::RwLock;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
@@ -51,6 +53,10 @@ use crate::auth::{
 use crate::session::{
     SessionAuthenticator, SessionId, SessionRecord, SessionStore, SessionStoreError,
 };
+
+/// Default lifetime for operator-minted access sessions (7 days).
+const DEFAULT_SESSION_LIFETIME: ChronoDuration = ChronoDuration::days(7);
+
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -368,6 +374,29 @@ impl WebuiAuthenticator for CompositeAuthenticator {
     }
 }
 
+#[async_trait]
+impl AccessSessionService for SignedTokenSessionStore {
+    async fn create_session(
+        &self,
+        tenant_id: TenantId,
+        user_id: UserId,
+        agent_id: Option<AgentId>,
+        project_id: Option<ProjectId>,
+    ) -> Result<String, ironclaw_reborn_composition::RebornServicesError> {
+        let token = SessionStore::create_session(
+                self,
+                tenant_id,
+                user_id,
+                DEFAULT_SESSION_LIFETIME,
+                agent_id,
+                project_id,
+            )
+            .await
+            .map_err(|_| ironclaw_reborn_composition::RebornServicesError::internal())?;
+        Ok(token.expose_secret().to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -404,16 +433,16 @@ mod tests {
     #[tokio::test]
     async fn signed_token_round_trips_tenant_and_user() {
         let store = signed_store("operator-secret");
-        let token = store
-            .create_session(
-                tenant(),
-                UserId::new("operator").expect("user"),
-                ChronoDuration::hours(1),
-                None,
-                None,
-            )
-            .await
-            .expect("create");
+        let token = SessionStore::create_session(
+            &store,
+            tenant(),
+            UserId::new("operator").expect("user"),
+            ChronoDuration::hours(1),
+            None,
+            None,
+        )
+        .await
+        .expect("create");
         let record = store
             .lookup(token.expose_secret())
             .await
@@ -426,16 +455,16 @@ mod tests {
     #[tokio::test]
     async fn tampered_or_wrong_key_token_is_rejected() {
         let store = signed_store("secret-a");
-        let token = store
-            .create_session(
-                tenant(),
-                UserId::new("operator").expect("user"),
-                ChronoDuration::hours(1),
-                None,
-                None,
-            )
-            .await
-            .expect("create");
+        let token = SessionStore::create_session(
+            &store,
+            tenant(),
+            UserId::new("operator").expect("user"),
+            ChronoDuration::hours(1),
+            None,
+            None,
+        )
+        .await
+        .expect("create");
         let raw = token.expose_secret().to_string();
 
         let mut tampered = raw.clone();
@@ -460,16 +489,16 @@ mod tests {
         let store_a = signed_store_for("shared-secret", &tenant_a);
         let store_b = signed_store_for("shared-secret", &tenant_b);
 
-        let token = store_a
-            .create_session(
-                tenant_a.clone(),
-                UserId::new("alice").expect("user"),
-                ChronoDuration::hours(1),
-                None,
-                None,
-            )
-            .await
-            .expect("create");
+        let token = SessionStore::create_session(
+            &store_a,
+            tenant_a.clone(),
+            UserId::new("alice").expect("user"),
+            ChronoDuration::hours(1),
+            None,
+            None,
+        )
+        .await
+        .expect("create");
         let raw = token.expose_secret().to_string();
 
         assert!(
@@ -493,6 +522,8 @@ mod tests {
                 sid: "session-1".to_string(),
                 tenant: "tenant-a".to_string(),
                 user: "operator".to_string(),
+                agent: None,
+                project: None,
                 iat: now - 100,
                 exp: now - 10,
             },
@@ -505,16 +536,16 @@ mod tests {
         // The logout/revoke contract: a token valid before `revoke` must
         // be rejected after it, so `POST /auth/logout` is not a lie.
         let store = signed_store("operator-secret");
-        let token = store
-            .create_session(
-                tenant(),
-                UserId::new("operator").expect("user"),
-                ChronoDuration::hours(1),
-                None,
-                None,
-            )
-            .await
-            .expect("create");
+        let token = SessionStore::create_session(
+            &store,
+            tenant(),
+            UserId::new("operator").expect("user"),
+            ChronoDuration::hours(1),
+            None,
+            None,
+        )
+        .await
+        .expect("create");
         let raw = token.expose_secret().to_string();
         assert!(store.lookup(&raw).await.expect("lookup").is_some());
 
@@ -529,10 +560,16 @@ mod tests {
     async fn create_session_rejects_non_positive_lifetime() {
         let store = signed_store("operator-secret");
         for lifetime in [ChronoDuration::zero(), ChronoDuration::seconds(-1)] {
-            let err = store
-                .create_session(tenant(), UserId::new("operator").expect("user"), lifetime, None, None)
-                .await
-                .expect_err("a non-positive lifetime must error, not mint a dead token");
+            let err = SessionStore::create_session(
+                &store,
+                tenant(),
+                UserId::new("operator").expect("user"),
+                lifetime,
+                None,
+                None,
+            )
+            .await
+            .expect_err("a non-positive lifetime must error, not mint a dead token");
             assert!(matches!(err, SessionStoreError::Backend(_)));
         }
     }
@@ -540,16 +577,16 @@ mod tests {
     #[tokio::test]
     async fn create_session_returns_error_on_lifetime_overflow() {
         let store = signed_store("operator-secret");
-        let err = store
-            .create_session(
-                tenant(),
-                UserId::new("operator").expect("user"),
-                ChronoDuration::MAX,
-                None,
-                None,
-            )
-            .await
-            .expect_err("a lifetime that overflows the expiry instant must error");
+        let err = SessionStore::create_session(
+            &store,
+            tenant(),
+            UserId::new("operator").expect("user"),
+            ChronoDuration::MAX,
+            None,
+            None,
+        )
+        .await
+        .expect_err("a lifetime that overflows the expiry instant must error");
         assert!(matches!(err, SessionStoreError::Backend(_)));
     }
 
@@ -563,6 +600,8 @@ mod tests {
                 sid: "session-1".to_string(),
                 tenant: String::new(),
                 user: "operator".to_string(),
+                agent: None,
+                project: None,
                 iat: now,
                 exp: now + 3600,
             },
@@ -588,6 +627,8 @@ mod tests {
                 sid: "session-1".to_string(),
                 tenant: tenant().as_str().to_string(),
                 user: String::new(),
+                agent: None,
+                project: None,
                 iat: now,
                 exp: now + 3600,
             },

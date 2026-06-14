@@ -1,23 +1,123 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Loader2, MessageSquare, Plus, Send, Terminal, Trash2, Unplug, Zap } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Loader2, MessageSquare, Plus, Terminal, Trash2, Unplug, Zap } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { type ApiClient, useApiClient } from "@/app";
+import { ChatIdentityBar } from "@/components/chat-identity-bar";
+import { ChatInput } from "@/components/chat-input";
+import { ChatMessage } from "@/components/chat-message";
+import { ChatMessageList } from "@/components/chat-message-list";
+import { ChatThreadMeta } from "@/components/chat-thread-meta";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { IronclawSseStatus, StreamEvent } from "@/hooks/use-ironclaw-events";
-import { useIronclawEvents } from "@/hooks/use-ironclaw-events";
+import type { ThreadState } from "@/hooks/use-thread-state";
+import { useIronclawChat } from "@/hooks/use-ironclaw-chat";
 import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
+import { useThreadState } from "@/hooks/use-thread-state";
 
 type Thread = Awaited<ReturnType<ApiClient["ironclaw"]["threads"]["list"]>>["data"][number];
-type TimelineEntry = Awaited<
-  ReturnType<ApiClient["ironclaw"]["threads"]["getTimeline"]>
->["data"][number];
 
 export const Route = createFileRoute("/_layout/")({
   component: ChatPage,
 });
+
+function ChatArea({
+  threadId,
+  apiClient,
+  initialMessages,
+  threadState,
+  onRebuild,
+}: {
+  threadId: string;
+  apiClient: ApiClient;
+  initialMessages: Array<{
+    id: string;
+    role: "user" | "assistant";
+    parts: Array<{ type: "text"; content: string }>;
+    createdAt?: Date;
+  }>;
+  threadState: ThreadState | null;
+  onRebuild: () => Promise<void>;
+}) {
+  const { messages, sendMessage, isLoading, addToolApprovalResponse, status } = useIronclawChat(
+    threadId,
+    apiClient,
+    initialMessages,
+  );
+
+  const [isRebuilding, setIsRebuilding] = useState(false);
+  const [threadMetaOpen, setThreadMetaOpen] = useState(false);
+
+  const handleRebuild = useCallback(async () => {
+    setIsRebuilding(true);
+    try {
+      await onRebuild();
+    } finally {
+      setIsRebuilding(false);
+    }
+  }, [onRebuild]);
+
+  const handleSend = useCallback(
+    (content: string) => {
+      sendMessage(content);
+    },
+    [sendMessage],
+  );
+
+  const handleApproveTool = useCallback(
+    (toolCallId: string, approved: boolean) => {
+      addToolApprovalResponse({ id: toolCallId, approved });
+      if (approved) {
+        apiClient.ironclaw.threads
+          .resolveGate({
+            id: threadId,
+            runId: "",
+            gateRef: toolCallId,
+            resolution: "approved",
+          })
+          .catch(() => toast.error("Failed to approve tool"));
+      }
+    },
+    [addToolApprovalResponse, apiClient, threadId],
+  );
+
+  return (
+    <>
+      <ChatIdentityBar
+        threadState={threadState}
+        onRebuild={handleRebuild}
+        onToggleMeta={() => setThreadMetaOpen((prev) => !prev)}
+        isRebuilding={isRebuilding}
+      />
+
+      <ChatMessageList
+        loading={messages.length === 0 && !threadState}
+        empty={messages.length === 0 && !!threadState}
+        emptyMessage="No messages yet. Send a message to start."
+      >
+        {messages.map((message) => (
+          <ChatMessage
+            key={message.id}
+            message={message}
+            onApproveTool={handleApproveTool}
+          />
+        ))}
+      </ChatMessageList>
+
+      <ChatInput
+        onSend={handleSend}
+        placeholder="Type a message..."
+        isSending={isLoading || status === "streaming" || status === "submitted"}
+      />
+
+      <ChatThreadMeta
+        open={threadMetaOpen}
+        onOpenChange={setThreadMetaOpen}
+        threadState={threadState}
+      />
+    </>
+  );
+}
 
 function ChatPage() {
   const apiClient = useApiClient();
@@ -26,30 +126,23 @@ function ChatPage() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [threadsLoaded, setThreadsLoaded] = useState(false);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
-  const [transcripts, setTranscripts] = useState<Record<string, TimelineEntry[]>>({});
-  const [optimisticMessages, setOptimisticMessages] = useState<Record<string, TimelineEntry[]>>({});
-  const [runStates, setRunStates] = useState<
-    Record<string, { runId?: string; activeRunId?: string }>
-  >({});
-  const [latestEvents, setLatestEvents] = useState<Record<string, StreamEvent>>({});
-  const [sseStatus, setSseStatus] = useState<Record<string, IronclawSseStatus>>({});
-  const [streamErrors, setStreamErrors] = useState<Record<string, string>>({});
-  const [inputText, setInputText] = useState("");
-  const [isSending, setIsSending] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { state: threadState, loading: threadStateLoading, rebuild } = useThreadState(activeThreadId);
+
+  const initialMessages = useMemo(() => {
+    if (!threadState?.messages) return null;
+    return threadState.messages
+      .filter((m) => m.kind === "User" || m.kind === "Assistant")
+      .map((m) => ({
+        id: m.messageId,
+        role: (m.role === "user" ? "user" : "assistant") as "user" | "assistant",
+        parts: [{ type: "text" as const, content: m.content ?? "" }],
+        createdAt: m.createdAt ? new Date(m.createdAt) : undefined,
+      }));
+  }, [threadState]);
 
   const isDisconnected =
     connectionStatus === "disconnected" || connectionStatus === "never-connected";
-
-  const appendTranscript = useCallback((threadId: string, entries: TimelineEntry[]) => {
-    setTranscripts((prev) => {
-      const existing = prev[threadId] ?? [];
-      const known = new Set(existing.map((e) => e.messageId));
-      const fresh = entries.filter((e) => !known.has(e.messageId));
-      if (fresh.length === 0) return prev;
-      return { ...prev, [threadId]: [...existing, ...fresh] };
-    });
-  }, []);
 
   const loadThreads = useCallback(async () => {
     try {
@@ -65,166 +158,9 @@ function ChatPage() {
     if (!isDisconnected) loadThreads();
   }, [loadThreads, isDisconnected]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  });
-
-  const handleEvent = useCallback(
-    (threadId: string, event: StreamEvent) => {
-      setStreamErrors((prev) => {
-        if (!prev[threadId]) return prev;
-        const n = { ...prev };
-        delete n[threadId];
-        return n;
-      });
-
-      setLatestEvents((prev) => ({ ...prev, [threadId]: event }));
-
-      if (event.type === "keep_alive") return;
-
-      if (event.type === "accepted" && event.ack) {
-        setRunStates((prev) => {
-          const current = prev[threadId] ?? {};
-          const next: { runId?: string; activeRunId?: string } = {};
-          if (event.ack!.runId) next.runId = event.ack!.runId;
-          if (event.ack!.activeRunId) next.activeRunId = event.ack!.activeRunId;
-          return Object.keys(next).length === 0
-            ? prev
-            : { ...prev, [threadId]: { ...current, ...next } };
-        });
-        return;
-      }
-
-      if (event.type === "final_reply" && event.reply?.text) {
-        appendTranscript(threadId, [
-          {
-            messageId: `reply-${threadId}-${event.reply.turnRunId}`,
-            threadId,
-            sequence: 0,
-            kind: "Assistant",
-            status: "completed",
-            content: event.reply.text,
-            createdAt: event.reply.generatedAt ?? new Date().toISOString(),
-            role: "assistant",
-          },
-        ]);
-        setRunStates((prev) => {
-          const n = { ...prev };
-          delete n[threadId];
-          return n;
-        });
-        return;
-      }
-
-      if (event.type === "cancelled" || event.type === "failed") {
-        setRunStates((prev) => {
-          const n = { ...prev };
-          delete n[threadId];
-          return n;
-        });
-      }
-    },
-    [appendTranscript],
-  );
-
-  const { status: currentSseStatus } = useIronclawEvents({
-    threadId: activeThreadId,
-    enabled: !!activeThreadId && !isDisconnected,
-    onEvent: useCallback(
-      (envelope) => {
-        if (!activeThreadId) return;
-        handleEvent(activeThreadId, envelope.event);
-      },
-      [activeThreadId, handleEvent],
-    ),
-  });
-
-  useEffect(() => {
-    setSseStatus((prev) => {
-      if (!activeThreadId) return prev;
-      if (currentSseStatus === "connected") {
-        const n = { ...prev };
-        delete n[activeThreadId];
-        return n;
-      }
-      return { ...prev, [activeThreadId]: currentSseStatus };
-    });
-  }, [activeThreadId, currentSseStatus]);
-
-  const openThread = useCallback(
-    async (threadId: string) => {
-      setActiveThreadId(threadId);
-      setLatestEvents((prev) => {
-        const n = { ...prev };
-        delete n[threadId];
-        return n;
-      });
-      setStreamErrors((prev) => {
-        const n = { ...prev };
-        delete n[threadId];
-        return n;
-      });
-
-      try {
-        const timeline = await apiClient.ironclaw.threads.getTimeline({ id: threadId, limit: 100 });
-        setTranscripts((prev) => ({ ...prev, [threadId]: timeline.data }));
-        setOptimisticMessages((prev) => {
-          const n = { ...prev };
-          delete n[threadId];
-          return n;
-        });
-      } catch {
-        // timeline load failed; proceed with empty transcript
-      }
-    },
-    [apiClient],
-  );
-
-  const sendMessage = useCallback(async () => {
-    if (!activeThreadId || !inputText.trim() || isSending) return;
-
-    const content = inputText.trim();
-    setInputText("");
-    setIsSending(true);
-
-    const optimisticId = `user-${crypto.randomUUID()}`;
-    setOptimisticMessages((prev) => ({
-      ...prev,
-      [activeThreadId]: [
-        ...(prev[activeThreadId] ?? []),
-        {
-          messageId: optimisticId,
-          threadId: activeThreadId,
-          sequence: 0,
-          kind: "User",
-          status: "accepted",
-          content,
-          createdAt: new Date().toISOString(),
-          role: "user",
-        },
-      ],
-    }));
-
-    try {
-      const accepted = await apiClient.ironclaw.threads.sendMessage({
-        id: activeThreadId,
-        content,
-      });
-      if (accepted.runId || accepted.activeRunId) {
-        setRunStates((prev) => ({
-          ...prev,
-          [activeThreadId]: {
-            runId: accepted.runId ?? prev[activeThreadId]?.runId,
-            activeRunId: accepted.activeRunId,
-          },
-        }));
-      }
-    } catch {
-      toast.error("Failed to send message");
-    } finally {
-      setIsSending(false);
-    }
-  }, [activeThreadId, inputText, isSending, apiClient]);
+  const openThread = useCallback(async (threadId: string) => {
+    setActiveThreadId(threadId);
+  }, []);
 
   const createThread = useCallback(async () => {
     try {
@@ -258,16 +194,6 @@ function ChatPage() {
     },
     [apiClient, activeThreadId],
   );
-
-  const currentEntries = useMemo(() => {
-    if (!activeThreadId) return [];
-    return [...(transcripts[activeThreadId] ?? []), ...(optimisticMessages[activeThreadId] ?? [])];
-  }, [activeThreadId, transcripts, optimisticMessages]);
-
-  const runState = activeThreadId ? runStates[activeThreadId] : undefined;
-  const latestEvent = activeThreadId ? latestEvents[activeThreadId] : undefined;
-  const sseError = activeThreadId ? streamErrors[activeThreadId] : undefined;
-  const activeSseStatus = activeThreadId ? sseStatus[activeThreadId] : undefined;
 
   const statusDotClass =
     connectionStatus === "connected"
@@ -368,139 +294,23 @@ function ChatPage() {
       </div>
 
       <div className="flex flex-1 flex-col min-w-0">
-        {activeThreadId ? (
-          <>
-            <ScrollArea className="flex-1 p-4">
-              <div className="mx-auto max-w-3xl space-y-4">
-                {currentEntries.map((entry) => (
-                  <div
-                    key={entry.messageId}
-                    className={`flex ${entry.role === "user" ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={`max-w-[80%] rounded-xl px-4 py-2.5 text-sm ${
-                        entry.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted text-foreground"
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap">{entry.content ?? ""}</p>
-                    </div>
-                  </div>
-                ))}
-                {(runState?.runId || runState?.activeRunId) &&
-                  latestEvent?.type !== "running" &&
-                  latestEvent?.type !== "gate" && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      {latestEvent?.type === "accepted"
-                        ? "Accepted, waiting for response..."
-                        : "Message received, waiting..."}
-                    </div>
-                  )}
-                {latestEvent?.type === "running" && latestEvent?.progress && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    {latestEvent.progress.kind || "Thinking..."}
-                  </div>
-                )}
-                {latestEvent?.type === "gate" && latestEvent?.prompt && (
-                  <div className="rounded-lg border border-[color:var(--chart-3)]/30 bg-[color:var(--chart-3)]/5 px-4 py-3 text-xs text-[color:var(--chart-3)]">
-                    <p className="font-medium mb-0.5">{latestEvent.prompt.headline}</p>
-                    <p>{latestEvent.prompt.body}</p>
-                  </div>
-                )}
-                {latestEvent?.type === "auth_required" && latestEvent?.authPrompt && (
-                  <div className="rounded-lg border border-[color:var(--chart-3)]/30 bg-[color:var(--chart-3)]/5 px-4 py-3 text-xs text-[color:var(--chart-3)]">
-                    <p className="font-medium mb-0.5">{latestEvent.authPrompt.headline}</p>
-                    <p>{latestEvent.authPrompt.body}</p>
-                    {latestEvent.authPrompt.authorizationUrl && (
-                      <a
-                        href={latestEvent.authPrompt.authorizationUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-1 inline-flex items-center gap-1 text-primary underline"
-                      >
-                        Authorize
-                      </a>
-                    )}
-                  </div>
-                )}
-                {latestEvent?.type === "cancelled" && (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive">
-                    Run cancelled
-                  </div>
-                )}
-                {latestEvent?.type === "failed" && (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive">
-                    Run failed
-                    {(() => {
-                      const f = latestEvent.runState?.failure;
-                      if (f && typeof f === "object") {
-                        const msg = (f as Record<string, unknown>).message;
-                        return msg ? (
-                          <span className="block mt-0.5 opacity-80">{String(msg)}</span>
-                        ) : null;
-                      }
-                      return null;
-                    })()}
-                  </div>
-                )}
-                {(latestEvent?.type === "capability_activity" ||
-                  latestEvent?.type === "capability_display_preview") && (
-                  <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin shrink-0" />
-                    <span>
-                      {latestEvent.type === "capability_display_preview"
-                        ? (latestEvent.preview?.title ?? "Capability running")
-                        : "Capability activity running"}
-                    </span>
-                  </div>
-                )}
-                {latestEvent?.type === "projection_snapshot" ||
-                latestEvent?.type === "projection_update"
-                  ? null
-                  : null}
-                {activeSseStatus === "reconnecting" && !sseError && (
-                  <div className="flex items-center gap-2 rounded-lg border border-[color:var(--chart-3)]/30 bg-[color:var(--chart-3)]/5 px-4 py-3 text-xs text-[color:var(--chart-3)]">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Reconnecting to event stream...
-                  </div>
-                )}
-                {sseError && (
-                  <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive">
-                    <Unplug className="h-3 w-3" />
-                    {sseError}
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-            </ScrollArea>
-
-            <div className="border-t border-border p-4">
-              <div className="mx-auto flex max-w-3xl items-center gap-2">
-                <Input
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder={isDisconnected ? "IronClaw not connected" : "Type a message..."}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      sendMessage();
-                    }
-                  }}
-                  disabled={isSending || isDisconnected}
-                />
-                <Button
-                  size="icon"
-                  onClick={sendMessage}
-                  disabled={!inputText.trim() || isSending || isDisconnected}
-                >
-                  <Send size={14} />
-                </Button>
-              </div>
-            </div>
-          </>
+        {activeThreadId && threadStateLoading ? (
+          <div className="flex h-full items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : activeThreadId && initialMessages ? (
+          <ChatArea
+            key={activeThreadId}
+            threadId={activeThreadId}
+            apiClient={apiClient}
+            initialMessages={initialMessages}
+            threadState={threadState}
+            onRebuild={rebuild}
+          />
+        ) : activeThreadId && !initialMessages ? (
+          <div className="flex h-full items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
         ) : (
           <div className="flex h-full items-center justify-center">
             {isDisconnected ? (

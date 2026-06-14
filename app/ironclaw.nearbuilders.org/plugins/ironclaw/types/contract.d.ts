@@ -106,6 +106,51 @@ export declare const TimelineSchema: z.ZodObject<{
         nextCursor: z.ZodNullable<z.ZodString>;
     }, z.core.$strip>;
 }, z.core.$strip>;
+export declare const ThreadStateSchema: z.ZodObject<{
+    thread: z.ZodObject<{
+        threadId: z.ZodString;
+        scope: z.ZodObject<{
+            tenantId: z.ZodString;
+            agentId: z.ZodString;
+            projectId: z.ZodOptional<z.ZodString>;
+            ownerUserId: z.ZodOptional<z.ZodString>;
+            missionId: z.ZodOptional<z.ZodString>;
+        }, z.core.$strip>;
+        createdByActorId: z.ZodString;
+        title: z.ZodOptional<z.ZodString>;
+        metadataJson: z.ZodOptional<z.ZodString>;
+        goal: z.ZodOptional<z.ZodObject<{
+            statement: z.ZodString;
+            refinedAtSequence: z.ZodNumber;
+            refinementCount: z.ZodNumber;
+        }, z.core.$strip>>;
+    }, z.core.$strip>;
+    messages: z.ZodArray<z.ZodObject<{
+        messageId: z.ZodString;
+        threadId: z.ZodString;
+        sequence: z.ZodNumber;
+        kind: z.ZodString;
+        status: z.ZodString;
+        actorId: z.ZodOptional<z.ZodString>;
+        sourceBindingId: z.ZodOptional<z.ZodString>;
+        replyTargetBindingId: z.ZodOptional<z.ZodString>;
+        turnId: z.ZodOptional<z.ZodString>;
+        turnRunId: z.ZodOptional<z.ZodString>;
+        toolResultRef: z.ZodOptional<z.ZodString>;
+        content: z.ZodOptional<z.ZodString>;
+        redactionRef: z.ZodOptional<z.ZodString>;
+        role: z.ZodOptional<z.ZodString>;
+        createdAt: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    summaryArtifacts: z.ZodArray<z.ZodObject<{
+        summaryId: z.ZodString;
+        threadId: z.ZodString;
+        startSequence: z.ZodNumber;
+        endSequence: z.ZodNumber;
+        summaryKind: z.ZodString;
+        content: z.ZodString;
+    }, z.core.$strip>>;
+}, z.core.$strip>;
 export declare const AcceptedResponseSchema: z.ZodObject<{
     outcome: z.ZodString;
     threadId: z.ZodString;
@@ -117,6 +162,26 @@ export declare const AcceptedResponseSchema: z.ZodObject<{
     resolvedRunProfileId: z.ZodOptional<z.ZodString>;
     resolvedRunProfileVersion: z.ZodOptional<z.ZodNumber>;
     eventCursor: z.ZodOptional<z.ZodNumber>;
+}, z.core.$strip>;
+export declare const AguiChunkSchema: z.ZodObject<{
+    type: z.ZodString;
+    threadId: z.ZodOptional<z.ZodString>;
+    runId: z.ZodOptional<z.ZodString>;
+    messageId: z.ZodOptional<z.ZodString>;
+    toolCallId: z.ZodOptional<z.ZodString>;
+    toolCallName: z.ZodOptional<z.ZodString>;
+    delta: z.ZodOptional<z.ZodString>;
+    content: z.ZodOptional<z.ZodString>;
+    result: z.ZodOptional<z.ZodAny>;
+    state: z.ZodOptional<z.ZodString>;
+    finishReason: z.ZodOptional<z.ZodString>;
+    name: z.ZodOptional<z.ZodString>;
+    value: z.ZodOptional<z.ZodAny>;
+    input: z.ZodOptional<z.ZodAny>;
+    role: z.ZodOptional<z.ZodString>;
+    messages: z.ZodOptional<z.ZodArray<z.ZodAny>>;
+    message: z.ZodOptional<z.ZodString>;
+    code: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 export declare const GateResolutionSchema: z.ZodEnum<{
     approved: "approved";
@@ -986,6 +1051,142 @@ export declare const contract: {
                 message: string;
             };
         }>>, Record<never, never>>;
+        getState: import("@orpc/contract").ContractProcedure<z.ZodObject<{
+            id: z.ZodString;
+        }, z.core.$strip>, z.ZodObject<{
+            thread: z.ZodObject<{
+                threadId: z.ZodString;
+                scope: z.ZodObject<{
+                    tenantId: z.ZodString;
+                    agentId: z.ZodString;
+                    projectId: z.ZodOptional<z.ZodString>;
+                    ownerUserId: z.ZodOptional<z.ZodString>;
+                    missionId: z.ZodOptional<z.ZodString>;
+                }, z.core.$strip>;
+                createdByActorId: z.ZodString;
+                title: z.ZodOptional<z.ZodString>;
+                metadataJson: z.ZodOptional<z.ZodString>;
+                goal: z.ZodOptional<z.ZodObject<{
+                    statement: z.ZodString;
+                    refinedAtSequence: z.ZodNumber;
+                    refinementCount: z.ZodNumber;
+                }, z.core.$strip>>;
+            }, z.core.$strip>;
+            messages: z.ZodArray<z.ZodObject<{
+                messageId: z.ZodString;
+                threadId: z.ZodString;
+                sequence: z.ZodNumber;
+                kind: z.ZodString;
+                status: z.ZodString;
+                actorId: z.ZodOptional<z.ZodString>;
+                sourceBindingId: z.ZodOptional<z.ZodString>;
+                replyTargetBindingId: z.ZodOptional<z.ZodString>;
+                turnId: z.ZodOptional<z.ZodString>;
+                turnRunId: z.ZodOptional<z.ZodString>;
+                toolResultRef: z.ZodOptional<z.ZodString>;
+                content: z.ZodOptional<z.ZodString>;
+                redactionRef: z.ZodOptional<z.ZodString>;
+                role: z.ZodOptional<z.ZodString>;
+                createdAt: z.ZodOptional<z.ZodString>;
+            }, z.core.$strip>>;
+            summaryArtifacts: z.ZodArray<z.ZodObject<{
+                summaryId: z.ZodString;
+                threadId: z.ZodString;
+                startSequence: z.ZodNumber;
+                endSequence: z.ZodNumber;
+                summaryKind: z.ZodString;
+                content: z.ZodString;
+            }, z.core.$strip>>;
+        }, z.core.$strip>, import("@orpc/contract").MergedErrorMap<Record<never, never>, import("@orpc/contract").MergedErrorMap<Record<never, never>, {
+            UNAUTHORIZED: {
+                status: number;
+                message: string;
+            };
+            NOT_FOUND: {
+                status: number;
+                message: string;
+            };
+            BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            CONFLICT: {
+                status: number;
+                message: string;
+            };
+            GATEWAY_ERROR: {
+                status: number;
+                message: string;
+            };
+        }>>, Record<never, never>>;
+        chatStream: import("@orpc/contract").ContractProcedure<z.ZodObject<{
+            id: z.ZodString;
+            content: z.ZodString;
+            clientActionId: z.ZodOptional<z.ZodString>;
+            messages: z.ZodOptional<z.ZodArray<z.ZodObject<{
+                role: z.ZodString;
+                content: z.ZodString;
+            }, z.core.$strip>>>;
+        }, z.core.$strip>, import("@orpc/contract").Schema<AsyncIteratorObject<{
+            type: string;
+            threadId?: string | undefined;
+            runId?: string | undefined;
+            messageId?: string | undefined;
+            toolCallId?: string | undefined;
+            toolCallName?: string | undefined;
+            delta?: string | undefined;
+            content?: string | undefined;
+            result?: any;
+            state?: string | undefined;
+            finishReason?: string | undefined;
+            name?: string | undefined;
+            value?: any;
+            input?: any;
+            role?: string | undefined;
+            messages?: any[] | undefined;
+            message?: string | undefined;
+            code?: string | undefined;
+        }, unknown, void>, import("@orpc/shared").AsyncIteratorClass<{
+            type: string;
+            threadId?: string | undefined;
+            runId?: string | undefined;
+            messageId?: string | undefined;
+            toolCallId?: string | undefined;
+            toolCallName?: string | undefined;
+            delta?: string | undefined;
+            content?: string | undefined;
+            result?: any;
+            state?: string | undefined;
+            finishReason?: string | undefined;
+            name?: string | undefined;
+            value?: any;
+            input?: any;
+            role?: string | undefined;
+            messages?: any[] | undefined;
+            message?: string | undefined;
+            code?: string | undefined;
+        }, unknown, void>>, import("@orpc/contract").MergedErrorMap<Record<never, never>, import("@orpc/contract").MergedErrorMap<Record<never, never>, {
+            UNAUTHORIZED: {
+                status: number;
+                message: string;
+            };
+            NOT_FOUND: {
+                status: number;
+                message: string;
+            };
+            BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            CONFLICT: {
+                status: number;
+                message: string;
+            };
+            GATEWAY_ERROR: {
+                status: number;
+                message: string;
+            };
+        }>>, Record<never, never>>;
     };
     automations: {
         list: import("@orpc/contract").ContractProcedure<z.ZodObject<{
@@ -1636,6 +1837,37 @@ export declare const contract: {
                 }, z.core.$strip>;
                 commandAliases: z.ZodArray<z.ZodString>;
             }, z.core.$strip>>;
+        }, z.core.$strip>, import("@orpc/contract").MergedErrorMap<Record<never, never>, import("@orpc/contract").MergedErrorMap<Record<never, never>, {
+            UNAUTHORIZED: {
+                status: number;
+                message: string;
+            };
+            NOT_FOUND: {
+                status: number;
+                message: string;
+            };
+            BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            CONFLICT: {
+                status: number;
+                message: string;
+            };
+            GATEWAY_ERROR: {
+                status: number;
+                message: string;
+            };
+        }>>, Record<never, never>>;
+    };
+    operator: {
+        createAccessSession: import("@orpc/contract").ContractProcedure<z.ZodObject<{
+            tenantId: z.ZodString;
+            agentId: z.ZodOptional<z.ZodString>;
+            projectId: z.ZodOptional<z.ZodString>;
+        }, z.core.$strip>, z.ZodObject<{
+            token: z.ZodString;
+            expiresAt: z.ZodISODateTime;
         }, z.core.$strip>, import("@orpc/contract").MergedErrorMap<Record<never, never>, import("@orpc/contract").MergedErrorMap<Record<never, never>, {
             UNAUTHORIZED: {
                 status: number;

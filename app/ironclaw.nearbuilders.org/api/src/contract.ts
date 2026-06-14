@@ -30,7 +30,8 @@ export const LeaderboardEntrySchema = z.object({
 
 export const IronclawSettingsSchema = z.object({
   tunnelUrl: z.string().url(),
-  apiToken: z.string().min(1),
+  apiToken: z.string(),
+  hasToken: z.boolean().optional(),
   updatedAt: z.iso.datetime().optional(),
 });
 
@@ -84,7 +85,10 @@ export const contract = oc.router({
 
       update: oc
         .route({ method: "PUT", path: "/ironclaw/settings", summary: "Update ironclaw connection settings" })
-        .input(IronclawSettingsSchema)
+        .input(z.object({
+          tunnelUrl: z.string().url(),
+          apiToken: z.string().min(1),
+        }))
         .output(z.object({ success: z.boolean() }))
         .errors({ UNAUTHORIZED, BAD_REQUEST }),
     },

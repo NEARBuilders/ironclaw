@@ -243,7 +243,10 @@ mod tests {
     async fn env_bearer_authenticator_accepts_exact_token() {
         let auth = EnvBearerAuthenticator::new(
             SecretString::from("right-token".to_string()),
+            TenantId::new("tenant-alpha").expect("tenant"),
             UserId::new("user-alpha").expect("user"),
+            None,
+            None,
         )
         .expect("auth");
         let result = auth.authenticate("right-token").await;
@@ -263,7 +266,10 @@ mod tests {
     async fn env_bearer_authenticator_rejects_wrong_token() {
         let auth = EnvBearerAuthenticator::new(
             SecretString::from("right-token".to_string()),
+            TenantId::new("tenant-alpha").expect("tenant"),
             UserId::new("user-alpha").expect("user"),
+            None,
+            None,
         )
         .expect("auth");
         assert!(auth.authenticate("wrong-token").await.is_none());
@@ -275,7 +281,10 @@ mod tests {
         // even though it would be a prefix of the configured token.
         let auth = EnvBearerAuthenticator::new(
             SecretString::from("right-token".to_string()),
+            TenantId::new("tenant-alpha").expect("tenant"),
             UserId::new("user-alpha").expect("user"),
+            None,
+            None,
         )
         .expect("auth");
         assert!(auth.authenticate("right").await.is_none());
@@ -286,7 +295,10 @@ mod tests {
     fn env_bearer_authenticator_rejects_empty_configured_token() {
         let err = EnvBearerAuthenticator::new(
             SecretString::from(String::new()),
+            TenantId::new("tenant-alpha").expect("tenant"),
             UserId::new("user-alpha").expect("user"),
+            None,
+            None,
         )
         .expect_err("empty token must be rejected at construction");
         assert!(matches!(err, EnvBearerConfigError::EmptyToken));
