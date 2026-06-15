@@ -169,7 +169,17 @@ if [ "$MODE" = "local" ]; then
   if [ ! -f "$EVDEV_DIR/.env" ]; then
     echo "==> $EVDEV_DIR/.env not found — creating from .env.example"
     cp "$EVDEV_DIR/.env.example" "$EVDEV_DIR/.env"
-    echo "    warning: review $EVDEV_DIR/.env and fill in required values." >&2
+    echo "    info: filling required secrets." >&2
+  fi
+
+  if grep -q '^BETTER_AUTH_SECRET=$' "$EVDEV_DIR/.env" 2>/dev/null; then
+    secret="$(openssl rand -base64 32)"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      sed -i '' "s/^BETTER_AUTH_SECRET=$/BETTER_AUTH_SECRET=$secret/" "$EVDEV_DIR/.env"
+    else
+      sed -i "s/^BETTER_AUTH_SECRET=$/BETTER_AUTH_SECRET=$secret/" "$EVDEV_DIR/.env"
+    fi
+    echo "    info: auto-generated BETTER_AUTH_SECRET in .env" >&2
   fi
 
   if [ ! -f "$EVDEV_DIR/node_modules/.bin/bos" ]; then
