@@ -77,7 +77,9 @@ describe("ironclaw chat contract (via mock Reborn)", () => {
 
   it("SSE stream returns accepted and final_reply events", async () => {
     mock = await startRebornMock({ scenario: "stream-final-reply" });
-    const sseRes = await fetch(`${mock.baseUrl}/api/webchat/v2/threads/thread-001/events?token=${mock.token}`);
+    const sseRes = await fetch(
+      `${mock.baseUrl}/api/webchat/v2/threads/thread-001/events?token=${mock.token}`,
+    );
     expect(sseRes.status).toBe(200);
     expect(sseRes.headers.get("content-type")).toContain("text/event-stream");
 

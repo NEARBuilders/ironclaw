@@ -95,9 +95,7 @@ function RegistryEntryCard({
               {entry.kind}
             </Badge>
           </div>
-          {entry.version && (
-            <p className="text-xs text-muted-foreground">v{entry.version}</p>
-          )}
+          {entry.version && <p className="text-xs text-muted-foreground">v{entry.version}</p>}
         </div>
         <Button
           size="sm"
@@ -168,9 +166,7 @@ function InstalledExtensionCard({
               <span className="ml-1">{ext.kind}</span>
             </Badge>
           </div>
-          {ext.version && (
-            <p className="text-xs text-muted-foreground">v{ext.version}</p>
-          )}
+          {ext.version && <p className="text-xs text-muted-foreground">v{ext.version}</p>}
         </div>
         {ext.active ? (
           <Badge variant="default" className="shrink-0 gap-1 text-[10px] px-2 py-0.5">
@@ -210,7 +206,10 @@ function InstalledExtensionCard({
           </span>
         )}
         {ext.activationError && (
-          <span className="inline-flex items-center gap-1 text-destructive" title={ext.activationError}>
+          <span
+            className="inline-flex items-center gap-1 text-destructive"
+            title={ext.activationError}
+          >
             <XCircle size={12} />
             Error
           </span>
@@ -239,12 +238,7 @@ function InstalledExtensionCard({
             Configure
           </Button>
         )}
-        <Button
-          size="sm"
-          variant="destructive"
-          onClick={() => onRemove(ext)}
-          disabled={removing}
-        >
+        <Button size="sm" variant="destructive" onClick={() => onRemove(ext)} disabled={removing}>
           {removing ? (
             <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
           ) : (
@@ -363,9 +357,7 @@ function SetupDialog({
 
             {setupData.onboarding?.credentialNextStep && (
               <div className="rounded-lg border border-border bg-card p-4">
-                <p className="text-xs font-medium text-foreground mb-1.5">
-                  Credential Fields
-                </p>
+                <p className="text-xs font-medium text-foreground mb-1.5">Credential Fields</p>
                 <p className="text-sm text-muted-foreground">
                   {setupData.onboarding.credentialNextStep}
                 </p>
@@ -378,9 +370,7 @@ function SetupDialog({
                   <div className="space-y-3">
                     {setupData.secrets.map((secret) => (
                       <div key={secret.name} className="space-y-1.5">
-                        <Label htmlFor={secret.name}>
-                          {secret.prompt}
-                        </Label>
+                        <Label htmlFor={secret.name}>{secret.prompt}</Label>
                         <Input
                           id={secret.name}
                           placeholder={secret.prompt}
@@ -419,16 +409,17 @@ function SetupDialog({
                   </div>
                 )}
                 <Button onClick={handleSubmit} disabled={saving} className="w-full">
-                  {saving ? (
-                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                  ) : null}
+                  {saving ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
                   {saving ? "Saving..." : "Save Configuration"}
                 </Button>
               </div>
             )}
           </div>
         ) : null}
-        {setupData && !setupData.onboarding && setupData.secrets.length === 0 && setupData.fields.length === 0 ? (
+        {setupData &&
+        !setupData.onboarding &&
+        setupData.secrets.length === 0 &&
+        setupData.fields.length === 0 ? (
           <div className="text-sm text-muted-foreground">
             <p>No additional setup required for this extension.</p>
           </div>
@@ -689,9 +680,7 @@ function ExtensionsPage() {
             </div>
           ) : filteredRegistry.length === 0 ? (
             <div className="rounded-lg border border-border p-8 text-center space-y-2">
-              <p className="text-sm text-muted-foreground">
-                No extensions match your search.
-              </p>
+              <p className="text-sm text-muted-foreground">No extensions match your search.</p>
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
@@ -737,7 +726,10 @@ function ExtensionsPage() {
                 {ch.commandAliases.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {ch.commandAliases.map((alias) => (
-                      <span key={alias} className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                      <span
+                        key={alias}
+                        className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground"
+                      >
                         /{alias}
                       </span>
                     ))}
@@ -749,7 +741,12 @@ function ExtensionsPage() {
         )}
       </section>
 
-      <SetupDialog ext={setupExt} open={setupOpen} onOpenChange={setSetupOpen} onSave={loadInstalled} />
+      <SetupDialog
+        ext={setupExt}
+        open={setupOpen}
+        onOpenChange={setSetupOpen}
+        onSave={loadInstalled}
+      />
     </div>
   );
 }

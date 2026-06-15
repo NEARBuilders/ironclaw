@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { type RebornAppHost, startRebornApp } from "../helpers/reborn-app";
 import { loginAnonymously, setupIronclawApiMock } from "../helpers/playwright-auth";
+import { type RebornAppHost, startRebornApp } from "../helpers/reborn-app";
 
 test.describe("Settings - IronClaw", () => {
   test.describe.configure({ mode: "serial" });

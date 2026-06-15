@@ -40,7 +40,11 @@ function createRpcLink(runtimeConfig: { hostUrl: string; rpcBase: string }) {
           }
 
           const status = "status" in err ? Number(err.status) : 0;
-          if (status === 412 || message.includes("precondition_failed") || message.includes("not configured")) {
+          if (
+            status === 412 ||
+            message.includes("precondition_failed") ||
+            message.includes("not configured")
+          ) {
             void import("sonner").then(({ toast }) => {
               toast.warning("Plugin not configured", {
                 id: "plugin-config-error",

@@ -47,7 +47,8 @@ const sections = [
             <strong className="text-foreground">Claim $5 of free credits</strong>
           </li>
           <li>
-            <strong className="text-foreground">Generate an API key</strong> in the "API Keys" section
+            <strong className="text-foreground">Generate an API key</strong> in the "API Keys"
+            section
           </li>
           <li>
             <strong className="text-foreground">Export your API key</strong>
@@ -78,8 +79,8 @@ const sections = [
         <div className="rounded-xl border-2 border-primary/40 bg-primary/5 px-5 py-4 space-y-3">
           <p className="text-sm font-bold text-foreground">Quick start (recommended)</p>
           <p className="text-sm text-muted-foreground">
-            The repo includes run-reborn-webui.sh which handles the entire setup.
-            Just export your provider key and run:
+            The repo includes run-reborn-webui.sh which handles the entire setup. Just export your
+            provider key and run:
           </p>
           <CommandCopy command="git clone https://github.com/NEARBuilders/ironclaw.git && cd ironclaw" />
           <CommandCopy command='export NEARAI_API_KEY="your-key-here"' />
@@ -96,8 +97,8 @@ const sections = [
 
         <p className="text-sm text-muted-foreground">
           Set this env var before starting ironclaw, or add{" "}
-          <code className="rounded bg-secondary px-1 py-0.5">allowed_origins</code> to your config.toml.
-          Then paste the printed login token below.
+          <code className="rounded bg-secondary px-1 py-0.5">allowed_origins</code> to your
+          config.toml. Then paste the printed login token below.
         </p>
       </div>
     ),
@@ -115,7 +116,9 @@ const sections = [
         <CommandCopy command="git clone https://github.com/jcarbonnell/ironclaw-hackathon.git" />
         <CommandCopy command='export IRONCLAW_REBORN_HOME="$HOME/.ironclaw-reborn-demo"' />
         <CommandCopy command='mkdir -p "$IRONCLAW_REBORN_HOME/local-dev/tenants/default/users/reborn-cli/skills/ironclaw-hackathon"' />
-        <CommandCopy command={`cp ironclaw-hackathon/skill/SKILL.md "$IRONCLAW_REBORN_HOME/local-dev/tenants/default/users/reborn-cli/skills/ironclaw-hackathon/"`} />
+        <CommandCopy
+          command={`cp ironclaw-hackathon/skill/SKILL.md "$IRONCLAW_REBORN_HOME/local-dev/tenants/default/users/reborn-cli/skills/ironclaw-hackathon/"`}
+        />
         <p className="text-sm text-muted-foreground">Verify everything is set up:</p>
         <CommandCopy command="cargo run -q -p ironclaw_reborn_cli --bin ironclaw-reborn -- extension search nova && cargo run -q -p ironclaw_reborn_cli --bin ironclaw-reborn -- skills list | grep hackathon" />
       </div>
@@ -138,22 +141,32 @@ const sections = [
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-secondary">
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-border">Field</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-border">Purpose</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-border">
+                    Field
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-border">
+                    Purpose
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 <tr className="border-b border-border">
                   <td className="px-3 py-2 font-mono text-xs text-foreground">Agent ID</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">Short handle, no spaces/slashes/quotes</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    Short handle, no spaces/slashes/quotes
+                  </td>
                 </tr>
                 <tr className="border-b border-border">
                   <td className="px-3 py-2 font-mono text-xs text-foreground">Participant Name</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">Name or @handle for the leaderboard</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    Name or @handle for the leaderboard
+                  </td>
                 </tr>
                 <tr>
                   <td className="px-3 py-2 font-mono text-xs text-foreground">NOVA Account ID</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">Must match at submission time</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    Must match at submission time
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -175,13 +188,21 @@ const sections = [
         </p>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" asChild>
-            <a href="https://github.com/nearai/ironhub/issues/new?template=new-skill.yml" target="_blank" rel="noopener noreferrer">
+            <a
+              href="https://github.com/nearai/ironhub/issues/new?template=new-skill.yml"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <ExternalLink size={12} />
               New skill template
             </a>
           </Button>
           <Button variant="outline" size="sm" asChild>
-            <a href="https://github.com/nearai/ironhub/issues/new?template=new-tool.yml" target="_blank" rel="noopener noreferrer">
+            <a
+              href="https://github.com/nearai/ironhub/issues/new?template=new-tool.yml"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <ExternalLink size={12} />
               New tool template
             </a>
@@ -214,34 +235,52 @@ const sections = [
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-secondary">
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-border">Field</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-border">Notes</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-border">
+                    Field
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-border">
+                    Notes
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 <tr className="border-b border-border">
                   <td className="px-3 py-2 font-mono text-xs text-foreground">NOVA Account ID</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">Must match registration</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    Must match registration
+                  </td>
                 </tr>
                 <tr className="border-b border-border">
                   <td className="px-3 py-2 font-mono text-xs text-foreground">NOVA API Key</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">From nova-sdk.com. Never stored or echoed</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    From nova-sdk.com. Never stored or echoed
+                  </td>
                 </tr>
                 <tr className="border-b border-border">
                   <td className="px-3 py-2 font-mono text-xs text-foreground">Project Title</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">Short name for your project</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    Short name for your project
+                  </td>
                 </tr>
                 <tr className="border-b border-border">
-                  <td className="px-3 py-2 font-mono text-xs text-foreground">Workflow Description</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">One sentence, 280 chars max</td>
+                  <td className="px-3 py-2 font-mono text-xs text-foreground">
+                    Workflow Description
+                  </td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    One sentence, 280 chars max
+                  </td>
                 </tr>
                 <tr className="border-b border-border">
                   <td className="px-3 py-2 font-mono text-xs text-foreground">Demo URL</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">5 min video, publicly viewable</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    5 min video, publicly viewable
+                  </td>
                 </tr>
                 <tr>
                   <td className="px-3 py-2 font-mono text-xs text-foreground">GitHub Repo</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">Public repo URL (optional)</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    Public repo URL (optional)
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -275,7 +314,10 @@ const sections = [
               Ask questions, share progress, connect with outros participants
             </p>
           </div>
-          <ExternalLink size={16} className="shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
+          <ExternalLink
+            size={16}
+            className="shrink-0 text-muted-foreground group-hover:text-primary transition-colors"
+          />
         </a>
       </div>
     ),
@@ -314,7 +356,10 @@ function HackathonGuidePage() {
         {sections.map((section) => {
           const isOpen = openSections.has(section.id);
           return (
-            <div key={section.id} className="rounded-xl border border-border bg-card overflow-hidden">
+            <div
+              key={section.id}
+              className="rounded-xl border border-border bg-card overflow-hidden"
+            >
               <button
                 type="button"
                 onClick={() => toggleSection(section.id)}
@@ -334,9 +379,7 @@ function HackathonGuidePage() {
                   }`}
                 />
               </button>
-              {isOpen && (
-                <div className="border-t border-border px-5 py-4">{section.content}</div>
-              )}
+              {isOpen && <div className="border-t border-border px-5 py-4">{section.content}</div>}
             </div>
           );
         })}

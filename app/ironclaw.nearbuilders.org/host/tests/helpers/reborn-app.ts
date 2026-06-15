@@ -1,7 +1,7 @@
 import path from "node:path";
 import { startRebornMock } from "../../../tests/reborn-mock/server";
 import type { ScenarioName } from "../../../tests/reborn-mock/types";
-import { startBundledHost, type BundledHostUrls } from "./bundled-host";
+import { type BundledHostUrls, startBundledHost } from "./bundled-host";
 import { loadHostTestEnv } from "./test-env";
 
 const workspaceRoot = path.resolve(import.meta.dirname, "../../..");

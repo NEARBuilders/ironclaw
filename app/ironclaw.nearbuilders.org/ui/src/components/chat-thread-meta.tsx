@@ -1,13 +1,13 @@
 import { FileText, MessageSquare, User } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetDescription,
 } from "@/components/ui/sheet";
-import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
 import type { ThreadState } from "@/hooks/use-thread-state";
 
 interface ChatThreadMetaProps {
@@ -85,7 +85,8 @@ export function ChatThreadMeta({ open, onOpenChange, threadState }: ChatThreadMe
                             {String(artifact.summaryKind ?? "")}
                           </Badge>
                           <span className="text-[10px] text-muted-foreground">
-                            seq {String(artifact.startSequence ?? "")}-{String(artifact.endSequence ?? "")}
+                            seq {String(artifact.startSequence ?? "")}-
+                            {String(artifact.endSequence ?? "")}
                           </span>
                         </div>
                         <p className="mt-1.5 text-xs text-foreground line-clamp-2">

@@ -26,9 +26,7 @@ function LeaderboardPage() {
         </div>
         <div>
           <h1 className="text-lg font-semibold">Leaderboard</h1>
-          <p className="text-sm text-muted-foreground">
-            Submissions ranked by submission time
-          </p>
+          <p className="text-sm text-muted-foreground">Submissions ranked by submission time</p>
         </div>
       </div>
 

@@ -9,11 +9,30 @@ const Errors = {
   GATEWAY_ERROR: { status: 502, message: "Ironclaw gateway error" },
 };
 
+export const AttachmentCapabilitiesSchema = z.object({
+  accept: z.array(z.string()),
+  maxCount: z.number(),
+  maxFileBytes: z.number(),
+  maxTotalBytes: z.number(),
+});
+
+export const AttachmentRefSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["audio", "image", "document"]),
+  mimeType: z.string(),
+  filename: z.string().optional(),
+  sizeBytes: z.number().optional(),
+  storageKey: z.string().optional(),
+  extractedText: z.string().optional(),
+  previewUrl: z.string().optional(),
+});
+
 export const SessionSchema = z.object({
   tenantId: z.string(),
   userId: z.string(),
   capabilities: z.object({
     operatorWebuiConfig: z.boolean(),
+    attachments: AttachmentCapabilitiesSchema.optional(),
   }),
 });
 
@@ -70,6 +89,7 @@ export const TimelineEntrySchema = z.object({
   redactionRef: z.string().optional(),
   role: z.string().optional(),
   createdAt: z.string().optional(),
+  attachments: z.array(AttachmentRefSchema).optional(),
 });
 
 export const TimelineSchema = z.object({
@@ -154,28 +174,28 @@ export const ChatEventSchema = z.object({
     .optional(),
   activity: z
     .object({
-      invocationId: z.string(),
+      invocationId: z.string().catch(""),
       turnRunId: z.string().optional(),
       threadId: z.string().optional(),
-      capabilityId: z.string(),
-      status: z.string(),
+      capabilityId: z.string().catch(""),
+      status: z.string().catch(""),
       provider: z.string().optional(),
       runtime: z.string().optional(),
-      processId: z.string().optional(),
-      outputBytes: z.number().optional(),
+      processId: z.string().nullable().optional(),
+      outputBytes: z.number().nullable().optional(),
       errorKind: z.string().optional(),
-      updatedAt: z.string(),
+      updatedAt: z.string().optional(),
     })
     .optional(),
   preview: z
     .object({
       timelineMessageId: z.string().optional(),
-      invocationId: z.string(),
+      invocationId: z.string().catch(""),
       turnRunId: z.string().optional(),
       threadId: z.string().optional(),
-      capabilityId: z.string(),
-      status: z.string(),
-      title: z.string(),
+      capabilityId: z.string().catch(""),
+      status: z.string().catch(""),
+      title: z.string().catch(""),
       subtitle: z.string().optional(),
       inputSummary: z.string().optional(),
       outputSummary: z.string().optional(),
@@ -183,8 +203,8 @@ export const ChatEventSchema = z.object({
       outputKind: z.string().optional(),
       outputBytes: z.number().optional(),
       resultRef: z.string().optional(),
-      truncated: z.boolean(),
-      updatedAt: z.string(),
+      truncated: z.boolean().catch(false),
+      updatedAt: z.string().optional(),
     })
     .optional(),
   reply: z
@@ -228,33 +248,28 @@ export const ChatEventSchema = z.object({
     .optional(),
   response: z
     .object({
-      runId: z.string(),
-      status: z.string(),
-      eventCursor: z.number(),
-      alreadyTerminal: z.boolean(),
+      runId: z.string().catch(""),
+      status: z.string().catch(""),
+      eventCursor: z.number().optional(),
+      alreadyTerminal: z.boolean().optional(),
     })
     .optional(),
   runState: z
     .object({
-      turnId: z.string(),
-      runId: z.string(),
-      status: z.string(),
-      eventCursor: z.number(),
-      acceptedMessageRef: z.string(),
-      resolvedRunProfileId: z.string(),
-      resolvedRunProfileVersion: z.number(),
-      receivedAt: z.string(),
+      turnId: z.string().catch(""),
+      runId: z.string().catch(""),
+      status: z.string().catch(""),
+      eventCursor: z.number().optional(),
+      acceptedMessageRef: z.string().catch(""),
+      resolvedRunProfileId: z.string().catch(""),
+      resolvedRunProfileVersion: z.number().catch(0),
+      receivedAt: z.string().catch(""),
       checkpointId: z.string().optional(),
       gateRef: z.string().optional(),
       failure: z.unknown().optional(),
     })
     .optional(),
-  state: z
-    .object({
-      threadId: z.string(),
-      items: z.array(z.unknown()),
-    })
-    .optional(),
+  state: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const AuthProviderSchema = z.object({
@@ -517,6 +532,15 @@ export const contract = oc.router({
           id: z.string(),
           content: z.string(),
           clientActionId: z.string().optional(),
+          attachments: z
+            .array(
+              z.object({
+                mimeType: z.string(),
+                filename: z.string().optional(),
+                dataBase64: z.string(),
+              }),
+            )
+            .optional(),
         }),
       )
       .output(AcceptedResponseSchema)

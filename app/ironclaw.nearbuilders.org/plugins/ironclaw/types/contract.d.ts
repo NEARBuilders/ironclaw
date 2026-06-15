@@ -1,9 +1,35 @@
 import { z } from "every-plugin/zod";
+export declare const AttachmentCapabilitiesSchema: z.ZodObject<{
+    accept: z.ZodArray<z.ZodString>;
+    maxCount: z.ZodNumber;
+    maxFileBytes: z.ZodNumber;
+    maxTotalBytes: z.ZodNumber;
+}, z.core.$strip>;
+export declare const AttachmentRefSchema: z.ZodObject<{
+    id: z.ZodString;
+    kind: z.ZodEnum<{
+        audio: "audio";
+        image: "image";
+        document: "document";
+    }>;
+    mimeType: z.ZodString;
+    filename: z.ZodOptional<z.ZodString>;
+    sizeBytes: z.ZodOptional<z.ZodNumber>;
+    storageKey: z.ZodOptional<z.ZodString>;
+    extractedText: z.ZodOptional<z.ZodString>;
+    previewUrl: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
 export declare const SessionSchema: z.ZodObject<{
     tenantId: z.ZodString;
     userId: z.ZodString;
     capabilities: z.ZodObject<{
         operatorWebuiConfig: z.ZodBoolean;
+        attachments: z.ZodOptional<z.ZodObject<{
+            accept: z.ZodArray<z.ZodString>;
+            maxCount: z.ZodNumber;
+            maxFileBytes: z.ZodNumber;
+            maxTotalBytes: z.ZodNumber;
+        }, z.core.$strip>>;
     }, z.core.$strip>;
 }, z.core.$strip>;
 export declare const ThreadScopeSchema: z.ZodObject<{
@@ -81,6 +107,20 @@ export declare const TimelineEntrySchema: z.ZodObject<{
     redactionRef: z.ZodOptional<z.ZodString>;
     role: z.ZodOptional<z.ZodString>;
     createdAt: z.ZodOptional<z.ZodString>;
+    attachments: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        kind: z.ZodEnum<{
+            audio: "audio";
+            image: "image";
+            document: "document";
+        }>;
+        mimeType: z.ZodString;
+        filename: z.ZodOptional<z.ZodString>;
+        sizeBytes: z.ZodOptional<z.ZodNumber>;
+        storageKey: z.ZodOptional<z.ZodString>;
+        extractedText: z.ZodOptional<z.ZodString>;
+        previewUrl: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>>;
 }, z.core.$strip>;
 export declare const TimelineSchema: z.ZodObject<{
     data: z.ZodArray<z.ZodObject<{
@@ -99,6 +139,20 @@ export declare const TimelineSchema: z.ZodObject<{
         redactionRef: z.ZodOptional<z.ZodString>;
         role: z.ZodOptional<z.ZodString>;
         createdAt: z.ZodOptional<z.ZodString>;
+        attachments: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            id: z.ZodString;
+            kind: z.ZodEnum<{
+                audio: "audio";
+                image: "image";
+                document: "document";
+            }>;
+            mimeType: z.ZodString;
+            filename: z.ZodOptional<z.ZodString>;
+            sizeBytes: z.ZodOptional<z.ZodNumber>;
+            storageKey: z.ZodOptional<z.ZodString>;
+            extractedText: z.ZodOptional<z.ZodString>;
+            previewUrl: z.ZodOptional<z.ZodString>;
+        }, z.core.$strip>>>;
     }, z.core.$strip>>;
     meta: z.ZodObject<{
         total: z.ZodNumber;
@@ -141,6 +195,20 @@ export declare const ThreadStateSchema: z.ZodObject<{
         redactionRef: z.ZodOptional<z.ZodString>;
         role: z.ZodOptional<z.ZodString>;
         createdAt: z.ZodOptional<z.ZodString>;
+        attachments: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            id: z.ZodString;
+            kind: z.ZodEnum<{
+                audio: "audio";
+                image: "image";
+                document: "document";
+            }>;
+            mimeType: z.ZodString;
+            filename: z.ZodOptional<z.ZodString>;
+            sizeBytes: z.ZodOptional<z.ZodNumber>;
+            storageKey: z.ZodOptional<z.ZodString>;
+            extractedText: z.ZodOptional<z.ZodString>;
+            previewUrl: z.ZodOptional<z.ZodString>;
+        }, z.core.$strip>>>;
     }, z.core.$strip>>;
     summaryArtifacts: z.ZodArray<z.ZodObject<{
         summaryId: z.ZodString;
@@ -202,26 +270,26 @@ export declare const ChatEventSchema: z.ZodObject<{
         generatedAt: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>>;
     activity: z.ZodOptional<z.ZodObject<{
-        invocationId: z.ZodString;
+        invocationId: z.ZodCatch<z.ZodString>;
         turnRunId: z.ZodOptional<z.ZodString>;
         threadId: z.ZodOptional<z.ZodString>;
-        capabilityId: z.ZodString;
-        status: z.ZodString;
+        capabilityId: z.ZodCatch<z.ZodString>;
+        status: z.ZodCatch<z.ZodString>;
         provider: z.ZodOptional<z.ZodString>;
         runtime: z.ZodOptional<z.ZodString>;
         processId: z.ZodOptional<z.ZodString>;
         outputBytes: z.ZodOptional<z.ZodNumber>;
         errorKind: z.ZodOptional<z.ZodString>;
-        updatedAt: z.ZodString;
+        updatedAt: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>>;
     preview: z.ZodOptional<z.ZodObject<{
         timelineMessageId: z.ZodOptional<z.ZodString>;
-        invocationId: z.ZodString;
+        invocationId: z.ZodCatch<z.ZodString>;
         turnRunId: z.ZodOptional<z.ZodString>;
         threadId: z.ZodOptional<z.ZodString>;
-        capabilityId: z.ZodString;
-        status: z.ZodString;
-        title: z.ZodString;
+        capabilityId: z.ZodCatch<z.ZodString>;
+        status: z.ZodCatch<z.ZodString>;
+        title: z.ZodCatch<z.ZodString>;
         subtitle: z.ZodOptional<z.ZodString>;
         inputSummary: z.ZodOptional<z.ZodString>;
         outputSummary: z.ZodOptional<z.ZodString>;
@@ -229,8 +297,8 @@ export declare const ChatEventSchema: z.ZodObject<{
         outputKind: z.ZodOptional<z.ZodString>;
         outputBytes: z.ZodOptional<z.ZodNumber>;
         resultRef: z.ZodOptional<z.ZodString>;
-        truncated: z.ZodBoolean;
-        updatedAt: z.ZodString;
+        truncated: z.ZodCatch<z.ZodBoolean>;
+        updatedAt: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>>;
     reply: z.ZodOptional<z.ZodObject<{
         text: z.ZodString;
@@ -264,28 +332,25 @@ export declare const ChatEventSchema: z.ZodObject<{
         expiresAt: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>>;
     response: z.ZodOptional<z.ZodObject<{
-        runId: z.ZodString;
-        status: z.ZodString;
-        eventCursor: z.ZodNumber;
-        alreadyTerminal: z.ZodBoolean;
+        runId: z.ZodCatch<z.ZodString>;
+        status: z.ZodCatch<z.ZodString>;
+        eventCursor: z.ZodOptional<z.ZodNumber>;
+        alreadyTerminal: z.ZodOptional<z.ZodBoolean>;
     }, z.core.$strip>>;
     runState: z.ZodOptional<z.ZodObject<{
-        turnId: z.ZodString;
-        runId: z.ZodString;
-        status: z.ZodString;
-        eventCursor: z.ZodNumber;
-        acceptedMessageRef: z.ZodString;
-        resolvedRunProfileId: z.ZodString;
-        resolvedRunProfileVersion: z.ZodNumber;
-        receivedAt: z.ZodString;
+        turnId: z.ZodCatch<z.ZodString>;
+        runId: z.ZodCatch<z.ZodString>;
+        status: z.ZodCatch<z.ZodString>;
+        eventCursor: z.ZodOptional<z.ZodNumber>;
+        acceptedMessageRef: z.ZodCatch<z.ZodString>;
+        resolvedRunProfileId: z.ZodCatch<z.ZodString>;
+        resolvedRunProfileVersion: z.ZodCatch<z.ZodNumber>;
+        receivedAt: z.ZodCatch<z.ZodString>;
         checkpointId: z.ZodOptional<z.ZodString>;
         gateRef: z.ZodOptional<z.ZodString>;
         failure: z.ZodOptional<z.ZodUnknown>;
     }, z.core.$strip>>;
-    state: z.ZodOptional<z.ZodObject<{
-        threadId: z.ZodString;
-        items: z.ZodArray<z.ZodUnknown>;
-    }, z.core.$strip>>;
+    state: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
 }, z.core.$strip>;
 export declare const AuthProviderSchema: z.ZodObject<{
     id: z.ZodString;
@@ -522,6 +587,12 @@ export declare const contract: {
         userId: z.ZodString;
         capabilities: z.ZodObject<{
             operatorWebuiConfig: z.ZodBoolean;
+            attachments: z.ZodOptional<z.ZodObject<{
+                accept: z.ZodArray<z.ZodString>;
+                maxCount: z.ZodNumber;
+                maxFileBytes: z.ZodNumber;
+                maxTotalBytes: z.ZodNumber;
+            }, z.core.$strip>>;
         }, z.core.$strip>;
     }, z.core.$strip>, import("@orpc/contract").MergedErrorMap<Record<never, never>, import("@orpc/contract").MergedErrorMap<Record<never, never>, {
         UNAUTHORIZED: {
@@ -652,6 +723,11 @@ export declare const contract: {
             id: z.ZodString;
             content: z.ZodString;
             clientActionId: z.ZodOptional<z.ZodString>;
+            attachments: z.ZodOptional<z.ZodArray<z.ZodObject<{
+                mimeType: z.ZodString;
+                filename: z.ZodOptional<z.ZodString>;
+                dataBase64: z.ZodString;
+            }, z.core.$strip>>>;
         }, z.core.$strip>, z.ZodObject<{
             outcome: z.ZodString;
             threadId: z.ZodString;
@@ -706,6 +782,20 @@ export declare const contract: {
                 redactionRef: z.ZodOptional<z.ZodString>;
                 role: z.ZodOptional<z.ZodString>;
                 createdAt: z.ZodOptional<z.ZodString>;
+                attachments: z.ZodOptional<z.ZodArray<z.ZodObject<{
+                    id: z.ZodString;
+                    kind: z.ZodEnum<{
+                        audio: "audio";
+                        image: "image";
+                        document: "document";
+                    }>;
+                    mimeType: z.ZodString;
+                    filename: z.ZodOptional<z.ZodString>;
+                    sizeBytes: z.ZodOptional<z.ZodNumber>;
+                    storageKey: z.ZodOptional<z.ZodString>;
+                    extractedText: z.ZodOptional<z.ZodString>;
+                    previewUrl: z.ZodOptional<z.ZodString>;
+                }, z.core.$strip>>>;
             }, z.core.$strip>>;
             meta: z.ZodObject<{
                 total: z.ZodNumber;
@@ -825,7 +915,6 @@ export declare const contract: {
                 invocationId: string;
                 capabilityId: string;
                 status: string;
-                updatedAt: string;
                 turnRunId?: string | undefined;
                 threadId?: string | undefined;
                 provider?: string | undefined;
@@ -833,6 +922,7 @@ export declare const contract: {
                 processId?: string | undefined;
                 outputBytes?: number | undefined;
                 errorKind?: string | undefined;
+                updatedAt?: string | undefined;
             } | undefined;
             preview?: {
                 invocationId: string;
@@ -840,7 +930,6 @@ export declare const contract: {
                 status: string;
                 title: string;
                 truncated: boolean;
-                updatedAt: string;
                 timelineMessageId?: string | undefined;
                 turnRunId?: string | undefined;
                 threadId?: string | undefined;
@@ -851,6 +940,7 @@ export declare const contract: {
                 outputKind?: string | undefined;
                 outputBytes?: number | undefined;
                 resultRef?: string | undefined;
+                updatedAt?: string | undefined;
             } | undefined;
             reply?: {
                 text: string;
@@ -886,26 +976,23 @@ export declare const contract: {
             response?: {
                 runId: string;
                 status: string;
-                eventCursor: number;
-                alreadyTerminal: boolean;
+                eventCursor?: number | undefined;
+                alreadyTerminal?: boolean | undefined;
             } | undefined;
             runState?: {
                 turnId: string;
                 runId: string;
                 status: string;
-                eventCursor: number;
                 acceptedMessageRef: string;
                 resolvedRunProfileId: string;
                 resolvedRunProfileVersion: number;
                 receivedAt: string;
+                eventCursor?: number | undefined;
                 checkpointId?: string | undefined;
                 gateRef?: string | undefined;
                 failure?: unknown;
             } | undefined;
-            state?: {
-                threadId: string;
-                items: unknown[];
-            } | undefined;
+            state?: Record<string, unknown> | undefined;
         }, unknown, void>, import("@orpc/shared").AsyncIteratorClass<{
             type: "cancelled" | "accepted" | "running" | "capability_progress" | "capability_activity" | "capability_display_preview" | "gate" | "auth_required" | "final_reply" | "failed" | "projection_snapshot" | "projection_update" | "keep_alive";
             cursor?: string | undefined;
@@ -928,7 +1015,6 @@ export declare const contract: {
                 invocationId: string;
                 capabilityId: string;
                 status: string;
-                updatedAt: string;
                 turnRunId?: string | undefined;
                 threadId?: string | undefined;
                 provider?: string | undefined;
@@ -936,6 +1022,7 @@ export declare const contract: {
                 processId?: string | undefined;
                 outputBytes?: number | undefined;
                 errorKind?: string | undefined;
+                updatedAt?: string | undefined;
             } | undefined;
             preview?: {
                 invocationId: string;
@@ -943,7 +1030,6 @@ export declare const contract: {
                 status: string;
                 title: string;
                 truncated: boolean;
-                updatedAt: string;
                 timelineMessageId?: string | undefined;
                 turnRunId?: string | undefined;
                 threadId?: string | undefined;
@@ -954,6 +1040,7 @@ export declare const contract: {
                 outputKind?: string | undefined;
                 outputBytes?: number | undefined;
                 resultRef?: string | undefined;
+                updatedAt?: string | undefined;
             } | undefined;
             reply?: {
                 text: string;
@@ -989,26 +1076,23 @@ export declare const contract: {
             response?: {
                 runId: string;
                 status: string;
-                eventCursor: number;
-                alreadyTerminal: boolean;
+                eventCursor?: number | undefined;
+                alreadyTerminal?: boolean | undefined;
             } | undefined;
             runState?: {
                 turnId: string;
                 runId: string;
                 status: string;
-                eventCursor: number;
                 acceptedMessageRef: string;
                 resolvedRunProfileId: string;
                 resolvedRunProfileVersion: number;
                 receivedAt: string;
+                eventCursor?: number | undefined;
                 checkpointId?: string | undefined;
                 gateRef?: string | undefined;
                 failure?: unknown;
             } | undefined;
-            state?: {
-                threadId: string;
-                items: unknown[];
-            } | undefined;
+            state?: Record<string, unknown> | undefined;
         }, unknown, void>>, import("@orpc/contract").MergedErrorMap<Record<never, never>, import("@orpc/contract").MergedErrorMap<Record<never, never>, {
             UNAUTHORIZED: {
                 status: number;
@@ -1068,6 +1152,20 @@ export declare const contract: {
                 redactionRef: z.ZodOptional<z.ZodString>;
                 role: z.ZodOptional<z.ZodString>;
                 createdAt: z.ZodOptional<z.ZodString>;
+                attachments: z.ZodOptional<z.ZodArray<z.ZodObject<{
+                    id: z.ZodString;
+                    kind: z.ZodEnum<{
+                        audio: "audio";
+                        image: "image";
+                        document: "document";
+                    }>;
+                    mimeType: z.ZodString;
+                    filename: z.ZodOptional<z.ZodString>;
+                    sizeBytes: z.ZodOptional<z.ZodNumber>;
+                    storageKey: z.ZodOptional<z.ZodString>;
+                    extractedText: z.ZodOptional<z.ZodString>;
+                    previewUrl: z.ZodOptional<z.ZodString>;
+                }, z.core.$strip>>>;
             }, z.core.$strip>>;
             summaryArtifacts: z.ZodArray<z.ZodObject<{
                 summaryId: z.ZodString;

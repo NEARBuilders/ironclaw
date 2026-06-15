@@ -12,6 +12,7 @@ function offEvent(es: NodeEventSource, type: string, handler: (e: MessageEvent) 
 
 import type {
   AcceptedResponseSchema,
+  AttachmentCapabilitiesSchema,
   AutomationSchema,
   ChatEventSchema,
   ConnectableChannelSchema,
@@ -51,6 +52,7 @@ type SkillContentResponse = z.infer<typeof SkillContentResponseSchema>;
 type SkillActionResponse = z.infer<typeof SkillActionResponseSchema>;
 type ConnectableChannel = z.infer<typeof ConnectableChannelSchema>;
 type ThreadState = z.infer<typeof ThreadStateSchema>;
+type AttachmentCapabilities = z.infer<typeof AttachmentCapabilitiesSchema>;
 
 const BODY_METHODS = new Set(["POST", "PUT", "PATCH"]);
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -115,6 +117,16 @@ function mapThreadEntry(m: any): z.infer<typeof TimelineEntrySchema> {
     redactionRef: m.redaction_ref ?? undefined,
     role,
     createdAt: m.created_at ?? undefined,
+    attachments: (m.attachments ?? []).map((att: any) => ({
+      id: att.id ?? "",
+      kind: att.kind ?? "document",
+      mimeType: att.mime_type ?? "application/octet-stream",
+      filename: att.filename ?? undefined,
+      sizeBytes: att.size_bytes ?? undefined,
+      storageKey: att.storage_key ?? undefined,
+      extractedText: att.extracted_text ?? undefined,
+      previewUrl: att.preview_url ?? undefined,
+    })),
   };
 }
 
@@ -231,11 +243,21 @@ export class IronclawService {
     return Effect.tryPromise({
       try: async () => {
         const raw: any = await this.request("GET", "/api/webchat/v2/session");
+        const caps = raw.capabilities ?? {};
+        const attCaps: AttachmentCapabilities | undefined = caps.attachments
+          ? {
+              accept: caps.attachments.accept ?? [],
+              maxCount: caps.attachments.max_count ?? 0,
+              maxFileBytes: caps.attachments.max_file_bytes ?? 0,
+              maxTotalBytes: caps.attachments.max_total_bytes ?? 0,
+            }
+          : undefined;
         return {
           tenantId: raw.tenant_id,
           userId: raw.user_id,
           capabilities: {
-            operatorWebuiConfig: raw.capabilities?.operator_webui_config ?? false,
+            operatorWebuiConfig: caps.operator_webui_config ?? false,
+            attachments: attCaps,
           },
         } as Session;
       },
@@ -306,13 +328,25 @@ export class IronclawService {
     id: string,
     content: string,
     clientActionId?: string,
+    attachments?: Array<{ mimeType: string; filename?: string; dataBase64: string }>,
   ): Effect.Effect<AcceptedResponse, Error> {
     return Effect.tryPromise({
       try: async () => {
+        const body: Record<string, unknown> = {
+          client_action_id: clientActionId ?? crypto.randomUUID(),
+          content,
+        };
+        if (attachments && attachments.length > 0) {
+          body.attachments = attachments.map((a) => ({
+            mime_type: a.mimeType,
+            filename: a.filename,
+            data_base64: a.dataBase64,
+          }));
+        }
         const raw: any = await this.request(
           "POST",
           `/api/webchat/v2/threads/${encodeURIComponent(id)}/messages`,
-          { client_action_id: clientActionId ?? crypto.randomUUID(), content },
+          body,
         );
         const base = {
           outcome: raw.outcome,

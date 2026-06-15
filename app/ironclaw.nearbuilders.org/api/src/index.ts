@@ -16,16 +16,16 @@ import {
   tenantCredentials,
 } from "./db/schema";
 import { createAuthMiddleware } from "./lib/auth";
-import type { PluginsClient } from "./lib/plugins-types.gen";
 import {
-  normalizeThread,
-  normalizeTimelinePage,
-  normalizeTimelineEntry,
-  diffMessageSets,
-  type ConversationMessage,
   type ConversationEvent,
+  type ConversationMessage,
   type ConversationMessagePage,
+  diffMessageSets,
+  normalizeThread,
+  normalizeTimelineEntry,
+  normalizeTimelinePage,
 } from "./lib/conversation";
+import type { PluginsClient } from "./lib/plugins-types.gen";
 
 function generateId(): string {
   return `hc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -64,13 +64,40 @@ const hStream = (
     }
   };
 
-const hConversationStream = (
-  services: { ironclaw: (ctx: any) => Ic },
-) =>
+function snakeToCamel(str: string): string {
+  return str.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+function transformKeys(obj: unknown): unknown {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) return obj.map(transformKeys);
+  if (typeof obj !== "object") return obj;
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+    const camelKey = snakeToCamel(key);
+    result[camelKey] = transformKeys(value);
+  }
+  return result;
+}
+
+const PASSTHROUGH_EVENT_TYPES = new Set([
+  "accepted",
+  "running",
+  "capability_progress",
+  "capability_activity",
+  "capability_display_preview",
+  "gate",
+  "auth_required",
+  "final_reply",
+  "cancelled",
+  "failed",
+]);
+
+const hConversationStream = (services: { ironclaw: (ctx: any) => Ic }) =>
   async function* ({ input, signal, context }: any) {
     const ic = services.ironclaw(context);
-    const threadId = (input as any).threadId;
-    const afterCursor = (input as any).afterCursor;
+      const threadId = input.threadId;
+    const afterCursor = input.afterCursor;
     const knownIds = new Set<string>();
     let snapshotYielded = false;
 
@@ -80,14 +107,17 @@ const hConversationStream = (
         afterCursor,
       });
 
-      for await (const event of (rawStream as any)) {
+      for await (const event of rawStream as AsyncIterable<Record<string, unknown>>) {
         if (signal?.aborted) break;
 
         const type = event.type as string;
 
         if (type === "keep_alive") {
-          const ev: ConversationEvent = { type: "keep_alive", threadId };
-          yield ev;
+          yield { type: "keep_alive", threadId } satisfies ConversationEvent;
+          continue;
+        }
+
+        if (PASSTHROUGH_EVENT_TYPES.has(type)) {
           continue;
         }
 
@@ -101,33 +131,48 @@ const hConversationStream = (
               for (const msg of page.messages) {
                 knownIds.add(msg.id);
               }
-              yield { type: "snapshot", threadId, messages: page.messages } satisfies ConversationEvent;
+              yield {
+                type: "snapshot",
+                threadId,
+                messages: page.messages,
+              } satisfies ConversationEvent;
               continue;
             }
 
-            const added = diffMessageSets(knownIds, page.messages);
+            const added = diffMessageSets(
+              knownIds,
+              page.messages,
+            );
             if (added.length > 0) {
               for (const msg of added) {
                 knownIds.add(msg.id);
               }
-              yield { type: "messages_changed", threadId, messages: page.messages } satisfies ConversationEvent;
+              yield {
+                type: "messages_changed",
+                threadId,
+                messages: page.messages,
+              } satisfies ConversationEvent;
               for (const msg of added) {
                 yield { type: "message_added", threadId, message: msg } satisfies ConversationEvent;
 
                 if (msg.role === "assistant") {
-                  yield { type: "run_finished", threadId, runId: msg.runId ?? undefined } satisfies ConversationEvent;
+                  yield {
+                    type: "run_finished",
+                    threadId,
+                    runId: msg.runId ?? undefined,
+                  } satisfies ConversationEvent;
                 }
               }
             }
-          } catch {
-          }
+          } catch {}
         }
       }
     } catch (error) {
-      console.error("[hConvStream] raw stream validation error — sending error event to client:", {
-        message: error instanceof Error ? error.message : String(error),
-        code: (error as any)?.code,
-      });
+      console.error("[hConvStream] raw stream validation error:", error);
+      const cause = (error as any).cause ?? error;
+      if (cause.issues) {
+        console.error("[hConvStream] validation issues:", JSON.stringify(cause.issues, null, 2));
+      }
       yield {
         type: "error",
         threadId,
@@ -723,10 +768,14 @@ export default createPlugin.withPlugins<PluginsClient>()({
               id: input.threadId,
               content: input.content,
               clientActionId: input.clientActionId,
+              attachments: input.attachments,
             });
             return {
               threadId: input.threadId,
               runId: raw.runId ?? raw.activeRunId ?? "",
+              outcome: raw.outcome,
+              status: raw.status,
+              activeRunId: raw.activeRunId,
               acceptedMessageRef: raw.acceptedMessageRef ?? "",
               pendingMessageId: `pending-${crypto.randomUUID()}`,
               submittedAt: new Date().toISOString(),
@@ -734,9 +783,7 @@ export default createPlugin.withPlugins<PluginsClient>()({
             };
           }),
 
-        stream: builder.conversation.stream
-          .use(requireAuth)
-          .handler(hConversationStream(s)),
+        stream: builder.conversation.stream.use(requireAuth).handler(hConversationStream(s)),
       },
     };
   },

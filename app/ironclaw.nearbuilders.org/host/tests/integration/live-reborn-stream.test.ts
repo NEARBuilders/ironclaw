@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { startRealStack, type RealStackHandle } from "../helpers/real-stack";
+import { type RealStackHandle, startRealStack } from "../helpers/real-stack";
 
 describe("live reborn stream contract", () => {
   let stack: RealStackHandle;

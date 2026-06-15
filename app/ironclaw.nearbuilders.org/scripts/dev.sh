@@ -42,7 +42,7 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM
 
-echo "═══ ironclaw.nearbuilders.org — Development ═══"
+echo "═══ ironclaw.everything.dev — Development ═══"
 echo ""
 echo "  ironclaw port   : $IRONCLAW_REBORN_SERVE_PORT"
   echo "  everything-dev  : http://localhost:${PORT:-3000}"

@@ -3,10 +3,10 @@
 #
 # Default mode (tunnel): starts Reborn locally and auto-launches a tunnel
 # (cloudflared / ngrok / bore) so you can connect the deployed everything-dev
-# UI at https://app.ironclaw.nearbuilders.org/settings/ironclaw.
+# UI at https://app.ironclaw.everything.dev/settings/ironclaw.
 #
 #   --local  starts the everything-dev dev stack locally instead (no tunnel).
-#            Requires the everything-dev project at app/ironclaw.nearbuilders.org/
+#            Requires the everything-dev project at app/ironclaw.everything.dev/
 #            to be set up with `cp .env.example .env && bun install`.
 #
 # Usage:
@@ -36,12 +36,12 @@
 # with zsh's auto-set $HOST (the machine hostname), which could bind serve to a
 # non-loopback interface and expose the bearer token over plain HTTP.
 
-set -euo pipefail
-
 # Re-exec under bash if invoked via sh (brace expansion / arrays need bash).
 if [ -z "${BASH_VERSION:-}" ]; then
   exec bash "$0" "$@"
 fi
+
+set -euo pipefail
 
 PROVIDER="${PROVIDER:-nearai}"
 MODEL="${MODEL:-}"
@@ -280,7 +280,7 @@ if [ "$MODE" = "tunnel" ]; then
 ══════════════════════════════════════════════════════════════════
  IronClaw Reborn — MODE: TUNNEL
 ══════════════════════════════════════════════════════════════════
- Connect the deployed UI at app.ironclaw.nearbuilders.org to your
+ Connect the deployed UI at app.ironclaw.everything.dev to your
  local Reborn via the tunnel.
 
   Tunnel URL : $TUNNEL_URL
@@ -288,7 +288,7 @@ if [ "$MODE" = "tunnel" ]; then
 
   ┌─ Step 1 ─────────────────────────────────────────────────┐
   │  Open Settings → IronClaw at:                            │
-  │    https://app.ironclaw.nearbuilders.org/settings/ironclaw │
+  │    https://app.ironclaw.everything.dev/settings/ironclaw │
   └──────────────────────────────────────────────────────────┘
 
   ┌─ Step 2 ─────────────────────────────────────────────────┐
@@ -316,7 +316,7 @@ fi
 # Local mode — start Reborn + everything-dev dev stack on localhost
 # ─────────────────────────────────────────────────────────────────────
 if [ "$MODE" = "local" ]; then
-  EVDEV_DIR="$REPO_ROOT/app/ironclaw.nearbuilders.org"
+  EVDEV_DIR="$REPO_ROOT/app/ironclaw.everything.dev"
 
   if [ ! -d "$EVDEV_DIR" ]; then
     echo "error: everything-dev project not found at $EVDEV_DIR" >&2

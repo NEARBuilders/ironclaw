@@ -1,8 +1,32 @@
-import { useCallback, useEffect, useRef } from "react";
-import { useChat } from "@tanstack/ai-react";
+import { consumeEventIterator } from "@orpc/client";
 import type { StreamChunk, UIMessage } from "@tanstack/ai/client";
+import { useChat } from "@tanstack/ai-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "@/app";
-import { openIronclawEventSource } from "@/lib/ironclaw-sse";
+import type { StagedAttachment } from "@/lib/attachments";
+
+interface RunState {
+  phase:
+    | "idle"
+    | "submitted"
+    | "running"
+    | "awaiting_approval"
+    | "auth_required"
+    | "failed"
+    | "cancelled"
+    | "disconnected";
+  runId?: string;
+  message?: string;
+  gateRef?: string;
+  gateHeadline?: string;
+  gateBody?: string;
+  authRequestRef?: string;
+  authHeadline?: string;
+  authBody?: string;
+  authUrl?: string;
+}
+
+export type { RunState };
 
 function messageTextContent(message: UIMessage): string {
   return message.parts
@@ -16,14 +40,18 @@ function createIronclawStream({
   threadId,
   content,
   clientActionId,
+  attachments,
   onRunStarted,
+  onRunStateChange,
   signal,
 }: {
   apiClient: ApiClient;
   threadId: string;
   content: string;
   clientActionId: string;
+  attachments?: StagedAttachment[];
   onRunStarted: (runId: string) => void;
+  onRunStateChange: (update: Partial<RunState>) => void;
   signal: AbortSignal;
 }): AsyncIterable<StreamChunk> {
   return {
@@ -31,7 +59,7 @@ function createIronclawStream({
       const queue: Array<Record<string, unknown>> = [];
       const waiters: Array<(result: IteratorResult<Record<string, unknown>>) => void> = [];
       let closed = false;
-      let sourceHandle: { close: () => void } | null = null;
+      let unsubscribe: (() => Promise<void>) | null = null;
 
       const push = (chunk: Record<string, unknown>) => {
         if (closed) return;
@@ -46,8 +74,11 @@ function createIronclawStream({
       const finish = () => {
         if (closed) return;
         closed = true;
-        sourceHandle?.close();
-        sourceHandle = null;
+        if (unsubscribe) {
+          const u = unsubscribe;
+          unsubscribe = null;
+          void u();
+        }
         while (waiters.length > 0) {
           const waiter = waiters.shift();
           waiter?.({ value: undefined, done: true });
@@ -59,64 +90,155 @@ function createIronclawStream({
         finish();
       };
 
-      signal.addEventListener("abort", abort, { once: true });
-
-      function abort() {
-        finish();
-      }
+      signal.addEventListener(
+        "abort",
+        () => {
+          finish();
+        },
+        { once: true },
+      );
 
       void (async () => {
         let runId: string;
         let replyMessageId = "reply-pending";
 
         try {
-          const accepted = await (apiClient as any).conversation.sendMessage({
-            threadId,
+          const accepted = await apiClient.ironclaw.threads.sendMessage({
+            id: threadId,
             content,
             clientActionId,
+            attachments: attachments?.map((a) => ({
+              mimeType: a.mimeType,
+              filename: a.filename,
+              dataBase64: a.dataBase64,
+            })),
           });
-          runId = accepted.runId ?? crypto.randomUUID();
+          runId = accepted.runId ?? accepted.activeRunId ?? crypto.randomUUID();
           replyMessageId = `reply-${runId}`;
           onRunStarted(runId);
+          onRunStateChange({ phase: "running", runId });
           push({ type: "RUN_STARTED", threadId, runId });
 
-          sourceHandle = openIronclawEventSource({
-            threadId,
-            afterCursor: accepted.eventCursor ?? undefined,
-            onEvent: (envelope) => {
-              const event = envelope.event as Record<string, unknown>;
-              if (closed) return;
+          const afterCursor = accepted.eventCursor != null ? String(accepted.eventCursor) : undefined;
 
-              if (event.type === "message_added") {
-                const msg = (event as any).message;
-                if (msg?.role === "assistant" && msg?.text) {
-                  push({ type: "TEXT_MESSAGE_START", messageId: replyMessageId, role: "assistant" });
-                  push({ type: "TEXT_MESSAGE_CONTENT", messageId: replyMessageId, delta: msg.text, content: msg.text });
-                  push({ type: "TEXT_MESSAGE_END", messageId: replyMessageId });
+          unsubscribe = consumeEventIterator(
+            apiClient.ironclaw.threads.streamEvents({ id: threadId, afterCursor }),
+            {
+              onEvent: (event: any) => {
+                if (closed) return;
+
+                switch (event.type) {
+                  case "accepted": {
+                    onRunStateChange({
+                      phase: "running",
+                      runId: event.ack?.runId ?? runId,
+                      message: undefined,
+                    });
+                    break;
+                  }
+                  case "running": {
+                    onRunStateChange({ phase: "running", runId: event.runState?.runId ?? runId });
+                    break;
+                  }
+                  case "gate": {
+                    const g = event.prompt ?? {};
+                    onRunStateChange({
+                      phase: "awaiting_approval",
+                      gateRef: g.gateRef,
+                      gateHeadline: g.headline,
+                      gateBody: g.body,
+                    });
+                    push({
+                      type: "GATE_REQUIRED",
+                      runId,
+                      gateRef: g.gateRef,
+                      headline: g.headline,
+                      body: g.body,
+                    });
+                    break;
+                  }
+                  case "auth_required": {
+                    const a = event.authPrompt ?? {};
+                    onRunStateChange({
+                      phase: "auth_required",
+                      authRequestRef: a.authRequestRef,
+                      authHeadline: a.headline,
+                      authBody: a.body,
+                      authUrl: a.authorizationUrl,
+                    });
+                    push({
+                      type: "AUTH_REQUIRED",
+                      runId,
+                      authRequestRef: a.authRequestRef,
+                      headline: a.headline,
+                      body: a.body,
+                      authorizationUrl: a.authorizationUrl,
+                    });
+                    break;
+                  }
+                  case "final_reply": {
+                    const reply = event.reply ?? {};
+                    if (reply.text) {
+                      push({
+                        type: "TEXT_MESSAGE_START",
+                        messageId: replyMessageId,
+                        role: "assistant",
+                      });
+                      push({
+                        type: "TEXT_MESSAGE_CONTENT",
+                        messageId: replyMessageId,
+                        delta: reply.text,
+                        content: reply.text,
+                      });
+                      push({ type: "TEXT_MESSAGE_END", messageId: replyMessageId });
+                    }
+                    break;
+                  }
+                  case "failed": {
+                    const failMsg =
+                      event.response?.status ?? event.runState?.failure ?? "Run failed";
+                    const msg = typeof failMsg === "string" ? failMsg : JSON.stringify(failMsg);
+                    onRunStateChange({ phase: "failed", message: msg });
+                    push({ type: "RUN_FAILED", runId, message: msg });
+                    finish();
+                    break;
+                  }
+                  case "cancelled": {
+                    onRunStateChange({ phase: "cancelled", message: "Run was cancelled" });
+                    push({ type: "RUN_CANCELLED", runId });
+                    finish();
+                    break;
+                  }
+                  case "capability_progress":
+                  case "capability_activity":
+                  case "capability_display_preview": {
+                    push({ type: "CAPABILITY_UPDATED", runId, event });
+                    break;
+                  }
+                  case "projection_snapshot":
+                  case "projection_update":
+                    break;
+                  case "keep_alive":
+                    break;
+                  default:
+                    break;
                 }
-                return;
-              }
-
-              if (event.type === "run_finished") {
+              },
+              onError: (err: any) => {
+                const msg = err instanceof Error ? err.message : String(err);
+                onRunStateChange({ phase: "disconnected", message: msg });
+                fail(msg);
+              },
+              onFinish: (_state: any) => {
                 push({ type: "RUN_FINISHED", runId, finishReason: "stop" });
                 finish();
-                return;
-              }
-
-              if (event.type === "error") {
-                console.error("[createIronclawStream] normalized SSE error — run may still be processing on backend", typeof (event as any).error === "string" ? (event as any).error : String(event));
-                fail(typeof (event as any).error === "string" ? (event as any).error : "Run failed");
-                return;
-              }
+              },
             },
-            onError: (status) => {
-              if (status === "disconnected") {
-                fail("Event stream disconnected");
-              }
-            },
-          });
+          );
         } catch (error) {
-          fail(error instanceof Error ? error.message : String(error));
+          const msg = error instanceof Error ? error.message : String(error);
+          onRunStateChange({ phase: "failed", message: msg });
+          fail(msg);
         }
       })();
 
@@ -151,6 +273,8 @@ export function useIronclawChat(
   initialMessages: Array<UIMessage>,
 ) {
   const activeRunIdRef = useRef<string | null>(null);
+  const pendingAttachmentsRef = useRef<StagedAttachment[]>([]);
+  const [runState, setRunState] = useState<RunState>({ phase: "idle" });
 
   const initialMessagesRef = useRef(initialMessages);
 
@@ -160,32 +284,60 @@ export function useIronclawChat(
     fetcher: async ({ messages }, { signal }) => {
       const lastUser = [...messages].reverse().find((message) => message.role === "user");
       const content = lastUser ? messageTextContent(lastUser) : "";
+      const attachments = pendingAttachmentsRef.current;
+      pendingAttachmentsRef.current = [];
+
+      setRunState({ phase: "submitted", message: undefined });
 
       return createIronclawStream({
         apiClient,
         threadId,
         content,
         clientActionId: `ui-${crypto.randomUUID()}`,
+        attachments,
         signal,
         onRunStarted: (runId) => {
           activeRunIdRef.current = runId;
+        },
+        onRunStateChange: (update) => {
+          setRunState((prev) => ({ ...prev, ...update }));
         },
       });
     },
     onError: (error) => {
       console.error("[useIronclawChat]", error);
+      setRunState({
+        phase: "failed",
+        message: error instanceof Error ? error.message : String(error),
+      });
     },
   });
 
   useEffect(() => {
-    if (
-      initialMessages.length > 0 &&
-      initialMessages !== initialMessagesRef.current
-    ) {
+    if (initialMessages.length > 0 && initialMessages !== initialMessagesRef.current) {
       initialMessagesRef.current = initialMessages;
       chat.setMessages(initialMessages);
     }
   }, [initialMessages, chat]);
+
+  useEffect(() => {
+    if (
+      !chat.isLoading &&
+      runState.phase !== "idle" &&
+      runState.phase !== "failed" &&
+      runState.phase !== "cancelled"
+    ) {
+      setRunState({ phase: "idle" });
+    }
+  }, [chat.isLoading, runState.phase]);
+
+  const sendMessageWithAttachments = useCallback(
+    (content: string, attachments?: StagedAttachment[]) => {
+      pendingAttachmentsRef.current = attachments ?? [];
+      chat.sendMessage(content);
+    },
+    [chat.sendMessage],
+  );
 
   const resolveGate = useCallback(
     async (gateRef: string, approved: boolean) => {
@@ -206,12 +358,13 @@ export function useIronclawChat(
 
   return {
     messages: chat.messages,
-    sendMessage: chat.sendMessage,
+    sendMessage: sendMessageWithAttachments,
     isLoading: chat.isLoading,
     status: chat.status,
     error: chat.error,
     stop: chat.stop,
     setMessages: chat.setMessages,
     resolveGate,
+    runState,
   };
 }

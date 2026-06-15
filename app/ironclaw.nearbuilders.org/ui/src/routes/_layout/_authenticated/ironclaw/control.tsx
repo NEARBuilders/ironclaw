@@ -134,7 +134,9 @@ function OutboundTab({ apiClient }: { apiClient: ReturnType<typeof useApiClient>
 }
 
 function AutomationsTab({ apiClient }: { apiClient: ReturnType<typeof useApiClient> }) {
-  const [automations, setAutomations] = useState<Array<{ id: string; name?: string; status?: string }>>([]);
+  const [automations, setAutomations] = useState<
+    Array<{ id: string; name?: string; status?: string }>
+  >([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -221,7 +223,11 @@ function ExtensionsTab({ apiClient }: { apiClient: ReturnType<typeof useApiClien
       <div className="space-y-4">
         <div className="space-y-2">
           <label className="text-xs font-medium text-muted-foreground">Extension Name</label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. my-channel" />
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. my-channel"
+          />
         </div>
         <div className="space-y-2">
           <label className="text-xs font-medium text-muted-foreground">Action</label>
@@ -251,18 +257,18 @@ function ExtensionsTab({ apiClient }: { apiClient: ReturnType<typeof useApiClien
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Run Setup
         </Button>
-          {result && (
-            <div
-              className={`rounded-lg border px-4 py-3 text-sm ${
-                result.success
-                  ? "border-green-500/30 bg-green-500/5 text-green-600"
-                  : "border-destructive/30 bg-destructive/5 text-destructive"
-              }`}
-            >
-              {result.message ?? (result.success ? "Success" : "Failed")}
-            </div>
-          )}
-        </div>
+        {result && (
+          <div
+            className={`rounded-lg border px-4 py-3 text-sm ${
+              result.success
+                ? "border-green-500/30 bg-green-500/5 text-green-600"
+                : "border-destructive/30 bg-destructive/5 text-destructive"
+            }`}
+          >
+            {result.message ?? (result.success ? "Success" : "Failed")}
+          </div>
+        )}
       </div>
-    );
-  }
+    </div>
+  );
+}

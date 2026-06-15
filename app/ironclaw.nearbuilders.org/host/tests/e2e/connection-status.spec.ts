@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { type RebornAppHost, startRebornApp } from "../helpers/reborn-app";
 import { loginAnonymously } from "../helpers/playwright-auth";
+import { type RebornAppHost, startRebornApp } from "../helpers/reborn-app";
 
 test.describe("Connection status", () => {
   test.describe.configure({ mode: "serial" });

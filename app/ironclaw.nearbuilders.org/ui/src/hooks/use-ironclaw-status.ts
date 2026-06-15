@@ -1,23 +1,40 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { z } from "every-plugin/zod";
 import { useApiClient } from "@/app";
 import { getConnectionMode } from "@/hooks/use-connection-mode";
+import type { SessionSchema } from "../../../plugins/ironclaw/src/contract.ts";
 
-export type IronclawConnectionStatus = "connected" | "disconnected" | "never-connected" | "checking";
+type SessionData = z.infer<typeof SessionSchema>;
+type AttachmentCapabilities = NonNullable<SessionData["capabilities"]["attachments"]> | null;
+
+export type IronclawConnectionStatus =
+  | "connected"
+  | "disconnected"
+  | "never-connected"
+  | "checking";
 
 export const ironclawStatusQueryKey = ["ironclaw-status"] as const;
 
 const SESSION_KEY = "ironclaw-was-connected";
 
 function markWasConnected() {
-  try { sessionStorage.setItem(SESSION_KEY, "1"); } catch { }
+  try {
+    sessionStorage.setItem(SESSION_KEY, "1");
+  } catch {}
 }
 
 function getWasConnected(): boolean {
-  try { return sessionStorage.getItem(SESSION_KEY) === "1"; } catch { return false; }
+  try {
+    return sessionStorage.getItem(SESSION_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 function clearWasConnected() {
-  try { sessionStorage.removeItem(SESSION_KEY); } catch { }
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {}
 }
 
 export function useIronclawStatus(): {
@@ -25,6 +42,8 @@ export function useIronclawStatus(): {
   refetch: () => void;
   disconnect: () => Promise<void>;
   connectionMode: "local" | "hosted";
+  session: SessionData | null;
+  attachmentCapabilities: AttachmentCapabilities;
 } {
   const apiClient = useApiClient();
   const queryClient = useQueryClient();
@@ -32,9 +51,24 @@ export function useIronclawStatus(): {
   const { data, isFetching, isError, refetch } = useQuery({
     queryKey: ironclawStatusQueryKey,
     queryFn: async () => {
-      await apiClient.ironclaw.ping();
-      markWasConnected();
-      return true;
+      try {
+        const session = await apiClient.ironclaw.session();
+        markWasConnected();
+        return {
+          connected: true,
+          session,
+          attachmentCapabilities: session?.capabilities?.attachments ?? null,
+        };
+      } catch {
+        const capsStr = sessionStorage.getItem("ironclaw-attachment-caps");
+        await apiClient.ironclaw.ping();
+        markWasConnected();
+        return {
+          connected: true,
+          session: null,
+          attachmentCapabilities: capsStr ? JSON.parse(capsStr) : null,
+        };
+      }
     },
     refetchInterval: 10_000,
     retry: false,
@@ -59,8 +93,12 @@ export function useIronclawStatus(): {
 
   return {
     status,
-    refetch: () => { refetch(); },
+    refetch: () => {
+      refetch();
+    },
     disconnect,
     connectionMode,
+    session: data?.session ?? null,
+    attachmentCapabilities: data?.attachmentCapabilities ?? null,
   };
 }

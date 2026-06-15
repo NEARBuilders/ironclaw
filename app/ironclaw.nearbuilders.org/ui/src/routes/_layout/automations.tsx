@@ -1,21 +1,47 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Activity, AlertCircle, ArrowRight, Cable, CalendarClock, CheckCircle, Clock, Loader2, RefreshCw, XCircle } from "lucide-react";
+import {
+  Activity,
+  AlertCircle,
+  ArrowRight,
+  Cable,
+  CalendarClock,
+  CheckCircle,
+  Clock,
+  Loader2,
+  RefreshCw,
+  XCircle,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useApiClient } from "@/app";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_layout/automations")({
   component: AutomationsPage,
 });
 
-type Automation = NonNullable<Awaited<ReturnType<ReturnType<typeof useApiClient>["ironclaw"]["automations"]["list"]>>["data"]>[number];
-type OutboundTarget = NonNullable<Awaited<ReturnType<ReturnType<typeof useApiClient>["ironclaw"]["outbound"]["listTargets"]>>["data"]>[number];
-type OutboundPrefs = Awaited<ReturnType<ReturnType<typeof useApiClient>["ironclaw"]["outbound"]["getPreferences"]>>;
+type Automation = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof useApiClient>["ironclaw"]["automations"]["list"]>>["data"]
+>[number];
+type OutboundTarget = NonNullable<
+  Awaited<
+    ReturnType<ReturnType<typeof useApiClient>["ironclaw"]["outbound"]["listTargets"]>
+  >["data"]
+>[number];
+type OutboundPrefs = Awaited<
+  ReturnType<ReturnType<typeof useApiClient>["ironclaw"]["outbound"]["getPreferences"]>
+>;
 
 function statusBadgeVariant(status: string | undefined): "default" | "secondary" | "destructive" {
   if (status === "active" || status === "success") return "default";
@@ -25,10 +51,14 @@ function statusBadgeVariant(status: string | undefined): "default" | "secondary"
 }
 
 function StatusIcon({ status }: { status?: string }) {
-  if (status === "active" || status === "success") return <CheckCircle className="size-3 text-[color:var(--near-green)]" />;
-  if (status === "inactive" || status === "disabled") return <XCircle className="size-3 text-muted-foreground" />;
-  if (status === "error" || status === "failed") return <AlertCircle className="size-3 text-destructive" />;
-  if (status === "pending") return <Loader2 className="size-3 animate-spin text-muted-foreground" />;
+  if (status === "active" || status === "success")
+    return <CheckCircle className="size-3 text-[color:var(--near-green)]" />;
+  if (status === "inactive" || status === "disabled")
+    return <XCircle className="size-3 text-muted-foreground" />;
+  if (status === "error" || status === "failed")
+    return <AlertCircle className="size-3 text-destructive" />;
+  if (status === "pending")
+    return <Loader2 className="size-3 animate-spin text-muted-foreground" />;
   return <Activity className="size-3 text-muted-foreground" />;
 }
 
@@ -36,7 +66,12 @@ function formatDateTime(iso?: string) {
   if (!iso) return null;
   try {
     const d = new Date(iso);
-    return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return iso;
   }
@@ -96,7 +131,9 @@ function AutomationCard({ automation }: { automation: Automation }) {
               <span>
                 Last: {formatDateTime(lastRun.submittedAt)}
                 {lastRun.status && (
-                  <Badge variant={statusBadgeVariant(lastRun.status)} className="ml-1.5">{lastRun.status}</Badge>
+                  <Badge variant={statusBadgeVariant(lastRun.status)} className="ml-1.5">
+                    {lastRun.status}
+                  </Badge>
                 )}
               </span>
             </div>
@@ -180,7 +217,9 @@ function OutboundPanel({
           <p className="text-xs text-muted-foreground">
             {prefs.finalReplyTarget.displayName ?? prefs.finalReplyTarget.channel}{" "}
             {prefs.finalReplyTarget.description && (
-              <span className="text-muted-foreground/60">— {prefs.finalReplyTarget.description}</span>
+              <span className="text-muted-foreground/60">
+                — {prefs.finalReplyTarget.description}
+              </span>
             )}
           </p>
           {prefs.status && (
@@ -210,7 +249,9 @@ function OutboundPanel({
             <SelectContent>
               <SelectGroup>
                 {targets.length === 0 && !loading && (
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground">No targets available</div>
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                    No targets available
+                  </div>
                 )}
                 {targets.map((t) => (
                   <SelectItem key={t.target.targetId} value={t.target.targetId}>
@@ -218,7 +259,9 @@ function OutboundPanel({
                       <span>{t.target.displayName}</span>
                       <span className="text-muted-foreground text-xs">({t.target.channel})</span>
                       {t.target.description && (
-                        <span className="text-muted-foreground text-xs">— {t.target.description}</span>
+                        <span className="text-muted-foreground text-xs">
+                          — {t.target.description}
+                        </span>
                       )}
                     </span>
                   </SelectItem>
@@ -230,7 +273,9 @@ function OutboundPanel({
 
         <Button
           onClick={handleSave}
-          disabled={saving || !selectedTargetId || selectedTargetId === prefs?.finalReplyTarget?.targetId}
+          disabled={
+            saving || !selectedTargetId || selectedTargetId === prefs?.finalReplyTarget?.targetId
+          }
         >
           {saving ? <Loader2 className="size-3 animate-spin" /> : null}
           {saving ? "Saving..." : currentTarget ? "Switch target" : "Set target"}
@@ -298,77 +343,80 @@ function AutomationsPage() {
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="space-y-6 p-6 max-w-5xl mx-auto">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-          <Activity className="h-5 w-5 text-primary" />
-        </div>
-        <div className="flex-1 space-y-0.5">
-          <h1 className="text-lg font-semibold text-foreground">Automations</h1>
-          <p className="text-sm text-muted-foreground">
-            Scheduled tasks and outbound delivery configuration.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={() => { loadAutomations(); loadOutbound(); }}
-          disabled={automationsLoading || outboundLoading}
-          title="Refresh automations"
-        >
-          <RefreshCw className={`size-4 ${automationsLoading ? "animate-spin" : ""}`} />
-        </Button>
-      </div>
-
-      <OutboundPanel
-        prefs={prefs}
-        targets={targets}
-        loading={outboundLoading}
-        onSave={handleSaveTarget}
-      />
-
-      <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-foreground">Scheduled automations</h2>
-
-        {automationsLoading ? (
-          <div className="space-y-3">
-            <AutomationSkeleton />
-            <AutomationSkeleton />
-            <AutomationSkeleton />
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+            <Activity className="h-5 w-5 text-primary" />
           </div>
-        ) : automationsError ? (
-          <Card className="flex flex-col items-center gap-3 p-6 text-center">
-            <AlertCircle className="size-8 text-destructive" />
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">Failed to load automations</p>
-              <p className="text-xs text-muted-foreground">
-                Something went wrong. Check your connection and try again.
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={loadAutomations}>
-              <RefreshCw className="mr-1.5 size-3" />
-              Retry
-            </Button>
-          </Card>
-        ) : automations.length === 0 ? (
-          <Card className="flex flex-col items-center gap-3 p-6 text-center">
-            <Clock className="size-8 text-muted-foreground" />
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">No automations yet</p>
-              <p className="text-xs text-muted-foreground">
-                Create a scheduled automation to have IronClaw run tasks automatically.
-              </p>
-            </div>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {automations.map((a) => (
-              <AutomationCard key={a.id} automation={a} />
-            ))}
+          <div className="flex-1 space-y-0.5">
+            <h1 className="text-lg font-semibold text-foreground">Automations</h1>
+            <p className="text-sm text-muted-foreground">
+              Scheduled tasks and outbound delivery configuration.
+            </p>
           </div>
-        )}
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={() => {
+              loadAutomations();
+              loadOutbound();
+            }}
+            disabled={automationsLoading || outboundLoading}
+            title="Refresh automations"
+          >
+            <RefreshCw className={`size-4 ${automationsLoading ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
+
+        <OutboundPanel
+          prefs={prefs}
+          targets={targets}
+          loading={outboundLoading}
+          onSave={handleSaveTarget}
+        />
+
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-foreground">Scheduled automations</h2>
+
+          {automationsLoading ? (
+            <div className="space-y-3">
+              <AutomationSkeleton />
+              <AutomationSkeleton />
+              <AutomationSkeleton />
+            </div>
+          ) : automationsError ? (
+            <Card className="flex flex-col items-center gap-3 p-6 text-center">
+              <AlertCircle className="size-8 text-destructive" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">Failed to load automations</p>
+                <p className="text-xs text-muted-foreground">
+                  Something went wrong. Check your connection and try again.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={loadAutomations}>
+                <RefreshCw className="mr-1.5 size-3" />
+                Retry
+              </Button>
+            </Card>
+          ) : automations.length === 0 ? (
+            <Card className="flex flex-col items-center gap-3 p-6 text-center">
+              <Clock className="size-8 text-muted-foreground" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">No automations yet</p>
+                <p className="text-xs text-muted-foreground">
+                  Create a scheduled automation to have IronClaw run tasks automatically.
+                </p>
+              </div>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {automations.map((a) => (
+                <AutomationCard key={a.id} automation={a} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
     </div>
   );
 }

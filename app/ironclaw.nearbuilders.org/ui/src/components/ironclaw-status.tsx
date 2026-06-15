@@ -48,8 +48,8 @@ export function IronclawStatus() {
         className="flex h-8 items-center gap-1.5 rounded-full border border-primary/40 bg-primary/5 px-3 text-xs font-medium text-primary transition-colors hover:bg-primary/10 hover:border-primary/70"
       >
         <Zap size={10} className="shrink-0" />
-        <span className="hidden sm:inline">Connect IronClaw</span>
-        <span className="sm:hidden">Connect</span>
+        <span className="hidden sm:inline">Set up IronClaw</span>
+        <span className="sm:hidden">Set up</span>
       </Link>
     );
   }
@@ -63,7 +63,9 @@ export function IronclawStatus() {
             className="flex h-8 items-center gap-1.5 rounded-full border border-destructive/40 bg-destructive/5 px-3 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 hover:border-destructive/60 cursor-pointer"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-destructive shrink-0" />
-            <span className="hidden sm:inline">{connectionMode === "hosted" ? "Connect" : "Reconnect"}</span>
+            <span className="hidden sm:inline">
+              {connectionMode === "hosted" ? "Connect" : "Reconnect"}
+            </span>
             <span className="sm:hidden">
               <Unplug size={10} />
             </span>
@@ -72,21 +74,18 @@ export function IronclawStatus() {
         <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
             {connectionMode === "hosted"
-              ? "No API key configured"
+              ? "No valid API key or access revoked"
               : "IronClaw binary unreachable"}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={refetch}
-            className="gap-2 text-xs cursor-pointer"
-          >
+          <DropdownMenuItem onClick={refetch} className="gap-2 text-xs cursor-pointer">
             <RefreshCw size={12} />
             Retry connection
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem asChild className="gap-2 text-xs cursor-pointer">
             <Link to="/setup">
-              <Zap size={12} />
-              Setup guide
+              <Zap size={12} />— Setup guide
             </Link>
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -99,6 +98,11 @@ export function IronclawStatus() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
+          title={
+            connectionMode === "hosted"
+              ? "Connected via hosted agent"
+              : "Connected via local binary"
+          }
           className="flex h-8 items-center gap-1.5 rounded-full border border-[color:var(--near-green)]/40 bg-[color:var(--near-green)]/5 px-3 text-xs font-medium text-[color:var(--near-green)] transition-colors hover:bg-[color:var(--near-green)]/10 cursor-pointer"
         >
           <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--near-green)] animate-pulse shrink-0" />
@@ -110,10 +114,7 @@ export function IronclawStatus() {
           {connectionMode === "hosted" ? "IronClaw hosted agent" : "IronClaw binary connected"}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={refetch}
-          className="gap-2 text-xs cursor-pointer"
-        >
+        <DropdownMenuItem onClick={refetch} className="gap-2 text-xs cursor-pointer">
           <RefreshCw size={12} />
           Refresh status
         </DropdownMenuItem>
@@ -123,11 +124,7 @@ export function IronclawStatus() {
           variant="destructive"
           className="gap-2 text-xs cursor-pointer"
         >
-          {isDisconnecting ? (
-            <Loader2 size={12} className="animate-spin" />
-          ) : (
-            <LogOut size={12} />
-          )}
+          {isDisconnecting ? <Loader2 size={12} className="animate-spin" /> : <LogOut size={12} />}
           {isDisconnecting ? "Disconnecting…" : "Disconnect"}
         </DropdownMenuItem>
       </DropdownMenuContent>

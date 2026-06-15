@@ -41,7 +41,11 @@ function extractMessages(data: Record<string, unknown>): ThreadState["messages"]
 
 export function useThreadState(
   threadId: string | null,
-  threadMeta?: { title?: string | null; scope?: { tenantId: string; agentId: string; projectId?: string }; createdByActorId?: string },
+  threadMeta?: {
+    title?: string | null;
+    scope?: { tenantId: string; agentId: string; projectId?: string };
+    createdByActorId?: string;
+  },
 ) {
   const apiClient = useApiClient();
   const [state, setState] = useState<ThreadState | null>(null);
@@ -49,77 +53,83 @@ export function useThreadState(
   const [error, setError] = useState<string | null>(null);
   const sseRef = useRef<{ close: () => void } | null>(null);
 
-  const fetchTimeline = useCallback(async (id: string) => {
-    try {
-      const result = await apiClient.ironclaw.threads.getTimeline({ id, limit: 100 });
-      return (result.data ?? []) as ThreadState["messages"];
-    } catch {
-      return [] as ThreadState["messages"];
-    }
-  }, [apiClient]);
+  const fetchTimeline = useCallback(
+    async (id: string) => {
+      try {
+        const result = await apiClient.ironclaw.threads.getTimeline({ id, limit: 100 });
+        return (result.data ?? []) as ThreadState["messages"];
+      } catch {
+        return [] as ThreadState["messages"];
+      }
+    },
+    [apiClient],
+  );
 
-  const connect = useCallback(async (id: string) => {
-    sseRef.current?.close();
-    setLoading(true);
-    setError(null);
+  const connect = useCallback(
+    async (id: string) => {
+      sseRef.current?.close();
+      setLoading(true);
+      setError(null);
 
-    const messages = await fetchTimeline(id);
+      const messages = await fetchTimeline(id);
 
-    setState({
-      thread: {
+      setState({
+        thread: {
+          threadId: id,
+          title: threadMeta?.title,
+          scope: threadMeta?.scope,
+          createdByActorId: threadMeta?.createdByActorId,
+        },
+        messages,
+        summaryArtifacts: [],
+      });
+      setLoading(false);
+
+      const handle = openIronclawEventSource({
         threadId: id,
-        title: threadMeta?.title,
-        scope: threadMeta?.scope,
-        createdByActorId: threadMeta?.createdByActorId,
-      },
-      messages,
-      summaryArtifacts: [],
-    });
-    setLoading(false);
+        onSnapshot: (data) => {
+          const raw = data as Record<string, unknown>;
+          const sseMessages = extractMessages(raw);
+          if (sseMessages.length > 0) {
+            setState((prev) => {
+              if (!prev) {
+                return { thread: { threadId: id }, messages: sseMessages };
+              }
+              const existingIds = new Set(prev.messages.map((m) => m.messageId));
+              const newMessages = sseMessages.filter((m) => !existingIds.has(m.messageId));
+              if (newMessages.length === 0) return prev;
+              return { ...prev, messages: [...prev.messages, ...newMessages] };
+            });
+          }
+        },
+        onUpdate: (data) => {
+          const raw = data as Record<string, unknown>;
+          const sseMessages = extractMessages(raw);
+          if (sseMessages.length > 0) {
+            setState((prev) => {
+              if (!prev) {
+                return { thread: { threadId: id }, messages: sseMessages };
+              }
+              const existingIds = new Set(prev.messages.map((m) => m.messageId));
+              const newMessages = sseMessages.filter((m) => !existingIds.has(m.messageId));
+              if (newMessages.length === 0) return prev;
+              return { ...prev, messages: [...prev.messages, ...newMessages] };
+            });
+          }
+        },
+        onEvent: () => {},
+        onError: (status) => {
+          if (status === "disconnected") {
+            setError("Event stream disconnected");
+          }
+        },
+        onOpen: () => setError(null),
+      });
 
-    const handle = openIronclawEventSource({
-      threadId: id,
-      onSnapshot: (data) => {
-        const raw = data as Record<string, unknown>;
-        const sseMessages = extractMessages(raw);
-        if (sseMessages.length > 0) {
-          setState((prev) => {
-            if (!prev) {
-              return { thread: { threadId: id }, messages: sseMessages };
-            }
-            const existingIds = new Set(prev.messages.map((m) => m.messageId));
-            const newMessages = sseMessages.filter((m) => !existingIds.has(m.messageId));
-            if (newMessages.length === 0) return prev;
-            return { ...prev, messages: [...prev.messages, ...newMessages] };
-          });
-        }
-      },
-      onUpdate: (data) => {
-        const raw = data as Record<string, unknown>;
-        const sseMessages = extractMessages(raw);
-        if (sseMessages.length > 0) {
-          setState((prev) => {
-            if (!prev) {
-              return { thread: { threadId: id }, messages: sseMessages };
-            }
-            const existingIds = new Set(prev.messages.map((m) => m.messageId));
-            const newMessages = sseMessages.filter((m) => !existingIds.has(m.messageId));
-            if (newMessages.length === 0) return prev;
-            return { ...prev, messages: [...prev.messages, ...newMessages] };
-          });
-        }
-      },
-      onEvent: () => {},
-      onError: (status) => {
-        if (status === "disconnected") {
-          setError("Event stream disconnected");
-        }
-      },
-      onOpen: () => setError(null),
-    });
-
-    sseRef.current = handle;
-  }, [threadMeta, fetchTimeline]);
+      sseRef.current = handle;
+    },
+    [threadMeta, fetchTimeline],
+  );
 
   useEffect(() => {
     if (threadId) {
@@ -141,7 +151,7 @@ export function useThreadState(
     if (threadId) {
       sseRef.current?.close();
       const messages = await fetchTimeline(threadId);
-      setState((prev) => prev ? { ...prev, messages } : { thread: { threadId }, messages });
+      setState((prev) => (prev ? { ...prev, messages } : { thread: { threadId }, messages }));
       const handle = openIronclawEventSource({
         threadId,
         onSnapshot: (data) => {

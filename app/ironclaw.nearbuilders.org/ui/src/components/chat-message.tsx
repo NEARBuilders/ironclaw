@@ -1,9 +1,23 @@
 import type { UIMessage } from "@tanstack/ai-react";
 import { ChatMessage as UiChatMessage } from "@tanstack/ai-react-ui";
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, Copy, Loader2, ShieldCheck, ShieldX, Terminal } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  File,
+  Image,
+  Loader2,
+  Music,
+  ShieldCheck,
+  ShieldX,
+  Terminal,
+} from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
+import { formatBytes } from "@/lib/attachments";
 import { cn } from "@/lib/utils";
 
 interface ChatMessageProps {
@@ -101,9 +115,7 @@ function ToolResultCard({ content, state }: { content: string | unknown[]; state
 
   const lineCount = displayText.split("\n").length;
   const shouldCollapse = lineCount > 5 && !expanded;
-  const display = shouldCollapse
-    ? displayText.split("\n").slice(0, 5).join("\n")
-    : displayText;
+  const display = shouldCollapse ? displayText.split("\n").slice(0, 5).join("\n") : displayText;
 
   return (
     <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
@@ -152,6 +164,61 @@ function ToolResultCard({ content, state }: { content: string | unknown[]; state
   );
 }
 
+function AttachmentCard({ attachment }: { attachment: any }) {
+  const kind = attachment.kind as string;
+  const isImage = kind === "image" || attachment.mimeType?.startsWith("image/");
+  const isAudio = kind === "audio" || attachment.mimeType?.startsWith("audio/");
+  const previewUrl =
+    (attachment.previewUrl ?? attachment.dataBase64)
+      ? `data:${attachment.mimeType};base64,${attachment.dataBase64}`
+      : null;
+
+  const icon = isImage ? Image : isAudio ? Music : File;
+  const Icon = icon;
+
+  const body = (
+    <div className="flex items-center gap-2 overflow-hidden rounded-md border border-border bg-muted/30 px-2.5 py-1.5 text-xs">
+      <Icon size={14} className="shrink-0 text-muted-foreground" />
+      <span
+        className="min-w-0 flex-1 truncate text-foreground"
+        title={attachment.filename ?? attachment.id}
+      >
+        {attachment.filename ?? "Unknown file"}
+      </span>
+      {attachment.mimeType ? (
+        <span className="shrink-0 text-muted-foreground/70">{attachment.mimeType}</span>
+      ) : null}
+      {attachment.sizeBytes != null ? (
+        <span className="shrink-0 text-muted-foreground/70">
+          {formatBytes(attachment.sizeBytes)}
+        </span>
+      ) : null}
+      {attachment.extractedText ? (
+        <span className="max-w-40 truncate text-muted-foreground/50 italic">
+          {attachment.extractedText}
+        </span>
+      ) : null}
+    </div>
+  );
+
+  if (isImage && previewUrl) {
+    return (
+      <a href={previewUrl} target="_blank" rel="noreferrer" className="group block">
+        <div className="overflow-hidden rounded-md border border-border bg-muted/20">
+          <img
+            src={previewUrl}
+            alt={attachment.filename ?? "attachment"}
+            className="max-h-32 w-auto object-contain transition-opacity group-hover:opacity-80"
+          />
+        </div>
+        {body}
+      </a>
+    );
+  }
+
+  return body;
+}
+
 export function ChatMessage({ message, isOptimistic, status, onApproveTool }: ChatMessageProps) {
   const isUser = message.role === "user";
   const isFailed = status === "failed";
@@ -168,7 +235,9 @@ export function ChatMessage({ message, isOptimistic, status, onApproveTool }: Ch
         .filter((p) => p.type === "text")
         .map((p) => (p as any).content ?? (p as any).text ?? "")
         .join(" ")
-    : (message as any).content ?? "";
+    : ((message as any).content ?? "");
+
+  const attachments = (message as any).attachments as any[] | undefined;
 
   return (
     <div className={cn("group flex w-full", isUser ? "justify-end" : "justify-start")}>
@@ -219,6 +288,13 @@ export function ChatMessage({ message, isOptimistic, status, onApproveTool }: Ch
             )}
           />
         )}
+        {attachments && attachments.length > 0 ? (
+          <div className="space-y-1">
+            {attachments.map((att: any) => (
+              <AttachmentCard key={att.id ?? att.filename} attachment={att} />
+            ))}
+          </div>
+        ) : null}
         {!isUser && message.createdAt ? (
           <div className="flex items-center gap-1.5 justify-start">
             {textContent && (
@@ -228,7 +304,13 @@ export function ChatMessage({ message, isOptimistic, status, onApproveTool }: Ch
                 className="opacity-0 group-hover:opacity-100 transition-opacity"
                 title={copied ? "Copied!" : "Copy message"}
               >
-                <Copy size={10} className={cn("text-muted-foreground/60 hover:text-muted-foreground transition-colors", copied && "text-muted-foreground")} />
+                <Copy
+                  size={10}
+                  className={cn(
+                    "text-muted-foreground/60 hover:text-muted-foreground transition-colors",
+                    copied && "text-muted-foreground",
+                  )}
+                />
               </button>
             )}
             <span className="text-[10px] text-muted-foreground/60">

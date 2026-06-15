@@ -1,5 +1,4 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMutation } from "@tanstack/react-query";
 import {
   Check,
   ChevronDown,
@@ -15,13 +14,10 @@ import {
   UserPlus,
   Zap,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { useAuthClient } from "@/app";
-import { ApiKeyForm, type ApiKeyFormValues, ApiKeyReveal, type ApiKeyRevealProps, UnderConstruction } from "@/components";
 import { Button } from "@/components/ui/button";
 import { CommandCopy } from "@/components/ui/command-copy";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConnectionMode } from "@/hooks/use-connection-mode";
 import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
 
@@ -98,12 +94,12 @@ const steps: Array<{
         <CommandCopy command='export NEARAI_API_KEY="your-key-here"' />
 
         <p className="text-xs text-muted-foreground">
-          The{" "}
-          <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
-            scripts/run-reborn-webui.sh
-          </code>{" "}
-          script in the next step will configure the model provider automatically (defaults to
-          DeepSeek V4 Flash via NEAR AI).
+            The{" "}
+            <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
+              scripts/bos-dev.sh --local
+            </code>{" "}
+            script in the next step will configure the model provider automatically (defaults to
+            DeepSeek V4 Flash via NEAR AI).
         </p>
 
         <div className="rounded-md border border-border bg-muted/50 px-3.5 py-2.5 text-xs text-muted-foreground">
@@ -167,22 +163,26 @@ Setup guide: https://docs.near.ai/cloud/quickstart#setup`,
           <p className="text-sm text-muted-foreground">
             The repo includes{" "}
             <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
-              scripts/run-reborn-webui.sh
+              scripts/bos-dev.sh --local
             </code>{" "}
-            which handles the entire setup:
+            which handles the entire setup (or{" "}
+            <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
+              scripts/bos-dev.sh work.efiz.near/ironclaw.everything.dev
+            </code>{" "}
+            to connect to a remote gateway):
           </p>
           <CommandCopy command="git clone https://github.com/NEARBuilders/ironclaw.git && cd ironclaw" />
           <CommandCopy command='export NEARAI_API_KEY="your-key-here"' />
-          <CommandCopy command="scripts/run-reborn-webui.sh" />
+          <CommandCopy command="scripts/bos-dev.sh --local" />
           <p className="text-sm text-muted-foreground">
             Open{" "}
             <a
-              href="http://127.0.0.1:3000/v2"
+              href="http://localhost:3000"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary underline underline-offset-4"
             >
-              http://127.0.0.1:3000/v2
+              http://localhost:3000
             </a>{" "}
             and log in with the printed token.
           </p>
@@ -237,7 +237,7 @@ Setup guide: https://docs.near.ai/cloud/quickstart#setup`,
 \`\`\`bash
 git clone https://github.com/NEARBuilders/ironclaw.git && cd ironclaw
 export NEARAI_API_KEY="your-key-here"
-scripts/run-reborn-webui.sh
+scripts/bos-dev.sh --local
 \`\`\`
 
 Reborn binary docs: https://github.com/nearai/ironclaw/blob/main/docs/reborn-binary.md`,
@@ -251,8 +251,8 @@ Reborn binary docs: https://github.com/nearai/ironclaw/blob/main/docs/reborn-bin
     content: ({ onNext }) => (
       <div className="space-y-4">
         <div className="rounded-lg border border-border bg-muted px-3.5 py-3 text-sm text-muted-foreground">
-          The hackathon skill and nova-submit extension are built into the agent.
-          You just need a NOVA account to submit your entry.
+          The hackathon skill and nova-submit extension are built into the agent. You just need a
+          NOVA account to submit your entry.
         </div>
 
         <p className="text-sm font-semibold text-foreground">Get a NOVA account</p>
@@ -266,7 +266,8 @@ Reborn binary docs: https://github.com/nearai/ironclaw/blob/main/docs/reborn-bin
           >
             nova-sdk.com
           </a>{" "}
-          for your NOVA account ID and API key. You will need these during registration and submission.
+          for your NOVA account ID and API key. You will need these during registration and
+          submission.
         </p>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -296,7 +297,8 @@ Sign up at https://nova-sdk.com for your NOVA account ID and API key.`,
     content: ({ onNext }) => (
       <div className="space-y-4">
         <div className="rounded-lg border border-border bg-muted px-3.5 py-3 text-sm text-muted-foreground">
-          Tell your agent in the chat: &ldquo;Register me for the hackathon.&rdquo;<br />
+          Tell your agent in the chat: &ldquo;Register me for the hackathon.&rdquo;
+          <br />
           Have your NOVA Account ID ready — the agent will ask for it.
         </div>
 
@@ -402,7 +404,11 @@ Have your NOVA Account ID ready.`,
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" asChild>
-              <a href="https://hub.ironclaw.com/developer" target="_blank" rel="noopener noreferrer">
+              <a
+                href="https://hub.ironclaw.com/developer"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 <ExternalLink size={12} />
                 IronHub developer hub
               </a>
@@ -443,9 +449,15 @@ Have your NOVA Account ID ready.`,
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="bg-secondary">
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-border">Field</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-border">Required</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-border">Notes</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-border">
+                    Field
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-border">
+                    Required
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground border-b border-border">
+                    Notes
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -478,7 +490,11 @@ Have your NOVA Account ID ready.`,
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" asChild>
-              <a href="https://github.com/jcarbonnell/ironclaw-hackathon" target="_blank" rel="noopener noreferrer">
+              <a
+                href="https://github.com/jcarbonnell/ironclaw-hackathon"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 <ExternalLink size={12} />
                 ironclaw-hackathon repo
               </a>
@@ -641,42 +657,19 @@ function StepProgressBar({
   );
 }
 
-type CreatedApiKey = ApiKeyRevealProps["apiKey"];
-
 function IronclawPage() {
-  const authClient = useAuthClient();
-  const { connectionMode, switchMode } = useConnectionMode();
+  const { connectionMode } = useConnectionMode();
   const { status: connectionStatus, refetch: refetchStatus } = useIronclawStatus();
   const [completedSteps, setCompletedSteps] = useState<Set<StepId>>(new Set());
-  const [activeStep, setActiveStep] = useState<StepId | null>("api-key");
+  const [activeStep, setActiveStep] = useState<StepId | null>(null);
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState(connectionMode === "hosted" ? "hosted" : "local");
+  const stepsRef = useRef<HTMLDivElement>(null);
 
-  const [createdKey, setCreatedKey] = useState<CreatedApiKey | null>(null);
+  const isConnected = connectionStatus === "connected";
 
-  const createKeyMutation = useMutation({
-    mutationFn: async (values: ApiKeyFormValues) => {
-      const { data, error } = await authClient.apiKey.create({
-        ...values,
-        configId: "user-keys",
-        metadata: { scope: "ironclaw" },
-      });
-      if (error) throw new Error(error.message ?? "Failed to create API key");
-      return data as unknown as CreatedApiKey;
-    },
-    onSuccess: (key) => {
-      setCreatedKey(key);
-      toast.success("API key created — copy it now, you won't see it again");
-    },
-    onError: (err: Error) => {
-      toast.error(err.message);
-    },
-  });
-
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
-    switchMode(tab === "hosted" ? "hosted" : "local");
-  };
+  const binarySteps = steps.filter((s) => ["api-key", "setup"].includes(s.id));
+  const hackathonSteps = steps.filter((s) => !["api-key", "setup"].includes(s.id));
+  const allBinaryComplete = binarySteps.every((s) => completedSteps.has(s.id));
 
   const toggleStep = (id: StepId) => {
     setActiveStep((prev) => (prev === id ? null : id));
@@ -695,6 +688,11 @@ function IronclawPage() {
     }
   };
 
+  const scrollToLocalSetup = () => {
+    toggleStep("setup");
+    stepsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const handleCopy = async () => {
     await navigator.clipboard.writeText(buildRebornMarkdown());
     setCopied(true);
@@ -702,7 +700,92 @@ function IronclawPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isConnected = connectionStatus === "connected";
+  const renderStep = (step: (typeof steps)[0]) => {
+    const isOpen = activeStep === step.id;
+    const isCompleted = completedSteps.has(step.id);
+    const Icon = step.icon;
+
+    return (
+      <div
+        key={step.id}
+        id={`step-${step.id}`}
+        className={`rounded-xl border bg-card overflow-hidden transition-colors ${
+          isCompleted ? "border-[color:var(--near-green)]/30" : "border-border"
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => toggleStep(step.id)}
+          className="flex w-full items-center gap-3 px-5 py-4 text-left cursor-pointer hover:bg-muted/50 transition-colors duration-150"
+        >
+          <div
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors ${
+              isCompleted
+                ? "bg-[color:var(--near-green)]/10 text-[color:var(--near-green)]"
+                : isOpen
+                  ? "bg-primary/10 text-primary"
+                  : "bg-secondary text-muted-foreground"
+            }`}
+          >
+            {isCompleted ? <Check size={14} /> : <Icon size={14} />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <span
+              className={`text-sm font-semibold ${isCompleted ? "text-muted-foreground line-through decoration-[color:var(--near-green)]/50" : "text-foreground"}`}
+            >
+              {step.title}
+            </span>
+            <p className="text-xs text-muted-foreground mt-0.5">{step.subtitle}</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {!isCompleted && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  markCompleteAndAdvance(step.id);
+                }}
+                className="hidden sm:flex items-center gap-1 rounded-md border border-[color:var(--near-green)]/40 bg-[color:var(--near-green)]/5 px-2 py-0.5 text-[10px] font-medium text-[color:var(--near-green)] hover:bg-[color:var(--near-green)]/10 transition-colors"
+              >
+                <Check size={9} />
+                Done
+              </button>
+            )}
+            <ChevronDown
+              size={16}
+              className={`text-muted-foreground transition-transform duration-200 ${
+                isOpen ? "rotate-0" : "-rotate-90"
+              }`}
+            />
+          </div>
+        </button>
+        {isOpen && (
+          <div className="border-t border-border px-5 py-4">
+            {step.content({ onNext: () => markCompleteAndAdvance(step.id) })}
+            <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setActiveStep(null)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Collapse
+              </button>
+              {!isCompleted && (
+                <button
+                  type="button"
+                  onClick={() => markCompleteAndAdvance(step.id)}
+                  className="flex items-center gap-1.5 rounded-md border border-[color:var(--near-green)]/40 bg-[color:var(--near-green)]/5 px-3 py-1 text-xs font-medium text-[color:var(--near-green)] hover:bg-[color:var(--near-green)]/10 transition-colors"
+                >
+                  <Check size={10} />
+                  Mark complete
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="flex min-h-[calc(100dvh-4rem)] flex-col overflow-auto">
@@ -741,7 +824,9 @@ function IronclawPage() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => { refetchStatus(); }}
+                  onClick={() => {
+                    refetchStatus();
+                  }}
                   className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <RefreshCw size={10} />
@@ -751,273 +836,119 @@ function IronclawPage() {
             )}
           </div>
 
-          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-            <TabsList className="w-full justify-start">
-              <TabsTrigger value="hosted">
-                <Cloud size={12} className="mr-1.5" />
-                Hosted Agent
-                <span className="ml-1.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                  no binary needed
-                </span>
-              </TabsTrigger>
-              <TabsTrigger value="local">
-                <Terminal size={12} className="mr-1.5" />
-                Local Binary
-              
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="hosted" className="mt-4 space-y-4">
-              <div className="relative">
-                <div className="pointer-events-none select-none blur-sm">
-                  <div className="rounded-xl border border-border bg-card p-6 space-y-6">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
-                        Connect to the shared agent
-                      </p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Generate an API key to access the hosted IronClaw agent. No local setup needed —
-                        just create a key and start chatting.
-                      </p>
-                    </div>
-
-                    {createdKey ? (
-                      <div className="space-y-4">
-                        <ApiKeyReveal apiKey={createdKey} onDismiss={() => setCreatedKey(null)} />
-
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`h-2 w-2 rounded-full shrink-0 ${
-                              isConnected ? "bg-[color:var(--near-green)]" : "bg-muted-foreground"
-                            }`}
-                          />
-                          <span className="text-sm text-muted-foreground">
-                            {isConnected
-                              ? "Connection verified — your API key is active"
-                              : "Pinging agent..."}
-                          </span>
-                          {!isConnected && (
-                            <button
-                              type="button"
-                              onClick={() => { refetchStatus(); }}
-                              className="text-xs text-primary underline underline-offset-2"
-                            >
-                              retry
-                            </button>
-                          )}
-                        </div>
-
-                        {isConnected && (
-                          <Link
-                            to="/"
-                            className="group flex items-center gap-4 rounded-xl border-2 border-[color:var(--near-green)]/30 bg-[color:var(--near-green)]/5 px-5 py-4 hover:border-[color:var(--near-green)] hover:bg-[color:var(--near-green)]/10 transition-all duration-200"
-                          >
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[color:var(--near-green)]/10">
-                              <MessageCircle size={22} className="text-[color:var(--near-green)]" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-base font-semibold text-foreground group-hover:text-[color:var(--near-green)] transition-colors">
-                                Start chatting
-                              </p>
-                              <p className="text-sm text-muted-foreground mt-0.5">
-                                Your agent is ready — open the chat and start building
-                              </p>
-                            </div>
-                            <ExternalLink
-                              size={16}
-                              className="shrink-0 text-muted-foreground group-hover:text-[color:var(--near-green)] transition-colors"
-                            />
-                          </Link>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="rounded-lg border border-border bg-muted/50 px-4 py-3">
-                          <p className="text-sm text-muted-foreground">
-                            Your API key grants access to the shared IronClaw agent. Each key is scoped
-                            to your account — you can revoke it anytime from your settings.
-                          </p>
-                        </div>
-
-                        <ApiKeyForm
-                          onCreate={(values) => createKeyMutation.mutate(values)}
-                          isPending={createKeyMutation.isPending}
-                        />
-
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span>Already have a key?</span>
-                          <button
-                            type="button"
-                            onClick={() => { refetchStatus(); }}
-                            className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
-                          >
-                            Test connection
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-4 rounded-xl border border-border bg-card p-6">
-                    <p className="text-sm font-semibold text-foreground mb-3">
-                      Switching between modes
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      You can switch between the{" "}
-                      <strong className="text-foreground">hosted agent</strong> and your{" "}
-                      <strong className="text-foreground">own local binary</strong> anytime from the
-                      profile dropdown menu. The hackathon setup steps are available under the{" "}
-                      <button
-                        type="button"
-                        onClick={() => handleTabChange("local")}
-                        className="text-primary underline underline-offset-2"
-                      >
-                        Local Binary
-                      </button>{" "}
-                      tab.
-                    </p>
-                  </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => (window.location.href = "/settings/ironclaw")}
+              className="rounded-xl border-2 border-primary/20 bg-card p-6 hover:border-primary/40 transition-colors text-left cursor-pointer"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <Cloud size={18} className="text-primary" />
                 </div>
-
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center">
-                  <UnderConstruction label="Hosted agent" skipNavigation />
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">Hosted Agent</h3>
+                  <p className="text-xs text-muted-foreground">no binary needed</p>
                 </div>
               </div>
-            </TabsContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Connect through the shared hosted agent. Generate an API key and set it in Settings.
+              </p>
+              <Button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.location.href = "/settings/ironclaw";
+                }}
+              >
+                Get started
+              </Button>
+            </button>
 
-            <TabsContent value="local" className="mt-4 space-y-4">
-              <div className="rounded-xl border border-border bg-card p-4 sm:p-6 space-y-4">
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <p className="text-sm font-semibold text-foreground">
-                    {completedSteps.size === steps.length
+            <button
+              type="button"
+              onClick={scrollToLocalSetup}
+              className="rounded-xl border-2 border-primary/20 bg-card p-6 hover:border-primary/40 transition-colors text-left cursor-pointer"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <Terminal size={18} className="text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">Local Binary</h3>
+                  <p className="text-xs text-muted-foreground">run your own</p>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Run your own ironclaw binary locally.
+              </p>
+              <Button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  scrollToLocalSetup();
+                }}
+              >
+                Set up locally
+              </Button>
+            </button>
+          </div>
+
+          <div ref={stepsRef}>
+            <div className="rounded-xl border border-border bg-card p-4 sm:p-6 space-y-4">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Local Binary Setup</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {allBinaryComplete
                       ? "All steps complete!"
-                      : `Step ${completedSteps.size + 1} of ${steps.length}`}
+                      : `Step ${binarySteps.filter((s) => completedSteps.has(s.id)).length + 1} of ${binarySteps.length}`}
                   </p>
-                  <div className="flex items-center gap-2">
-                    {completedSteps.size > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setCompletedSteps(new Set())}
-                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        Reset progress
-                      </button>
-                    )}
-                    <Button variant="outline" size="sm" onClick={handleCopy}>
-                      {copied ? <Check size={14} /> : <Copy size={14} />}
-                      {copied ? "Copied" : "Copy as skill"}
-                    </Button>
-                  </div>
                 </div>
-
-                <StepProgressBar
-                  steps={steps}
-                  completedSteps={completedSteps}
-                  activeStep={activeStep}
-                  onStepClick={toggleStep}
-                />
-
-                {completedSteps.size === steps.length && (
-                  <div className="rounded-lg border border-[color:var(--near-green)]/30 bg-[color:var(--near-green)]/5 px-4 py-3 text-sm text-[color:var(--near-green)] font-medium">
-                    You&apos;re all set! Head back to the chat to start using your agent.
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-3">
-                {steps.map((step) => {
-                  const isOpen = activeStep === step.id;
-                  const isCompleted = completedSteps.has(step.id);
-                  const Icon = step.icon;
-
-                  return (
-                    <div
-                      key={step.id}
-                      id={`step-${step.id}`}
-                      className={`rounded-xl border bg-card overflow-hidden transition-colors ${
-                        isCompleted ? "border-[color:var(--near-green)]/30" : "border-border"
-                      }`}
+                <div className="flex items-center gap-2">
+                  {completedSteps.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setCompletedSteps(new Set())}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                     >
-                      <button
-                        type="button"
-                        onClick={() => toggleStep(step.id)}
-                        className="flex w-full items-center gap-3 px-5 py-4 text-left cursor-pointer hover:bg-muted/50 transition-colors duration-150"
-                      >
-                        <div
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors ${
-                            isCompleted
-                              ? "bg-[color:var(--near-green)]/10 text-[color:var(--near-green)]"
-                              : isOpen
-                                ? "bg-primary/10 text-primary"
-                                : "bg-secondary text-muted-foreground"
-                          }`}
-                        >
-                          {isCompleted ? (
-                            <Check size={14} />
-                          ) : (
-                            <Icon size={14} />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <span
-                            className={`text-sm font-semibold ${isCompleted ? "text-muted-foreground line-through decoration-[color:var(--near-green)]/50" : "text-foreground"}`}
-                          >
-                            {step.title}
-                          </span>
-                          <p className="text-xs text-muted-foreground mt-0.5">{step.subtitle}</p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {!isCompleted && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                markCompleteAndAdvance(step.id);
-                              }}
-                              className="hidden sm:flex items-center gap-1 rounded-md border border-[color:var(--near-green)]/40 bg-[color:var(--near-green)]/5 px-2 py-0.5 text-[10px] font-medium text-[color:var(--near-green)] hover:bg-[color:var(--near-green)]/10 transition-colors"
-                            >
-                              <Check size={9} />
-                              Done
-                            </button>
-                          )}
-                          <ChevronDown
-                            size={16}
-                            className={`text-muted-foreground transition-transform duration-200 ${
-                              isOpen ? "rotate-0" : "-rotate-90"
-                            }`}
-                          />
-                        </div>
-                      </button>
-                      {isOpen && (
-                        <div className="border-t border-border px-5 py-4">
-                          {step.content({ onNext: () => markCompleteAndAdvance(step.id) })}
-                          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
-                            <button
-                              type="button"
-                              onClick={() => setActiveStep(null)}
-                              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                              Collapse
-                            </button>
-                            {!isCompleted && (
-                              <button
-                                type="button"
-                                onClick={() => markCompleteAndAdvance(step.id)}
-                                className="flex items-center gap-1.5 rounded-md border border-[color:var(--near-green)]/40 bg-[color:var(--near-green)]/5 px-3 py-1 text-xs font-medium text-[color:var(--near-green)] hover:bg-[color:var(--near-green)]/10 transition-colors"
-                              >
-                                <Check size={10} />
-                                Mark complete
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                      Reset progress
+                    </button>
+                  )}
+                  <Button variant="outline" size="sm" onClick={handleCopy}>
+                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                    {copied ? "Copied" : "Copy as skill"}
+                  </Button>
+                </div>
               </div>
-            </TabsContent>
-          </Tabs>
+
+              <StepProgressBar
+                steps={binarySteps}
+                completedSteps={completedSteps}
+                activeStep={activeStep}
+                onStepClick={toggleStep}
+              />
+
+              {allBinaryComplete && (
+                <div className="rounded-lg border border-[color:var(--near-green)]/30 bg-[color:var(--near-green)]/5 px-4 py-3 text-sm text-[color:var(--near-green)] font-medium">
+                  You&apos;re all set! Head back to the chat to start using your agent.
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3 mt-3">{binarySteps.map(renderStep)}</div>
+          </div>
+
+          <div>
+            <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
+              <h2 className="text-base font-semibold text-foreground">Hackathon</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Steps to participate in the NEAR Legion IronClaw Hackathon
+              </p>
+            </div>
+
+            <div className="space-y-3 mt-3">{hackathonSteps.map(renderStep)}</div>
+          </div>
 
           <div className="rounded-xl border border-border bg-card p-6">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
@@ -1025,13 +956,25 @@ function IronclawPage() {
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <UrlCard href="https://ironclaw.com" label="IronClaw" />
-              <UrlCard href="https://github.com/nearai/ironclaw/blob/main/docs/reborn-binary.md" label="Reborn binary docs" />
-              <UrlCard href="https://github.com/nearai/ironclaw/blob/main/docs/reborn-binary.md#extension" label="Nova-Submit extension" />
-              <UrlCard href="https://github.com/jcarbonnell/ironclaw-hackathon" label="ironclaw-hackathon" />
+              <UrlCard
+                href="https://github.com/nearai/ironclaw/blob/main/docs/reborn-binary.md"
+                label="Reborn binary docs"
+              />
+              <UrlCard
+                href="https://github.com/nearai/ironclaw/blob/main/docs/reborn-binary.md#extension"
+                label="Nova-Submit extension"
+              />
+              <UrlCard
+                href="https://github.com/jcarbonnell/ironclaw-hackathon"
+                label="ironclaw-hackathon"
+              />
               <UrlCard href="https://nova-sdk.com" label="NOVA SDK" />
               <UrlCard href="https://docs.ironclaw.com" label="IronClaw Docs" />
               <UrlCard href="https://cloud.near.ai" label="NEAR AI Cloud" />
-              <UrlCard href="https://docs.near.ai/cloud/quickstart#setup" label="API key setup guide" />
+              <UrlCard
+                href="https://docs.near.ai/cloud/quickstart#setup"
+                label="API key setup guide"
+              />
               <UrlCard href="https://t.me/ironclawAI" label="Telegram: @ironclawAI" />
             </div>
           </div>

@@ -93,7 +93,8 @@ export async function startRebornMock(options: RebornMockOptions = {}): Promise<
         res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       };
 
-      state.sseHandler(write)
+      state
+        .sseHandler(write)
         .catch(() => {})
         .finally(() => res.end());
     } else {
@@ -107,12 +108,20 @@ export async function startRebornMock(options: RebornMockOptions = {}): Promise<
     const method = req.method ?? "GET";
     const path = extractPath(req.url ?? "");
 
-    if (method === "GET" && path.startsWith("/api/webchat/v2/threads/") && path.endsWith("/events")) {
+    if (
+      method === "GET" &&
+      path.startsWith("/api/webchat/v2/threads/") &&
+      path.endsWith("/events")
+    ) {
       const match = path.match(/\/api\/webchat\/v2\/threads\/([^/]+)\/events/);
       if (match) return sseHandler(req, res);
     }
 
-    if (method === "GET" && path.startsWith("/api/webchat/v2/threads/") && path.endsWith("/timeline")) {
+    if (
+      method === "GET" &&
+      path.startsWith("/api/webchat/v2/threads/") &&
+      path.endsWith("/timeline")
+    ) {
       if (!requireAuth(req, res)) return;
       const match = path.match(/\/api\/webchat\/v2\/threads\/([^/]+)\/timeline/);
       if (!match) return notFound(res);
@@ -142,11 +151,15 @@ export async function startRebornMock(options: RebornMockOptions = {}): Promise<
       return jsonResponse(res, 200, { success: true });
     }
 
-    if (method === "POST" && path.startsWith("/api/webchat/v2/threads/") && path.endsWith("/messages")) {
+    if (
+      method === "POST" &&
+      path.startsWith("/api/webchat/v2/threads/") &&
+      path.endsWith("/messages")
+    ) {
       if (!requireAuth(req, res)) return;
       const match = path.match(/\/api\/webchat\/v2\/threads\/([^/]+)\/messages/);
       if (!match) return notFound(res);
-      const body = await readBody(req) as any;
+      const body = (await readBody(req)) as any;
       const thread = state.threads.find((t) => t.threadId === match[1]);
       if (!thread) return notFound(res);
 
@@ -201,7 +214,13 @@ export async function startRebornMock(options: RebornMockOptions = {}): Promise<
         threads: state.threads.map((t) => ({
           thread_id: t.threadId,
           title: t.title,
-          scope: { tenant_id: state.session.tenantId, agent_id: state.session.userId, project_id: undefined, owner_user_id: undefined, mission_id: undefined },
+          scope: {
+            tenant_id: state.session.tenantId,
+            agent_id: state.session.userId,
+            project_id: undefined,
+            owner_user_id: undefined,
+            mission_id: undefined,
+          },
           created_by_actor_id: state.session.userId,
           created_at: t.createdAt,
         })),
@@ -261,8 +280,16 @@ export async function startRebornMock(options: RebornMockOptions = {}): Promise<
       if (!requireAuth(req, res)) return;
       return jsonResponse(res, 200, {
         targets: state.outboundTargets.map((o) => ({
-          target: { target_id: o.target.targetId, channel: o.target.channel, display_name: o.target.displayName },
-          capabilities: { final_replies: o.capabilities.finalReplies, gate_prompts: o.capabilities.gatePrompts, auth_prompts: o.capabilities.authPrompts },
+          target: {
+            target_id: o.target.targetId,
+            channel: o.target.channel,
+            display_name: o.target.displayName,
+          },
+          capabilities: {
+            final_replies: o.capabilities.finalReplies,
+            gate_prompts: o.capabilities.gatePrompts,
+            auth_prompts: o.capabilities.authPrompts,
+          },
         })),
       });
     }
@@ -369,7 +396,10 @@ export async function startRebornMock(options: RebornMockOptions = {}): Promise<
       return jsonResponse(res, 200, { success: true });
     }
 
-    jsonResponse(res, 404, { error: "not_found", message: `No mock handler for ${method} ${path}` });
+    jsonResponse(res, 404, {
+      error: "not_found",
+      message: `No mock handler for ${method} ${path}`,
+    });
   });
 
   const port = options.port ?? 0;

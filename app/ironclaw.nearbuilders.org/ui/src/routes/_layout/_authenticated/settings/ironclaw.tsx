@@ -21,6 +21,7 @@ function IronclawSettings() {
   const [apiToken, setApiToken] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
   const [hasSettings, setHasSettings] = useState(false);
   const [connectionMode, setConnectionMode] = useState<"local" | "hosted">(getConnectionMode());
 
@@ -45,6 +46,18 @@ function IronclawSettings() {
       })
       .finally(() => setLoading(false));
   }, [apiClient, connectionMode]);
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    try {
+      await apiClient.ironclaw.ping();
+      toast.success("Connection successful — binary is reachable");
+    } catch {
+      toast.error("Connection failed — check your tunnel URL and API token");
+    } finally {
+      setTestingConnection(false);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,7 +106,9 @@ function IronclawSettings() {
         </span>
         <button
           type="button"
-          onClick={() => { refetchStatus(); }}
+          onClick={() => {
+            refetchStatus();
+          }}
           className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <RefreshCw size={10} />
@@ -111,21 +126,12 @@ function IronclawSettings() {
               <p className="text-sm font-semibold text-foreground">Hosted Agent Mode</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 You are connected through the shared hosted agent. No local binary configuration
-                needed. Generate or manage your API key from the{" "}
-                <Link
-                  to="/setup"
-                  className="text-primary underline underline-offset-2"
-                >
-                  setup page
-                </Link>{" "}
-                or{" "}
-                <Link
-                  to="/settings/api-keys"
-                  className="text-primary underline underline-offset-2"
-                >
+                needed. API keys are managed from the{" "}
+                <Link to="/settings/api-keys" className="text-primary underline underline-offset-2">
                   API keys settings
-                </Link>
-                .
+                </Link>{" "}
+                page — create a new key or revoke an existing one. After generating a key, the agent
+                will reconnect automatically.
               </p>
             </div>
           </div>
@@ -180,10 +186,25 @@ function IronclawSettings() {
                 No settings configured yet. Add your tunnel URL and API token to connect.
               </p>
             )}
-            <Button type="submit" disabled={saving || !tunnelUrl || !apiToken} className="ml-auto">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={14} />}
-              {saving ? "Saving..." : "Save settings"}
-            </Button>
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={testingConnection || !tunnelUrl || !apiToken}
+                onClick={handleTestConnection}
+              >
+                {testingConnection ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw size={14} />
+                )}
+                {testingConnection ? "Testing..." : "Test connection"}
+              </Button>
+              <Button type="submit" disabled={saving || !tunnelUrl || !apiToken}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={14} />}
+                {saving ? "Saving..." : "Save settings"}
+              </Button>
+            </div>
           </div>
         </form>
       )}
@@ -197,9 +218,23 @@ function IronclawSettings() {
           ngrok http http://localhost:3001
         </code>
         <p className="text-xs text-muted-foreground">
-          Copy the ngrok URL into the Tunnel URL field above. The API Token must match
-          the bearer token configured on your Reborn binary.
+          Copy the ngrok URL into the Tunnel URL field above. The API Token must match the bearer
+          token configured on your Reborn binary.
         </p>
+        <div className="rounded-md border border-border bg-secondary/30 px-3 py-2 mt-2">
+          <p className="text-xs font-medium text-foreground">Required environment variable</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            The{" "}
+            <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
+              IRONCLAW_REBORN_WEBUI_TOKEN
+            </code>{" "}
+            environment variable must be set on your Reborn binary. Use the same value as the API
+            Token above.
+          </p>
+          <code className="mt-1.5 block rounded bg-secondary px-2 py-1.5 text-xs font-mono text-foreground">
+            export IRONCLAW_REBORN_WEBUI_TOKEN=&quot;your-api-token-here&quot;
+          </code>
+        </div>
 
         <div className="pt-2 border-t border-border mt-3">
           <p className="text-xs font-medium text-foreground">Connection mode</p>

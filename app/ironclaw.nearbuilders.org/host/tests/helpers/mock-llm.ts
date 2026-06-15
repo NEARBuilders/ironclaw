@@ -30,18 +30,24 @@ export async function startMockLlm(): Promise<{
             "Cache-Control": "no-cache",
             Connection: "keep-alive",
           });
-          res.write(`data: ${JSON.stringify({ id: "mock-cid", object: "chat.completion.chunk", model: "mock-model", choices: [{ delta: { role: "assistant" }, index: 0 }] })}\n\n`);
-          res.write(`data: ${JSON.stringify({ id: "mock-cid", object: "chat.completion.chunk", model: "mock-model", choices: [{ delta: { content: SMOKE_REPLY }, index: 0 }] })}\n\n`);
+          res.write(
+            `data: ${JSON.stringify({ id: "mock-cid", object: "chat.completion.chunk", model: "mock-model", choices: [{ delta: { role: "assistant" }, index: 0 }] })}\n\n`,
+          );
+          res.write(
+            `data: ${JSON.stringify({ id: "mock-cid", object: "chat.completion.chunk", model: "mock-model", choices: [{ delta: { content: SMOKE_REPLY }, index: 0 }] })}\n\n`,
+          );
           res.write("data: [DONE]\n\n");
           res.end();
         } else {
           res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({
-            id: "mock-cid",
-            object: "chat.completion",
-            model: "mock-model",
-            choices: [{ message: { role: "assistant", content: SMOKE_REPLY }, index: 0 }],
-          }));
+          res.end(
+            JSON.stringify({
+              id: "mock-cid",
+              object: "chat.completion",
+              model: "mock-model",
+              choices: [{ message: { role: "assistant", content: SMOKE_REPLY }, index: 0 }],
+            }),
+          );
         }
       });
       return;

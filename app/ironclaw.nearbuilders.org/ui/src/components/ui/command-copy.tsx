@@ -2,13 +2,7 @@ import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-function CommandCopy({
-  command,
-  label,
-}: {
-  command: string;
-  label?: string;
-}) {
+function CommandCopy({ command, label }: { command: string; label?: string }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {

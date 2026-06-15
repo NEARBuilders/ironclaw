@@ -1,13 +1,18 @@
 import { expect, test } from "@playwright/test";
 import { startRebornMock } from "../../../tests/reborn-mock/server";
-import { startBundledHost, type BundledHostUrls } from "../helpers/bundled-host";
+import { type BundledHostUrls, startBundledHost } from "../helpers/bundled-host";
 import { loginAnonymously } from "../helpers/playwright-auth";
 
 test.describe("Chat UI regressions", () => {
   test.describe.configure({ mode: "serial" });
 
   let app: { baseUrl: string; stop: () => Promise<void> };
-  let rebornMock: { baseUrl: string; token: string; stop: () => Promise<void>; setScenario: (name: any) => void };
+  let rebornMock: {
+    baseUrl: string;
+    token: string;
+    stop: () => Promise<void>;
+    setScenario: (name: any) => void;
+  };
   let savedSettings: { tunnelUrl: string; apiToken: string };
   let connected: boolean;
 
@@ -53,24 +58,51 @@ test.describe("Chat UI regressions", () => {
       try {
         const reqUrl = route.request().url();
         let body: any = {};
-        try { body = route.request().postDataJSON() ?? {}; } catch {}
+        try {
+          body = route.request().postDataJSON() ?? {};
+        } catch {}
         const match = reqUrl.match(/\/api\/rpc\/ironclaw\/(.+)/);
         const p = (match ? match[1] : (body?.procedure ?? "")).replace(/\//g, ".");
 
         if (p.includes("settings.get")) {
-          if (!savedSettings.tunnelUrl) { await route.fulfill({ status: 404, body: JSON.stringify({ error: "NOT_FOUND" }) }); return; }
-          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(savedSettings) }); return;
+          if (!savedSettings.tunnelUrl) {
+            await route.fulfill({ status: 404, body: JSON.stringify({ error: "NOT_FOUND" }) });
+            return;
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(savedSettings),
+          });
+          return;
         }
         if (p.includes("settings.update")) {
           savedSettings = { tunnelUrl: rebornMock.baseUrl, apiToken: rebornMock.token };
           connected = true;
-          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true }) }); return;
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ success: true }),
+          });
+          return;
         }
         if (p.includes("ping") || p.includes("session")) {
-          if (!connected) { await route.fulfill({ status: 412, body: JSON.stringify({ error: "PRECONDITION_FAILED" }) }); return; }
-          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-            status: "ok", timestamp: new Date().toISOString(),
-          }) }); return;
+          if (!connected) {
+            await route.fulfill({
+              status: 412,
+              body: JSON.stringify({ error: "PRECONDITION_FAILED" }),
+            });
+            return;
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              status: "ok",
+              timestamp: new Date().toISOString(),
+            }),
+          });
+          return;
         }
 
         // Thread operations
@@ -78,22 +110,40 @@ test.describe("Chat UI regressions", () => {
           const res = await fetch(`${rebornMock.baseUrl}/api/webchat/v2/threads`, {
             headers: { Authorization: `Bearer ${rebornMock.token}` },
           });
-          await route.fulfill({ status: res.status, contentType: "application/json", body: JSON.stringify(await res.json()) }); return;
+          await route.fulfill({
+            status: res.status,
+            contentType: "application/json",
+            body: JSON.stringify(await res.json()),
+          });
+          return;
         }
         if (p.includes("threads.create")) {
           const res = await fetch(`${rebornMock.baseUrl}/api/webchat/v2/threads`, {
             method: "POST",
-            headers: { Authorization: `Bearer ${rebornMock.token}`, "Content-Type": "application/json" },
+            headers: {
+              Authorization: `Bearer ${rebornMock.token}`,
+              "Content-Type": "application/json",
+            },
             body: JSON.stringify({ client_action_id: `ui-${crypto.randomUUID()}` }),
           });
-          await route.fulfill({ status: res.status, contentType: "application/json", body: JSON.stringify(await res.json()) }); return;
+          await route.fulfill({
+            status: res.status,
+            contentType: "application/json",
+            body: JSON.stringify(await res.json()),
+          });
+          return;
         }
         if (p.includes("threads.getTimeline")) {
           const tid = body?.input?.id ?? "test";
           const res = await fetch(`${rebornMock.baseUrl}/api/webchat/v2/threads/${tid}/timeline`, {
             headers: { Authorization: `Bearer ${rebornMock.token}` },
           });
-          await route.fulfill({ status: res.status, contentType: "application/json", body: JSON.stringify(await res.json()) }); return;
+          await route.fulfill({
+            status: res.status,
+            contentType: "application/json",
+            body: JSON.stringify(await res.json()),
+          });
+          return;
         }
         if (p.includes("threads.sendMessage")) {
           const tid = body?.input?.id ?? "test";
@@ -101,20 +151,35 @@ test.describe("Chat UI regressions", () => {
           rebornMock.setScenario("stream-final-reply");
           const res = await fetch(`${rebornMock.baseUrl}/api/webchat/v2/threads/${tid}/messages`, {
             method: "POST",
-            headers: { Authorization: `Bearer ${rebornMock.token}`, "Content-Type": "application/json" },
+            headers: {
+              Authorization: `Bearer ${rebornMock.token}`,
+              "Content-Type": "application/json",
+            },
             body: JSON.stringify({ content, client_action_id: `act-${crypto.randomUUID()}` }),
           });
-          await route.fulfill({ status: res.status, contentType: "application/json", body: JSON.stringify(await res.json()) }); return;
+          await route.fulfill({
+            status: res.status,
+            contentType: "application/json",
+            body: JSON.stringify(await res.json()),
+          });
+          return;
         }
         if (p.includes("threads.streamEvents") || p.includes("streamEvents")) {
           const tid = body?.input?.id ?? "test";
           const sseUrl = `${rebornMock.baseUrl}/api/webchat/v2/threads/${tid}/events?token=${rebornMock.token}`;
           const res = await fetch(sseUrl);
-          await route.fulfill({ status: 200, contentType: "text/event-stream", body: await res.text() }); return;
+          await route.fulfill({
+            status: 200,
+            contentType: "text/event-stream",
+            body: await res.text(),
+          });
+          return;
         }
 
         await route.continue();
-      } catch { await route.continue(); }
+      } catch {
+        await route.continue();
+      }
     });
   });
 
@@ -164,7 +229,9 @@ test.describe("Chat UI regressions", () => {
     await expect(page.getByText("hello regression")).toBeVisible({ timeout: 5000 });
 
     // Running state should appear from accepted response
-    await expect(page.getByText(/Message received, waiting|Thinking/i)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/Message received, waiting|Thinking/i)).toBeVisible({
+      timeout: 15000,
+    });
   });
 
   test("final reply renders from SSE", async ({ page }) => {

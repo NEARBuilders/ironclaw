@@ -1,37 +1,29 @@
 import { spawn } from "node:child_process";
-import { createServer } from "node:net";
 import { mkdtempSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import path from "node:path";
 import { startMockLlm } from "./mock-llm";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "../../../../..");
-const APP_DIR = path.resolve(REPO_ROOT, "app/ironclaw.nearbuilders.org");
+const APP_DIR = path.resolve(REPO_ROOT, "app/ironclaw.everything.dev");
 const REBORN_BIN = path.resolve(REPO_ROOT, "target/debug/ironclaw-reborn");
 
 const AUTH_TOKEN = "e2e-reborn-real-token-0123456789";
 const USER_ID = "reborn-cli";
 
-async function waitForReady(
-  url: string,
-  timeout: number,
-  interval: number,
-): Promise<void> {
+async function waitForReady(url: string, timeout: number, interval: number): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
       if (res.ok) return;
-    } catch { }
+    } catch {}
     await new Promise((r) => setTimeout(r, interval));
   }
   throw new Error(`Timed out waiting for ${url}`);
 }
 
-function readStreamLines(
-  stream: NodeJS.ReadableStream | null,
-  buffer: string[],
-  maxLines: number,
-) {
+function readStreamLines(stream: NodeJS.ReadableStream | null, buffer: string[], maxLines: number) {
   if (!stream) return;
   stream.on("data", (chunk: Buffer) => {
     const lines = chunk.toString().split("\n");
@@ -79,7 +71,9 @@ export async function startRealStack(): Promise<RealStackHandle> {
   const mockLlmUrl = mock.baseUrl;
   await waitForReady(`${mockLlmUrl}/v1/models`, 15000, 500);
 
-  writeFileSync(path.join(tempDir, "config.toml"), `api_version = "ironclaw.runtime/v1"
+  writeFileSync(
+    path.join(tempDir, "config.toml"),
+    `api_version = "ironclaw.runtime/v1"
 
 [boot]
 profile = "local-dev"
@@ -98,7 +92,8 @@ provider_id = "openai"
 model = "mock-model"
 api_key_env = "MOCK_LLM_API_KEY"
 base_url = "${mockLlmUrl}/v1"
-`);
+`,
+  );
 
   const rebornPort = await findFreePort();
   const rebornEnv: Record<string, string> = {
@@ -165,11 +160,15 @@ base_url = "${mockLlmUrl}/v1"
   const stop = async () => {
     await mock.stop();
     for (const proc of [appDevProc, rebornProc]) {
-      try { proc.kill("SIGINT"); } catch { }
+      try {
+        proc.kill("SIGINT");
+      } catch {}
     }
     await new Promise((r) => setTimeout(r, 1000));
     for (const proc of [appDevProc, rebornProc]) {
-      try { proc.kill("SIGKILL"); } catch { }
+      try {
+        proc.kill("SIGKILL");
+      } catch {}
     }
   };
 

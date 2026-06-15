@@ -8,7 +8,12 @@ export async function loginAnonymously(page: Page, baseUrl: string) {
       contentType: "application/json",
       body: JSON.stringify({
         user: { id: "test-user-id", email: null, name: null, image: null, isAnonymous: true },
-        session: { id: "test-session-id", expiresAt: new Date(Date.now() + 86400000).toISOString(), createdAt: new Date().toISOString(), userId: "test-user-id" },
+        session: {
+          id: "test-session-id",
+          expiresAt: new Date(Date.now() + 86400000).toISOString(),
+          createdAt: new Date().toISOString(),
+          userId: "test-user-id",
+        },
       }),
     });
   });
@@ -19,7 +24,12 @@ export async function loginAnonymously(page: Page, baseUrl: string) {
       contentType: "application/json",
       body: JSON.stringify({
         user: { id: "test-user-id", email: null, name: null, image: null, isAnonymous: true },
-        session: { id: "test-session-id", expiresAt: new Date(Date.now() + 86400000).toISOString(), createdAt: new Date().toISOString(), userId: "test-user-id" },
+        session: {
+          id: "test-session-id",
+          expiresAt: new Date(Date.now() + 86400000).toISOString(),
+          createdAt: new Date().toISOString(),
+          userId: "test-user-id",
+        },
       }),
     });
   });
@@ -74,8 +84,16 @@ export function setupIronclawApiMock(page: Page, app: RebornAppHost) {
     const url = route.request().url();
     const method = route.request().method();
 
-    if (method === "POST" && (url.includes("ping") || url.endsWith("/api/rpc") || url.endsWith("/api/rpc/"))) {
-      const body = route.request().postDataJSON ? await route.request().postDataJSON().catch(() => ({})) : {};
+    if (
+      method === "POST" &&
+      (url.includes("ping") || url.endsWith("/api/rpc") || url.endsWith("/api/rpc/"))
+    ) {
+      const body = route.request().postDataJSON
+        ? await route
+            .request()
+            .postDataJSON()
+            .catch(() => ({}))
+        : {};
       const procedure = body?.procedure ?? "";
 
       if (typeof procedure === "string" && procedure.includes("ping")) {
@@ -87,7 +105,10 @@ export function setupIronclawApiMock(page: Page, app: RebornAppHost) {
           return route.fulfill({
             status: 404,
             contentType: "application/json",
-            body: JSON.stringify({ error: "NOT_FOUND", message: "No ironclaw settings configured" }),
+            body: JSON.stringify({
+              error: "NOT_FOUND",
+              message: "No ironclaw settings configured",
+            }),
           });
         }
         return route.fulfill({
@@ -124,43 +145,73 @@ export function setupIronclawApiMock(page: Page, app: RebornAppHost) {
           headers: { Authorization: `Bearer ${app.rebornToken}` },
         });
         const data = await res.json();
-        return route.fulfill({ status: res.status, contentType: "application/json", body: JSON.stringify(data) });
+        return route.fulfill({
+          status: res.status,
+          contentType: "application/json",
+          body: JSON.stringify(data),
+        });
       }
 
       if (procedure.includes("threads.create")) {
         const input = body?.input ?? {};
-        const clientActionId = typeof input?.clientActionId === "string" ? input.clientActionId : crypto.randomUUID();
+        const clientActionId =
+          typeof input?.clientActionId === "string" ? input.clientActionId : crypto.randomUUID();
         const res = await fetch(`${app.rebornBaseUrl}/api/webchat/v2/threads`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${app.rebornToken}`, "Content-Type": "application/json" },
+          headers: {
+            Authorization: `Bearer ${app.rebornToken}`,
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({ client_action_id: clientActionId }),
         });
         const data = await res.json();
-        return route.fulfill({ status: res.status, contentType: "application/json", body: JSON.stringify(data) });
+        return route.fulfill({
+          status: res.status,
+          contentType: "application/json",
+          body: JSON.stringify(data),
+        });
       }
 
       if (procedure.includes("threads.getTimeline")) {
         const input = body?.input ?? {};
         const threadId = typeof input?.id === "string" ? input.id : "thread-001";
-        const res = await fetch(`${app.rebornBaseUrl}/api/webchat/v2/threads/${threadId}/timeline`, {
-          headers: { Authorization: `Bearer ${app.rebornToken}` },
-        });
+        const res = await fetch(
+          `${app.rebornBaseUrl}/api/webchat/v2/threads/${threadId}/timeline`,
+          {
+            headers: { Authorization: `Bearer ${app.rebornToken}` },
+          },
+        );
         const data = await res.json();
-        return route.fulfill({ status: res.status, contentType: "application/json", body: JSON.stringify(data) });
+        return route.fulfill({
+          status: res.status,
+          contentType: "application/json",
+          body: JSON.stringify(data),
+        });
       }
 
       if (procedure.includes("threads.sendMessage")) {
         const input = body?.input ?? {};
         const threadId = typeof input?.id === "string" ? input.id : "thread-001";
         const content = typeof input?.content === "string" ? input.content : "";
-        const clientActionId = typeof input?.clientActionId === "string" ? input.clientActionId : crypto.randomUUID();
-        const res = await fetch(`${app.rebornBaseUrl}/api/webchat/v2/threads/${threadId}/messages`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${app.rebornToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ content, client_action_id: clientActionId }),
-        });
+        const clientActionId =
+          typeof input?.clientActionId === "string" ? input.clientActionId : crypto.randomUUID();
+        const res = await fetch(
+          `${app.rebornBaseUrl}/api/webchat/v2/threads/${threadId}/messages`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${app.rebornToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ content, client_action_id: clientActionId }),
+          },
+        );
         const data = await res.json();
-        return route.fulfill({ status: res.status, contentType: "application/json", body: JSON.stringify(data) });
+        return route.fulfill({
+          status: res.status,
+          contentType: "application/json",
+          body: JSON.stringify(data),
+        });
       }
 
       if (procedure.includes("threads.delete")) {
@@ -171,7 +222,11 @@ export function setupIronclawApiMock(page: Page, app: RebornAppHost) {
           headers: { Authorization: `Bearer ${app.rebornToken}` },
         });
         const data = await res.json();
-        return route.fulfill({ status: res.status, contentType: "application/json", body: JSON.stringify(data) });
+        return route.fulfill({
+          status: res.status,
+          contentType: "application/json",
+          body: JSON.stringify(data),
+        });
       }
 
       if (procedure.includes("threads.streamEvents") || procedure.includes("streamEvents")) {

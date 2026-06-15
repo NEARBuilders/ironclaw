@@ -1,11 +1,11 @@
 {
   "extends": "bos://work.efiz.near/nearbuilders.org",
   "account": "work.efiz.near",
-  "domain": "ironclaw.nearbuilders.org",
+  "domain": "ironclaw.everything.dev",
   "title": "IronClaw",
   "description": "IronClaw Reborn Dashboard Interface",
   "staging": {
-    "domain": "dev.everything.dev"
+    "domain": "dev.ironclaw..everything.dev"
   },
   "repository": "https://github.com/nearai/ironclaw",
   "ci": {
@@ -22,17 +22,25 @@
         "ALLOW_OVERRIDE",
         "ALLOW_UNTRUSTED_SSR",
         "CSP_STRICT"
-      ]
+      ],
+      "production": "https://elliot-braem-4903-host-ironclaw-nearbuilders-39ace7689-ze.zephyrcloud.app",
+      "integrity": "sha384-2ioL7P01rTZjZN2+/sBx6d35dBij8XYgz0jE2+zRtV45YFljYguognTBK9jtBGkP"
     },
     "ui": {
-      "development": "local:ui"
+      "development": "local:ui",
+      "ssr": "https://elliot-braem-4900-ui-ironclaw-nearbuilders-22b5afbed-ze.zephyrcloud.app",
+      "ssrIntegrity": "sha384-43WidCzwpxQKDLEZ9wxBEdcQVvvArbIR2osuVY0k9BCR/GSyDmKD7slJeiZ7ltIJ",
+      "production": "https://elliot-braem-4899-ui-ironclaw-nearbuilders-6e6a78c76-ze.zephyrcloud.app",
+      "integrity": "sha384-xWWsT0dz9V6bq9h1wbGAMyx1RxtdPDvBIbOabvGrOTOCRplqERp7aeRftCw8vsxp"
     },
     "api": {
       "development": "local:api",
       "secrets": [
         "API_DATABASE_URL",
         "IRONCLAW_BASE_URL"
-      ]
+      ],
+      "production": "https://elliot-braem-4901-api-ironclaw-nearbuilders-9e90ce3d2-ze.zephyrcloud.app",
+      "integrity": "sha384-YP3lQAGliCACtonGf0TARGa0m9QZHAjpx2FqnTyvebbDRlmCCM2fnJqjkwVJZ4IG"
     }
   },
   "plugins": {
@@ -44,7 +52,9 @@
       "secrets": [
         "IRONCLAW_BASE_URL",
         "IRONCLAW_API_TOKEN"
-      ]
+      ],
+      "production": "https://elliot-braem-4902-every-plugin-ironclaw-ironclaw--1c471ae5a-ze.zephyrcloud.app",
+      "integrity": "sha384-bca0lGIe5bz8+f8Ou5KLEqoKpbtplzEAkuPthwo9vo9C1iUEitJR9wzrLRMNylet"
     }
   }
 }

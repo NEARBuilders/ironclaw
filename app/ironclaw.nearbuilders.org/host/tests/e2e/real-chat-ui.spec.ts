@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { startRealStack, type RealStackHandle } from "../helpers/real-stack";
+import { type RealStackHandle, startRealStack } from "../helpers/real-stack";
 
 test.describe("Real chat UI", () => {
   test.describe.configure({ mode: "serial" });
@@ -25,7 +25,9 @@ test.describe("Real chat UI", () => {
     await stack?.stop();
   });
 
-  test("full chat: login, save settings, create thread, send message, see reply", async ({ page }) => {
+  test("full chat: login, save settings, create thread, send message, see reply", async ({
+    page,
+  }) => {
     test.setTimeout(240000);
     test.slow();
 
@@ -38,30 +40,60 @@ test.describe("Real chat UI", () => {
       try {
         const reqUrl = route.request().url();
         let body: any = {};
-        try { body = route.request().postDataJSON() ?? {}; } catch {}
+        try {
+          body = route.request().postDataJSON() ?? {};
+        } catch {}
         const match = reqUrl.match(/\/api\/rpc\/ironclaw\/(.+)/);
         const p = (match ? match[1] : (body?.procedure ?? "")).replace(/\//g, ".");
 
         if (p.includes("settings.get")) {
-          if (!savedSettings.tunnelUrl) { await route.fulfill({ status: 404, body: JSON.stringify({ error: "NOT_FOUND" }) }); return; }
-          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(savedSettings) }); return;
+          if (!savedSettings.tunnelUrl) {
+            await route.fulfill({ status: 404, body: JSON.stringify({ error: "NOT_FOUND" }) });
+            return;
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(savedSettings),
+          });
+          return;
         }
         if (p.includes("settings.update")) {
           savedSettings = { tunnelUrl: stack.rebornBaseUrl, apiToken: stack.rebornToken };
           connected = true;
-          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true }) }); return;
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ success: true }),
+          });
+          return;
         }
         if (p.includes("ping") || p.includes("session")) {
-          if (!connected) { await route.fulfill({ status: 412, body: JSON.stringify({ error: "PRECONDITION_FAILED" }) }); return; }
-          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-            status: "ok", timestamp: new Date().toISOString(),
-            tenant_id: "test", user_id: "test",
-            capabilities: { operatorWebuiConfig: true },
-          }) }); return;
+          if (!connected) {
+            await route.fulfill({
+              status: 412,
+              body: JSON.stringify({ error: "PRECONDITION_FAILED" }),
+            });
+            return;
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              status: "ok",
+              timestamp: new Date().toISOString(),
+              tenant_id: "test",
+              user_id: "test",
+              capabilities: { operatorWebuiConfig: true },
+            }),
+          });
+          return;
         }
 
         await route.continue();
-      } catch { await route.continue(); }
+      } catch {
+        await route.continue();
+      }
     });
 
     // 1. Real anonymous login
@@ -108,7 +140,9 @@ test.describe("Real chat UI", () => {
 
     // 10. Running state appears
     const runningState = page.getByText(/Message received, waiting|Thinking/i);
-    await expect(runningState.or(page.getByText(/Here is my final answer|How can I help|Hello! I'm/))).toBeVisible({ timeout: 30000 });
+    await expect(
+      runningState.or(page.getByText(/Here is my final answer|How can I help|Hello! I'm/)),
+    ).toBeVisible({ timeout: 30000 });
 
     // 11. Final reply appears
     const finalReply = page.getByText(/How can I help|Hello! I'm|Here is my final|answer/i);

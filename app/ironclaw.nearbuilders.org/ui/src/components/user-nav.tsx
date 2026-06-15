@@ -115,13 +115,17 @@ export function UserNav() {
             </DropdownMenuItem>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuLabel className="text-xs text-muted-foreground">connection</DropdownMenuLabel>
+          <DropdownMenuLabel className="text-xs text-muted-foreground">
+            connection
+          </DropdownMenuLabel>
           <DropdownMenuItem
             onClick={() => switchMode("hosted")}
             className="gap-2 text-xs cursor-pointer"
           >
             <div className="flex h-4 w-4 items-center justify-center">
-              {connectionMode === "hosted" && <Check size={12} className="text-[color:var(--near-green)]" />}
+              {connectionMode === "hosted" && (
+                <Check size={12} className="text-[color:var(--near-green)]" />
+              )}
             </div>
             <Cloud size={12} className="shrink-0" />
             Using hosted agent
@@ -131,7 +135,9 @@ export function UserNav() {
             className="gap-2 text-xs cursor-pointer"
           >
             <div className="flex h-4 w-4 items-center justify-center">
-              {connectionMode === "local" && <Check size={12} className="text-[color:var(--near-green)]" />}
+              {connectionMode === "local" && (
+                <Check size={12} className="text-[color:var(--near-green)]" />
+              )}
             </div>
             <Terminal size={12} className="shrink-0" />
             Using my own binary

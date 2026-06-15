@@ -52,13 +52,23 @@ function Layout() {
   const { status: connectionStatus } = useIronclawStatus();
 
   const ironclawSidebarItems: SidebarItem[] = [
-    ...(connectionStatus === "connected" ? [] : [{ icon: Wrench, label: "setup", to: "/setup" as const, roleRequired: "member" as const }]),
+    ...(connectionStatus === "connected"
+      ? []
+      : [{ icon: Wrench, label: "setup", to: "/setup" as const, roleRequired: "member" as const }]),
     { icon: MessageSquare, label: "chat", to: "/" as const, roleRequired: "anon" as const },
     { icon: Bot, label: "automations", to: "/automations" as const, roleRequired: "anon" as const },
-    { icon: Puzzle, label: "extensions", to: "/extensions" as const, roleRequired: "anon" as const },
+    {
+      icon: Puzzle,
+      label: "extensions",
+      to: "/extensions" as const,
+      roleRequired: "anon" as const,
+    },
     { icon: BookOpen, label: "skills", to: "/skills" as const, roleRequired: "anon" as const },
   ];
-  const visibleItems = filterSidebarByRole([...pluginSidebarItems, ...ironclawSidebarItems], userRole);
+  const visibleItems = filterSidebarByRole(
+    [...pluginSidebarItems, ...ironclawSidebarItems],
+    userRole,
+  );
   const gatewayId = runtime?.gatewayId;
 
   const isActive = (item: SidebarItem) => {
@@ -94,7 +104,7 @@ function Layout() {
               {visibleItems.map((item) => {
                 const Icon = item.icon;
                 const active = isActive(item);
-                  const isIronclaw = item.to === "/setup";
+                const isIronclaw = item.to === "/setup";
                 const className = `relative flex items-center justify-center w-10 h-10 border-2 border-outset border-border-strong shadow-sm transition-all duration-200 ease-out hover:shadow-md ${active ? "bg-foreground text-background" : "bg-card text-foreground hover:bg-muted"}`;
 
                 const statusDotColor =
@@ -243,7 +253,7 @@ function Layout() {
                 {visibleItems.map((item) => {
                   const Icon = item.icon;
                   const active = isActive(item);
-                const isIronclaw = item.to === "/setup";
+                  const isIronclaw = item.to === "/setup";
                   const className = `flex flex-col items-center justify-center gap-0.5 p-1.5 transition-colors duration-200 ${active ? "text-foreground" : "text-muted-foreground"}`;
 
                   const statusDotColor =

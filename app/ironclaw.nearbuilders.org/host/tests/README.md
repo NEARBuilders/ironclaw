@@ -111,11 +111,11 @@ await loginAnonymously(page);
 
 ```bash
 # E2E (Playwright)
-bun run --cwd app/ironclaw.nearbuilders.org/host test:e2e
+bun run --cwd app/ironclaw.everything.dev/host test:e2e
 
 # Integration (Vitest)
-bun run --cwd app/ironclaw.nearbuilders.org/host test
+bun run --cwd app/ironclaw.everything.dev/host test
 
 # Tagged integration tests
-bun run --cwd app/ironclaw.nearbuilders.org/host test -- --run
+bun run --cwd app/ironclaw.everything.dev/host test -- --run
 ```

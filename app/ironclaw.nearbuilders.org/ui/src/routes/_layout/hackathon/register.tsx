@@ -56,7 +56,7 @@ function RegisterPage() {
           </div>
           <h2 className="text-lg font-semibold">Registered!</h2>
           <p className="text-sm text-muted-foreground whitespace-pre-wrap">{result.message}</p>
-          <Button onClick={() => window.location.href = "/hackathon"} variant="outline">
+          <Button onClick={() => (window.location.href = "/hackathon")} variant="outline">
             Back to guide
           </Button>
         </Card>
@@ -69,9 +69,7 @@ function RegisterPage() {
       <Card className="space-y-6 p-8">
         <div className="space-y-1">
           <h1 className="text-lg font-semibold">Register for the Hackathon</h1>
-          <p className="text-sm text-muted-foreground">
-            Record your intent to compete.
-          </p>
+          <p className="text-sm text-muted-foreground">Record your intent to compete.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

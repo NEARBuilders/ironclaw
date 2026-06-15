@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { startRealStack, type RealStackHandle } from "../helpers/real-stack";
+import { type RealStackHandle, startRealStack } from "../helpers/real-stack";
 
 test.describe("Real stack chat smoke", () => {
   test.describe.configure({ mode: "serial" });
@@ -32,29 +32,59 @@ test.describe("Real stack chat smoke", () => {
       try {
         const reqUrl = route.request().url();
         let body: any = {};
-        try { body = route.request().postDataJSON() ?? {}; } catch {}
+        try {
+          body = route.request().postDataJSON() ?? {};
+        } catch {}
         const match = reqUrl.match(/\/api\/rpc\/ironclaw\/(.+)/);
         const p = (match ? match[1] : (body?.procedure ?? "")).replace(/\//g, ".");
 
         if (p.includes("settings.get")) {
-          if (!savedSettings.tunnelUrl) { await route.fulfill({ status: 404, body: JSON.stringify({ error: "NOT_FOUND" }) }); return; }
-          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(savedSettings) }); return;
+          if (!savedSettings.tunnelUrl) {
+            await route.fulfill({ status: 404, body: JSON.stringify({ error: "NOT_FOUND" }) });
+            return;
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(savedSettings),
+          });
+          return;
         }
         if (p.includes("settings.update")) {
           savedSettings = { tunnelUrl: stack.rebornBaseUrl, apiToken: stack.rebornToken };
           connected = true;
-          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true }) }); return;
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ success: true }),
+          });
+          return;
         }
         if (p.includes("ping") || p.includes("session")) {
-          if (!connected) { await route.fulfill({ status: 412, body: JSON.stringify({ error: "PRECONDITION_FAILED" }) }); return; }
-          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-            status: "ok", timestamp: new Date().toISOString(),
-            tenant_id: "test", user_id: "test",
-            capabilities: { operatorWebuiConfig: true },
-          }) }); return;
+          if (!connected) {
+            await route.fulfill({
+              status: 412,
+              body: JSON.stringify({ error: "PRECONDITION_FAILED" }),
+            });
+            return;
+          }
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              status: "ok",
+              timestamp: new Date().toISOString(),
+              tenant_id: "test",
+              user_id: "test",
+              capabilities: { operatorWebuiConfig: true },
+            }),
+          });
+          return;
         }
         await route.continue();
-      } catch (e) { await route.continue(); }
+      } catch (e) {
+        await route.continue();
+      }
     });
 
     // 1. Login
@@ -70,7 +100,9 @@ test.describe("Real stack chat smoke", () => {
     await page.getByLabel("Tunnel URL").fill(stack.rebornBaseUrl);
     await page.getByLabel("API Token").fill(stack.rebornToken);
     await page.getByRole("button", { name: /save settings/i }).click();
-    await expect(page.getByText("IronClaw settings saved").or(page.getByText("Failed to save settings"))).toBeVisible({ timeout: 30000 });
+    await expect(
+      page.getByText("IronClaw settings saved").or(page.getByText("Failed to save settings")),
+    ).toBeVisible({ timeout: 30000 });
 
     // 3. Verify Reborn connection via direct API call
     await page.goto(`${stack.appBaseUrl}/home`, { waitUntil: "domcontentloaded" });
@@ -95,20 +127,29 @@ test.describe("Real stack chat smoke", () => {
     expect(threadId).toBeDefined();
 
     // 6. Send message via Reborn API
-    const sendRes = await fetch(`${stack.rebornBaseUrl}/api/webchat/v2/threads/${threadId}/messages`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${stack.rebornToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ content: "hello", client_action_id: `act-${crypto.randomUUID()}` }),
-    });
+    const sendRes = await fetch(
+      `${stack.rebornBaseUrl}/api/webchat/v2/threads/${threadId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${stack.rebornToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content: "hello", client_action_id: `act-${crypto.randomUUID()}` }),
+      },
+    );
     expect(sendRes.status).toBe(200);
     const sendBody = await sendRes.json();
     expect(sendBody.outcome).toBe("submitted");
 
     // 7. Verify timeline has the message
     await new Promise((r) => setTimeout(r, 2000));
-    const timelineRes = await fetch(`${stack.rebornBaseUrl}/api/webchat/v2/threads/${threadId}/timeline`, {
-      headers: { Authorization: `Bearer ${stack.rebornToken}` },
-    });
+    const timelineRes = await fetch(
+      `${stack.rebornBaseUrl}/api/webchat/v2/threads/${threadId}/timeline`,
+      {
+        headers: { Authorization: `Bearer ${stack.rebornToken}` },
+      },
+    );
     expect(timelineRes.status).toBe(200);
     const timelineBody = await timelineRes.json();
     expect(timelineBody.messages.length).toBeGreaterThan(0);

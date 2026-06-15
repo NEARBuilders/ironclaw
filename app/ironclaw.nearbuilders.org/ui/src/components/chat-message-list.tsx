@@ -1,7 +1,7 @@
-import { useRef, useEffect, useState, useCallback, type ReactNode } from "react";
+import { ArrowDown, MessageSquare } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageSquare, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ChatMessageListProps {
@@ -98,13 +98,8 @@ export function ChatMessageList({
       <div className="flex-1 p-4">
         <div className="mx-auto max-w-4xl space-y-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
-              className={`flex ${i % 2 === 0 ? "justify-end" : "justify-start"}`}
-            >
-              <div
-                className={`space-y-2 ${i % 2 === 0 ? "max-w-[60%]" : "max-w-[75%]"}`}
-              >
+            <div key={i} className={`flex ${i % 2 === 0 ? "justify-end" : "justify-start"}`}>
+              <div className={`space-y-2 ${i % 2 === 0 ? "max-w-[60%]" : "max-w-[75%]"}`}>
                 <Skeleton className="h-4 w-32" />
                 <Skeleton className="h-16 w-full rounded-xl" />
               </div>
@@ -139,7 +134,9 @@ export function ChatMessageList({
         onClick={() => scrollToBottom("smooth")}
         className={cn(
           "absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-md transition-all duration-200 hover:bg-muted hover:text-foreground",
-          showScrollButton ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 translate-y-2 pointer-events-none",
+          showScrollButton
+            ? "opacity-100 translate-y-0 pointer-events-auto"
+            : "opacity-0 translate-y-2 pointer-events-none",
         )}
       >
         <ArrowDown size={12} />

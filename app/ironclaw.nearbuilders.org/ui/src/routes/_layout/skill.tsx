@@ -33,7 +33,8 @@ export const Route = createFileRoute("/_layout/skill")({
       { title: "Setup Skill | NEAR Builders" },
       {
         name: "description",
-        content: "Agent-oriented instructions for setting up the IronClaw reborn binary and connecting to NEAR Builders.",
+        content:
+          "Agent-oriented instructions for setting up the IronClaw reborn binary and connecting to NEAR Builders.",
       },
     ],
   }),
@@ -105,8 +106,7 @@ function SkillPage() {
             </div>
 
             <div className="rounded-[8px] border border-border bg-muted px-3.5 py-3 text-sm text-muted-foreground">
-              Best entry points: `/skill.md`, the `/setup` guide, and the chat dashboard at
-              `/`.
+              Best entry points: `/skill.md`, the `/setup` guide, and the chat dashboard at `/`.
             </div>
           </div>
 

@@ -162,7 +162,9 @@ export default createPlugin({
           .use(requireAuth)
           .handler(
             ri((svc, input) =>
-              Effect.runPromise(svc.sendMessage(input.id, input.content, input.clientActionId)),
+              Effect.runPromise(
+                svc.sendMessage(input.id, input.content, input.clientActionId, input.attachments),
+              ),
             ),
           ),
 

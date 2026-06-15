@@ -78,25 +78,33 @@ describe("reborn-mock contract: settings lifecycle", () => {
   it("healthy-chat scenario returns threads, automations, skills, extensions", async () => {
     mock = await startRebornMock({ scenario: "healthy-chat" });
 
-    const threads = await (await fetch(`${mock.baseUrl}/api/webchat/v2/threads`, {
-      headers: { Authorization: `Bearer ${mock.token}` },
-    })).json();
+    const threads = await (
+      await fetch(`${mock.baseUrl}/api/webchat/v2/threads`, {
+        headers: { Authorization: `Bearer ${mock.token}` },
+      })
+    ).json();
     expect(threads.threads).toHaveLength(1);
     expect(threads.threads[0].thread_id).toBe("thread-001");
 
-    const auto = await (await fetch(`${mock.baseUrl}/api/webchat/v2/automations`, {
-      headers: { Authorization: `Bearer ${mock.token}` },
-    })).json();
+    const auto = await (
+      await fetch(`${mock.baseUrl}/api/webchat/v2/automations`, {
+        headers: { Authorization: `Bearer ${mock.token}` },
+      })
+    ).json();
     expect(auto.automations).toHaveLength(1);
 
-    const skills = await (await fetch(`${mock.baseUrl}/api/webchat/v2/skills`, {
-      headers: { Authorization: `Bearer ${mock.token}` },
-    })).json();
+    const skills = await (
+      await fetch(`${mock.baseUrl}/api/webchat/v2/skills`, {
+        headers: { Authorization: `Bearer ${mock.token}` },
+      })
+    ).json();
     expect(skills.skills).toHaveLength(1);
 
-    const ext = await (await fetch(`${mock.baseUrl}/api/webchat/v2/extensions`, {
-      headers: { Authorization: `Bearer ${mock.token}` },
-    })).json();
+    const ext = await (
+      await fetch(`${mock.baseUrl}/api/webchat/v2/extensions`, {
+        headers: { Authorization: `Bearer ${mock.token}` },
+      })
+    ).json();
     expect(ext.extensions).toHaveLength(1);
 
     await mock.stop();
@@ -105,16 +113,20 @@ describe("reborn-mock contract: settings lifecycle", () => {
   it("reset restores initial state", async () => {
     mock = await startRebornMock({ scenario: "healthy-chat" });
 
-    let body = await (await fetch(`${mock.baseUrl}/api/webchat/v2/threads`, {
-      headers: { Authorization: `Bearer ${mock.token}` },
-    })).json();
+    let body = await (
+      await fetch(`${mock.baseUrl}/api/webchat/v2/threads`, {
+        headers: { Authorization: `Bearer ${mock.token}` },
+      })
+    ).json();
     expect(body.threads).toHaveLength(1);
 
     mock.reset();
 
-    body = await (await fetch(`${mock.baseUrl}/api/webchat/v2/threads`, {
-      headers: { Authorization: `Bearer ${mock.token}` },
-    })).json();
+    body = await (
+      await fetch(`${mock.baseUrl}/api/webchat/v2/threads`, {
+        headers: { Authorization: `Bearer ${mock.token}` },
+      })
+    ).json();
     expect(body.threads).toHaveLength(1);
 
     await mock.stop();
@@ -123,16 +135,20 @@ describe("reborn-mock contract: settings lifecycle", () => {
   it("setScenario switches state", async () => {
     mock = await startRebornMock({ scenario: "healthy-empty" });
 
-    let body = await (await fetch(`${mock.baseUrl}/api/webchat/v2/threads`, {
-      headers: { Authorization: `Bearer ${mock.token}` },
-    })).json();
+    let body = await (
+      await fetch(`${mock.baseUrl}/api/webchat/v2/threads`, {
+        headers: { Authorization: `Bearer ${mock.token}` },
+      })
+    ).json();
     expect(body.threads).toHaveLength(0);
 
     mock.setScenario("healthy-chat");
 
-    body = await (await fetch(`${mock.baseUrl}/api/webchat/v2/threads`, {
-      headers: { Authorization: `Bearer ${mock.token}` },
-    })).json();
+    body = await (
+      await fetch(`${mock.baseUrl}/api/webchat/v2/threads`, {
+        headers: { Authorization: `Bearer ${mock.token}` },
+      })
+    ).json();
     expect(body.threads).toHaveLength(1);
 
     await mock.stop();

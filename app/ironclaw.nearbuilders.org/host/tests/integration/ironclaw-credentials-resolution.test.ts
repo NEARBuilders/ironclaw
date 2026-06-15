@@ -98,7 +98,9 @@ describe("reborn-mock contract: auth and credential resolution", () => {
 
   it("SSE ?token= query parameter is accepted for auth", async () => {
     mock = await startRebornMock({ scenario: "healthy-chat" });
-    const res = await fetch(`${mock.baseUrl}/api/webchat/v2/threads/thread-001/events?token=${mock.token}`);
+    const res = await fetch(
+      `${mock.baseUrl}/api/webchat/v2/threads/thread-001/events?token=${mock.token}`,
+    );
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/event-stream");
     await mock.stop();
@@ -106,7 +108,9 @@ describe("reborn-mock contract: auth and credential resolution", () => {
 
   it("SSE rejects invalid ?token=", async () => {
     mock = await startRebornMock({ scenario: "healthy-chat" });
-    const res = await fetch(`${mock.baseUrl}/api/webchat/v2/threads/thread-001/events?token=wrong-token`);
+    const res = await fetch(
+      `${mock.baseUrl}/api/webchat/v2/threads/thread-001/events?token=wrong-token`,
+    );
     expect(res.status).toBe(401);
     await mock.stop();
   });

@@ -1,7 +1,17 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import type { UIMessage } from "@tanstack/ai-react";
 import type { MessagePart } from "@tanstack/ai";
-import { MessageSquare, Plus, Terminal, Trash2, Unplug, Zap } from "lucide-react";
+import type { UIMessage } from "@tanstack/ai-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+  AlertCircle,
+  MessageSquare,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+  Terminal,
+  Trash2,
+  Unplug,
+  Zap,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useApiClient } from "@/app";
@@ -12,9 +22,9 @@ import { ChatMessageList } from "@/components/chat-message-list";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
+import { type ConversationThread, useConversationThreads } from "@/hooks/use-conversation";
 import { useIronclawChat } from "@/hooks/use-ironclaw-chat";
-import { useConversationThreads, type ConversationThread } from "@/hooks/use-conversation";
+import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
 import { openIronclawEventSource } from "@/lib/ironclaw-sse";
 
 export const Route = createFileRoute("/_layout/")({
@@ -76,12 +86,14 @@ function ChatArea({
   threadMetaError,
   onOpenMobileSidebar,
   onToggleDesktopSidebar,
+  attachmentCapabilities,
 }: {
   threadId: string;
   threadMeta: ThreadMeta | null;
   threadMetaError: string | null;
   onOpenMobileSidebar?: () => void;
   onToggleDesktopSidebar?: () => void;
+  attachmentCapabilities?: any;
 }) {
   const apiClient = useApiClient();
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
@@ -174,9 +186,9 @@ function ChatArea({
   }, [chat.error, chat.isLoading, chat.setMessages, fetchThreadMessages]);
 
   const handleSend = useCallback(
-    (content: string) => {
+    (content: string, attachments?: any[]) => {
       if (!content.trim() || chat.isLoading) return;
-      chat.sendMessage(content);
+      chat.sendMessage(content, attachments);
     },
     [chat.sendMessage, chat.isLoading],
   );
@@ -188,6 +200,7 @@ function ChatArea({
   const messages = chat.messages;
   const isThinking = chat.isLoading;
   const isEmpty = messages.length === 0 && !isThinking && !loadingInitial;
+  const runState = chat.runState;
 
   return (
     <>
@@ -216,15 +229,50 @@ function ChatArea({
         activeThreadTitle={threadMeta?.title ?? `Thread ${threadId.slice(0, 8)}`}
       />
 
+      {runState.phase === "awaiting_approval" ? (
+        <div className="mx-auto flex w-full max-w-4xl items-center gap-2 border-b border-amber-500/20 bg-amber-500/5 px-4 py-2 text-xs text-amber-600">
+          <ShieldCheck size={12} className="shrink-0" />
+          <span className="flex-1">{runState.gateHeadline ?? "Approval required"}</span>
+        </div>
+      ) : runState.phase === "auth_required" ? (
+        <div className="mx-auto flex w-full max-w-4xl items-center gap-2 border-b border-blue-500/20 bg-blue-500/5 px-4 py-2 text-xs text-blue-600">
+          <ShieldCheck size={12} className="shrink-0" />
+          <span className="flex-1">{runState.authHeadline ?? "Authentication required"}</span>
+          {runState.authUrl ? (
+            <a
+              href={runState.authUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 font-medium hover:bg-blue-500/20 transition-colors"
+            >
+              Authorize
+            </a>
+          ) : null}
+        </div>
+      ) : runState.phase === "failed" ? (
+        <div className="mx-auto flex w-full max-w-4xl items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-xs text-destructive">
+          <AlertCircle size={12} className="shrink-0" />
+          <span className="flex-1 truncate">{runState.message ?? "Run failed"}</span>
+        </div>
+      ) : runState.phase === "cancelled" ? (
+        <div className="mx-auto flex w-full max-w-4xl items-center gap-2 border-b border-border bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+          <span>Run was cancelled</span>
+        </div>
+      ) : null}
+
       <ChatMessageList
         loading={loadingInitial}
         streamLoading={isThinking}
         empty={isEmpty}
-        emptyMessage={threadMetaError ? "Failed to load thread" : "No messages yet. Send a message to start."}
+        emptyMessage={
+          threadMetaError ? "Failed to load thread" : "No messages yet. Send a message to start."
+        }
       >
-        {messages.filter((m) => m.parts.length > 0).map((message) => (
-          <ChatMessage key={message.id} message={message} onApproveTool={chat.resolveGate} />
-        ))}
+        {messages
+          .filter((m) => m.parts.length > 0)
+          .map((message) => (
+            <ChatMessage key={message.id} message={message} onApproveTool={chat.resolveGate} />
+          ))}
         {isThinking ? (
           <div className="flex items-start gap-3">
             <div className="rounded-2xl rounded-bl-sm bg-muted px-4 py-2.5">
@@ -243,6 +291,7 @@ function ChatArea({
         onStop={chat.stop}
         placeholder="Type a message..."
         isSending={isThinking}
+        attachmentCapabilities={attachmentCapabilities}
       />
     </>
   );
@@ -250,7 +299,11 @@ function ChatArea({
 
 function ChatPage() {
   const apiClient = useApiClient();
-  const { status: connectionStatus } = useIronclawStatus();
+  const {
+    status: connectionStatus,
+    refetch: refetchStatus,
+    attachmentCapabilities,
+  } = useIronclawStatus();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -276,7 +329,11 @@ function ChatPage() {
     return {
       threadId: found.threadId,
       title: found.title,
-      scope: { tenantId: found.tenantId, agentId: found.agentId, projectId: found.projectId ?? undefined },
+      scope: {
+        tenantId: found.tenantId,
+        agentId: found.agentId,
+        projectId: found.projectId ?? undefined,
+      },
       createdByActorId: found.createdByActorId,
     } satisfies ThreadMeta;
   }, [activeThreadId, threads]);
@@ -447,6 +504,7 @@ function ChatPage() {
             threadMetaError={null}
             onOpenMobileSidebar={() => setSheetOpen(true)}
             onToggleDesktopSidebar={() => setSidebarOpen(!sidebarOpen)}
+            attachmentCapabilities={attachmentCapabilities}
           />
         ) : isDisconnected ? (
           <div className="flex h-full items-center justify-center">
@@ -466,13 +524,47 @@ function ChatPage() {
                     : "The IronClaw binary stopped responding. Check that it's still running."}
                 </p>
               </div>
-              <Link
-                to="/setup"
+              <div className="flex flex-col items-center gap-2">
+                {connectionStatus === "disconnected" && (
+                  <button
+                    type="button"
+                    onClick={() => refetchStatus()}
+                    className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/5 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+                  >
+                    <RefreshCw size={14} />
+                    Reconnect
+                  </button>
+                )}
+                <Link
+                  to="/setup"
+                  className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-border-strong transition-colors"
+                >
+                  <Zap size={14} />
+                  Setup guide
+                </Link>
+              </div>
+            </div>
+          </div>
+        ) : threads.length === 0 && threadsQuery.isSuccess ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="text-center space-y-4 max-w-xs px-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border bg-muted mx-auto">
+                <MessageSquare className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <div className="space-y-1.5">
+                <p className="text-sm font-semibold text-foreground">Start a conversation</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Create a new thread to begin.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={createThread}
                 className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/5 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
               >
-                <Zap size={14} />
-                {connectionStatus === "never-connected" ? "Set up IronClaw" : "Setup guide"}
-              </Link>
+                <Plus size={14} />
+                New thread
+              </button>
             </div>
           </div>
         ) : (

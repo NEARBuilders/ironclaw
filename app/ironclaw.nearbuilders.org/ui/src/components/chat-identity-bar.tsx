@@ -32,20 +32,28 @@ export function ChatIdentityBar({
     <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between gap-2 border-b border-border bg-card/95 px-2 sm:px-3 py-2 backdrop-blur-sm">
       <div className="flex items-center gap-2 min-w-0">
         {onOpenMobileSidebar && (
-          <Button variant="ghost" size="icon" className="h-7 w-7 lg:hidden" onClick={onOpenMobileSidebar}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 lg:hidden"
+            onClick={onOpenMobileSidebar}
+          >
             <PanelLeft size={14} />
           </Button>
         )}
         {onToggleDesktopSidebar && (
-          <Button variant="ghost" size="icon" className="h-7 w-7 hidden lg:flex" onClick={onToggleDesktopSidebar}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 hidden lg:flex"
+            onClick={onToggleDesktopSidebar}
+          >
             <PanelLeft size={14} />
           </Button>
         )}
         <span
           className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-            isConnected
-              ? "bg-[color:var(--near-green)]"
-              : "bg-destructive"
+            isConnected ? "bg-[color:var(--near-green)]" : "bg-destructive"
           }`}
         />
         {activeThreadTitle && (

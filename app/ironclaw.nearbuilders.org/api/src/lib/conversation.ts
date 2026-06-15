@@ -7,6 +7,14 @@ export interface ConversationThread {
   createdByActorId: string;
 }
 
+export interface ConversationAttachmentRef {
+  id: string;
+  kind: "audio" | "image" | "document";
+  mimeType: string;
+  filename?: string;
+  sizeBytes?: number;
+}
+
 export interface ConversationMessage {
   id: string;
   threadId: string;
@@ -16,6 +24,7 @@ export interface ConversationMessage {
   status: "submitted" | "finalized" | "failed";
   sequence: number;
   runId: string | null;
+  attachments?: ConversationAttachmentRef[];
 }
 
 export interface ConversationMessagePage {
@@ -41,7 +50,17 @@ export type ConversationEventType =
   | "run_pending"
   | "run_finished"
   | "error"
-  | "keep_alive";
+  | "keep_alive"
+  | "accepted"
+  | "running"
+  | "gate"
+  | "auth_required"
+  | "failed"
+  | "cancelled"
+  | "final_reply"
+  | "capability_progress"
+  | "capability_activity"
+  | "capability_display_preview";
 
 export interface ConversationEvent {
   type: ConversationEventType;
@@ -75,10 +94,7 @@ function statusFromString(s: string | undefined): "submitted" | "finalized" | "f
   return "submitted";
 }
 
-export function normalizeTimelineEntry(
-  raw: any,
-  threadId: string,
-): ConversationMessage {
+export function normalizeTimelineEntry(raw: any, threadId: string): ConversationMessage {
   return {
     id: raw.messageId ?? raw.message_id ?? raw.id ?? "",
     threadId,
@@ -88,13 +104,17 @@ export function normalizeTimelineEntry(
     status: statusFromString(raw.status),
     sequence: raw.sequence ?? 0,
     runId: raw.turnRunId ?? raw.turn_run_id ?? null,
+    attachments: (raw.attachments ?? []).map((att: any) => ({
+      id: att.id ?? att.attachment_id ?? "",
+      kind: att.kind ?? "document",
+      mimeType: att.mime_type ?? "application/octet-stream",
+      filename: att.filename ?? undefined,
+      sizeBytes: att.size_bytes ?? undefined,
+    })),
   };
 }
 
-export function normalizeTimelinePage(
-  raw: any,
-  threadId: string,
-): ConversationMessagePage {
+export function normalizeTimelinePage(raw: any, threadId: string): ConversationMessagePage {
   const data: any[] = raw.data ?? [];
   const meta = raw.meta ?? {};
   return {
@@ -106,7 +126,7 @@ export function normalizeTimelinePage(
 }
 
 export function diffMessageSets(
-  prev: Map<string, ConversationMessage>,
+  prev: Set<string>,
   next: ConversationMessage[],
 ): ConversationMessage[] {
   const added: ConversationMessage[] = [];
