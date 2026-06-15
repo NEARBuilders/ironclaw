@@ -661,7 +661,7 @@ function IronclawPage() {
   const { connectionMode } = useConnectionMode();
   const { status: connectionStatus, refetch: refetchStatus } = useIronclawStatus();
   const [completedSteps, setCompletedSteps] = useState<Set<StepId>>(new Set());
-  const [activeStep, setActiveStep] = useState<StepId | null>(null);
+  const [activeStep, setActiveStep] = useState<StepId | null>("api-key");
   const [copied, setCopied] = useState(false);
   const stepsRef = useRef<HTMLDivElement>(null);
 
@@ -738,19 +738,6 @@ function IronclawPage() {
             <p className="text-xs text-muted-foreground mt-0.5">{step.subtitle}</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {!isCompleted && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  markCompleteAndAdvance(step.id);
-                }}
-                className="hidden sm:flex items-center gap-1 rounded-md border border-[color:var(--near-green)]/40 bg-[color:var(--near-green)]/5 px-2 py-0.5 text-[10px] font-medium text-[color:var(--near-green)] hover:bg-[color:var(--near-green)]/10 transition-colors"
-              >
-                <Check size={9} />
-                Done
-              </button>
-            )}
             <ChevronDown
               size={16}
               className={`text-muted-foreground transition-transform duration-200 ${
@@ -790,7 +777,7 @@ function IronclawPage() {
   return (
     <div className="flex min-h-[calc(100dvh-4rem)] flex-col overflow-auto">
       <div className="flex-1">
-        <div className="mx-auto w-full max-w-4xl space-y-4 px-4 py-6 sm:px-6 sm:py-10">
+        <div className="mx-auto w-full max-w-4xl space-y-4 px-4 py-6 sm:px-6 sm:py-10 pb-20 sm:pb-12">
           <div className="rounded-xl border border-border bg-card p-6">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
@@ -837,36 +824,25 @@ function IronclawPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <button
-              type="button"
-              onClick={() => (window.location.href = "/settings/ironclaw")}
-              className="rounded-xl border-2 border-primary/20 bg-card p-6 hover:border-primary/40 transition-colors text-left cursor-pointer"
-            >
+            <div className="rounded-xl border-2 border-border bg-card p-6 opacity-40 blur-[2px] pointer-events-none select-none">
               <div className="flex items-center gap-3 mb-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <Cloud size={18} className="text-primary" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+                  <Cloud size={18} className="text-muted-foreground" />
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold text-foreground">Hosted Agent</h3>
-                  <p className="text-xs text-muted-foreground">no binary needed</p>
+                  <h3 className="text-base font-semibold text-muted-foreground">Hosted Agent</h3>
+                  <p className="text-xs text-muted-foreground">unavailable</p>
                 </div>
               </div>
               <p className="text-sm text-muted-foreground mb-4">
                 Connect through the shared hosted agent. Generate an API key and set it in Settings.
               </p>
-              <Button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  window.location.href = "/settings/ironclaw";
-                }}
-              >
+              <Button disabled variant="outline">
                 Get started
               </Button>
-            </button>
+            </div>
 
-            <button
-              type="button"
+            <div
               onClick={scrollToLocalSetup}
               className="rounded-xl border-2 border-primary/20 bg-card p-6 hover:border-primary/40 transition-colors text-left cursor-pointer"
             >
@@ -891,7 +867,7 @@ function IronclawPage() {
               >
                 Set up locally
               </Button>
-            </button>
+            </div>
           </div>
 
           <div ref={stepsRef}>

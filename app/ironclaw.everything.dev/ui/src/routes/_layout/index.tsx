@@ -84,7 +84,7 @@ function ChatArea({
     return (page.messages ?? []).map((m: any) => ({
       id: m.id,
       role: m.role,
-      parts: restMessageToParts(m.role, m.text ?? ""),
+      parts: restMessageToParts(m.role, m.text ?? "", { toolCallIdFallback: m.id }),
       createdAt: m.createdAt ? new Date(m.createdAt) : undefined,
     })) as UIMessage[];
   }, [apiClient, threadId]);
@@ -110,7 +110,7 @@ function ChatArea({
     };
   }, [fetchThreadMessages]);
 
-  const chat = useIronclawChat(threadId, apiClient, initialMessages);
+  const chat = useIronclawChat(threadId, apiClient, initialMessages, verbose);
   const isBusy =
     chat.runState.phase === "submitted" ||
     chat.runState.phase === "running" ||
@@ -118,33 +118,69 @@ function ChatArea({
     chat.runState.phase === "awaiting_approval" ||
     chat.runState.phase === "auth_required";
   const wasBusyRef = useRef(false);
-  const syncKnownIdsRef = useRef<Set<string>>(new Set());
+  const skipNextBusySyncRef = useRef(false);
 
   const replaceMessagesWithHistory = useCallback(async () => {
     try {
       const fresh = await fetchThreadMessages();
-      const known = syncKnownIdsRef.current;
-      const hasNew = fresh.some((m) => !known.has(m.id));
-      if (hasNew) {
-        chat.setMessages(fresh);
-      }
+      chat.setMessages(fresh);
     } catch (err) {
       console.error("[ChatArea] sync failed", err);
     }
   }, [fetchThreadMessages, chat.setMessages]);
 
   useEffect(() => {
-    syncKnownIdsRef.current = new Set(chat.messages.map((m) => m.id));
-  }, [chat.messages]);
-
-  useEffect(() => {
     if (wasBusyRef.current && !isBusy) {
       wasBusyRef.current = false;
+      if (skipNextBusySyncRef.current) {
+        skipNextBusySyncRef.current = false;
+        return;
+      }
       replaceMessagesWithHistory();
       return;
     }
     wasBusyRef.current = isBusy;
   }, [isBusy, replaceMessagesWithHistory]);
+
+  useEffect(() => {
+    if (chat.runState.phase !== "finalizing") return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const hasCanonicalAssistantReply = (messages: UIMessage[]) =>
+      messages.some(
+        (m) =>
+          m.role === "assistant" &&
+          m.parts?.some((p: any) => p.type === "text" && p.content?.trim()),
+      );
+
+    const pollHistory = async () => {
+      try {
+        const fresh = await fetchThreadMessages();
+        if (cancelled) return;
+        if (hasCanonicalAssistantReply(fresh)) {
+          chat.setMessages(fresh);
+          skipNextBusySyncRef.current = true;
+          chat.completeFinalization();
+          return;
+        }
+      } catch (err) {
+        console.error("[ChatArea] finalization sync failed", err);
+      }
+
+      if (!cancelled) {
+        timer = setTimeout(pollHistory, 250);
+      }
+    };
+
+    void pollHistory();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [chat.runState.phase, fetchThreadMessages, chat.completeFinalization, chat.setMessages]);
 
   useEffect(() => {
     if (isBusy) return;
@@ -155,7 +191,7 @@ function ChatArea({
       const mapped = rawMessages.map((m) => ({
         id: m.id,
         role: m.role,
-        parts: restMessageToParts(m.role, m.text ?? ""),
+        parts: restMessageToParts(m.role, m.text ?? "", { toolCallIdFallback: m.id }),
         createdAt: m.createdAt ? new Date(m.createdAt) : undefined,
       })) as UIMessage[];
       if (mapped.length > 0) {
@@ -198,17 +234,7 @@ function ChatArea({
     ?.parts?.some((p) => p.type === "text" && p.content?.trim())
     ?? false;
 
-  const progressLabel = useMemo(() => {
-    if (runState.phase === "submitted") return "Sending\u2026";
-    if (runState.phase === "running") {
-      if (runState.activeToolName && !lastAssistantHasText) return `Using ${runState.activeToolName}\u2026`;
-      return "Thinking\u2026";
-    }
-    if (runState.phase === "finalizing") return "Thinking\u2026";
-    if (runState.phase === "awaiting_approval") return "Waiting for approval\u2026";
-    if (runState.phase === "auth_required") return "Waiting for authorization\u2026";
-    return null;
-  }, [runState.phase, runState.activeToolName, lastAssistantHasText]);
+  const showLoading = runState.phase !== "idle" && runState.phase !== "failed" && runState.phase !== "cancelled";
 
   const toolActive = runState.activeToolName && !lastAssistantHasText;
   const ProgressIcon = runState.phase === "awaiting_approval" || runState.phase === "auth_required"
@@ -293,7 +319,7 @@ function ChatArea({
               verbose={verbose}
             />
           ))}
-        {progressLabel ? (
+        {showLoading ? (
           <div className="flex items-start gap-3">
             <div className="rounded-2xl rounded-bl-sm bg-muted px-4 py-2.5">
               <div className="flex items-center gap-2">
@@ -301,7 +327,6 @@ function ChatArea({
                   <ProgressIcon size={11} className="text-muted-foreground/60 shrink-0" />
                 ) : null}
                 <div className="flex items-center gap-1">
-                  <span className="text-xs text-muted-foreground/70">{progressLabel}</span>
                   <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:0ms]" />
                   <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:150ms]" />
                   <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:300ms]" />

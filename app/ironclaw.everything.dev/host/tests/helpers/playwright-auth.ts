@@ -172,9 +172,14 @@ export function setupIronclawApiMock(page: Page, app: RebornAppHost) {
         });
       }
 
-      if (procedure.includes("threads.getTimeline")) {
+      if (procedure.includes("conversation.getMessages") || procedure.includes("threads.getTimeline")) {
         const input = body?.input ?? {};
-        const threadId = typeof input?.id === "string" ? input.id : "thread-001";
+        const threadId =
+          typeof input?.threadId === "string"
+            ? input.threadId
+            : typeof input?.id === "string"
+              ? input.id
+              : "thread-001";
         const res = await fetch(
           `${app.rebornBaseUrl}/api/webchat/v2/threads/${threadId}/timeline`,
           {
@@ -189,9 +194,14 @@ export function setupIronclawApiMock(page: Page, app: RebornAppHost) {
         });
       }
 
-      if (procedure.includes("threads.sendMessage")) {
+      if (procedure.includes("conversation.sendMessage") || procedure.includes("threads.sendMessage")) {
         const input = body?.input ?? {};
-        const threadId = typeof input?.id === "string" ? input.id : "thread-001";
+        const threadId =
+          typeof input?.threadId === "string"
+            ? input.threadId
+            : typeof input?.id === "string"
+              ? input.id
+              : "thread-001";
         const content = typeof input?.content === "string" ? input.content : "";
         const clientActionId =
           typeof input?.clientActionId === "string" ? input.clientActionId : crypto.randomUUID();
@@ -229,11 +239,20 @@ export function setupIronclawApiMock(page: Page, app: RebornAppHost) {
         });
       }
 
-      if (procedure.includes("threads.streamEvents") || procedure.includes("streamEvents")) {
+      if (procedure.includes("conversation.live") || procedure.includes("threads.streamEvents") || procedure.includes("streamEvents")) {
+        const input = body?.input ?? {};
+        const threadId =
+          typeof input?.threadId === "string"
+            ? input.threadId
+            : typeof input?.id === "string"
+              ? input.id
+              : "thread-001";
         return route.fulfill({
           status: 200,
           contentType: "text/event-stream",
-          body: "",
+          body: await (
+            await fetch(`${app.rebornBaseUrl}/api/webchat/v2/threads/${threadId}/events?token=${app.rebornToken}`)
+          ).text(),
         });
       }
 

@@ -167,15 +167,14 @@ if [ "$MODE" = "local" ]; then
   fi
 
   if [ ! -f "$EVDEV_DIR/.env" ]; then
-    echo "error: $EVDEV_DIR/.env not found." >&2
-    echo "       Run 'cp .env.example .env' in that directory and configure it." >&2
-    exit 1
+    echo "==> $EVDEV_DIR/.env not found — creating from .env.example"
+    cp "$EVDEV_DIR/.env.example" "$EVDEV_DIR/.env"
+    echo "    warning: review $EVDEV_DIR/.env and fill in required values." >&2
   fi
 
   if [ ! -f "$EVDEV_DIR/node_modules/.bin/bos" ]; then
-    echo "error: everything-dev dependencies not installed." >&2
-    echo "       Run 'bun install' in $EVDEV_DIR" >&2
-    exit 1
+    echo "==> Installing everything-dev dependencies..."
+    (cd "$EVDEV_DIR" && bun install)
   fi
 
   export IRONCLAW_BASE_URL="http://$REBORN_HOST:$REBORN_PORT"
@@ -228,9 +227,8 @@ if [ "$MODE" = "remote" ]; then
   fi
 
   if [ ! -f "$EVDEV_DIR/node_modules/.bin/bos" ]; then
-    echo "error: everything-dev dependencies not installed." >&2
-    echo "       Run 'bun install' in $EVDEV_DIR" >&2
-    exit 1
+    echo "==> Installing everything-dev dependencies..."
+    (cd "$EVDEV_DIR" && bun install)
   fi
 
   export IRONCLAW_BASE_URL="http://$REBORN_HOST:$REBORN_PORT"

@@ -3,7 +3,6 @@ import { useChat } from "@tanstack/ai-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "@/app";
 import type { StagedAttachment } from "@/lib/attachments";
-import { createIronclawChatStream } from "@/lib/ironclaw-chat-stream";
 
 interface RunState {
   phase:
@@ -42,15 +41,54 @@ export function useIronclawChat(
   threadId: string,
   apiClient: ApiClient,
   initialMessages: Array<UIMessage>,
+  debugCustomFlows = false,
 ) {
   const activeRunIdRef = useRef<string | null>(null);
   const pendingAttachmentsRef = useRef<StagedAttachment[]>([]);
   const [runState, setRunState] = useState<RunState>({ phase: "idle" });
   const onRunStateChangeRef = useRef<(update: Partial<RunState>) => void>(() => {});
+  const runStateRef = useRef<RunState>({ phase: "idle" });
+  const handledCustomEventNamesRef = useRef(
+    new Set([
+      "ironclaw.accepted",
+      "ironclaw.running",
+      "ironclaw.capability-progress",
+      "ironclaw.capability-display-preview",
+      "ironclaw.capability-activity",
+      "ironclaw.gate",
+      "ironclaw.auth-required",
+      "ironclaw.final-reply",
+      "ironclaw.failed",
+      "ironclaw.cancelled",
+    ]),
+  );
 
   onRunStateChangeRef.current = (update) => {
-    setRunState((prev) => ({ ...prev, ...update }));
+    setRunState((prev) => {
+      const next = { ...prev, ...update };
+      runStateRef.current = next;
+      return next;
+    });
   };
+
+  const logCustomFlow = useCallback(
+    (kind: "swallowed" | "unhandled", name: string, value: unknown) => {
+      if (!debugCustomFlows) return;
+      const base = {
+        threadId,
+        runId: activeRunIdRef.current,
+        phase: runStateRef.current.phase,
+        name,
+        value,
+      };
+      if (kind === "swallowed") {
+        console.debug("[chat.custom.swallowed]", base);
+      } else {
+        console.warn("[chat.custom.unhandled]", base);
+      }
+    },
+    [debugCustomFlows, threadId],
+  );
 
   const initialMessagesRef = useRef(initialMessages);
 
@@ -76,18 +114,184 @@ export function useIronclawChat(
         })),
       });
 
-      yield* createIronclawChatStream({
+      const live = await apiClient.conversation.live({
         threadId,
-        accepted,
-        apiClient,
-        signal,
-        onRunStarted: (runId) => {
-          activeRunIdRef.current = runId;
-        },
-        onRunStateChange: (update) => {
-          onRunStateChangeRef.current(update);
-        },
+        runId: accepted.runId ?? accepted.activeRunId,
+        afterCursor: accepted.eventCursor != null ? String(accepted.eventCursor) : undefined,
       });
+
+      activeRunIdRef.current = accepted.runId ?? accepted.activeRunId ?? null;
+
+      console.debug("[fetcher] live obtained", typeof live, live);
+      let chunkIndex = 0;
+      for await (const chunk of live as AsyncIterable<any>) {
+        if (signal.aborted) return;
+        console.debug("[fetcher] chunk:", chunkIndex++, chunk.type, chunk);
+        yield chunk;
+      }
+    },
+    onChunk: (chunk: any) => {
+      console.debug("[onChunk]", chunk.type, chunk);
+
+      if (chunk.type === "CUSTOM") {
+        if (chunk.name === "approval-requested") {
+          logCustomFlow("swallowed", chunk.name, chunk.value);
+        } else if (!handledCustomEventNamesRef.current.has(chunk.name)) {
+          logCustomFlow("unhandled", chunk.name, chunk.value);
+        }
+      }
+
+      if (chunk.type === "RUN_STARTED") {
+        activeRunIdRef.current = chunk.runId ?? activeRunIdRef.current;
+        setRunState((prev) => ({
+          ...prev,
+          phase: "running",
+          runId: chunk.runId ?? prev.runId,
+          message: undefined,
+          replyMessageId: undefined,
+          gateRef: undefined,
+          gateHeadline: undefined,
+          gateBody: undefined,
+          authRequestRef: undefined,
+          authHeadline: undefined,
+          authBody: undefined,
+          authUrl: undefined,
+        }));
+        return;
+      }
+
+      if (chunk.type === "RUN_ERROR") {
+        setRunState((prev) => ({
+          ...prev,
+          phase: "failed",
+          message: chunk.message ?? "Run failed",
+          activeToolName: undefined,
+        }));
+        return;
+      }
+
+      if (chunk.type === "RUN_FINISHED") {
+        setRunState((prev) => {
+          if (prev.phase === "failed" || prev.phase === "cancelled") return prev;
+          if (prev.phase === "finalizing") return prev;
+          return {
+            ...prev,
+            phase: "idle",
+            replyMessageId: undefined,
+            activeToolName: undefined,
+            gateRef: undefined,
+            gateHeadline: undefined,
+            gateBody: undefined,
+            authRequestRef: undefined,
+            authHeadline: undefined,
+            authBody: undefined,
+            authUrl: undefined,
+          };
+        });
+      }
+    },
+    onCustomEvent: (eventType, data) => {
+      console.debug("[onCustomEvent]", eventType, data);
+      const payload = data as Record<string, unknown> | undefined;
+
+      if (eventType === "approval-requested") {
+        setRunState((prev) => ({
+          ...prev,
+          phase: "awaiting_approval",
+          gateRef: typeof payload?.approval === "object" && payload?.approval !== null ? String((payload.approval as { id?: unknown }).id ?? "") : undefined,
+          gateHeadline: typeof payload?.headline === "string" ? payload.headline : prev.gateHeadline,
+          gateBody: typeof payload?.body === "string" ? payload.body : prev.gateBody,
+          activeToolName: typeof payload?.toolName === "string" ? payload.toolName : prev.activeToolName,
+        }));
+        return;
+      }
+
+      if (eventType === "ironclaw.accepted" || eventType === "ironclaw.running") {
+        setRunState((prev) => ({
+          ...prev,
+          phase: "running",
+          runId: typeof payload?.runId === "string" ? payload.runId : prev.runId,
+          activeToolName: typeof payload?.toolName === "string" ? payload.toolName : prev.activeToolName,
+          message: undefined,
+        }));
+        return;
+      }
+
+      if (eventType === "ironclaw.capability-progress") {
+        setRunState((prev) => ({
+          ...prev,
+          phase: "running",
+          activeToolName: typeof payload?.toolName === "string" ? payload.toolName : prev.activeToolName,
+        }));
+        return;
+      }
+
+      if (eventType === "ironclaw.capability-display-preview" || eventType === "ironclaw.capability-activity") {
+        setRunState((prev) => ({
+          ...prev,
+          phase: "running",
+          activeToolName:
+            typeof payload?.toolName === "string"
+              ? payload.toolName
+              : typeof payload?.title === "string"
+                ? payload.title
+                : prev.activeToolName,
+        }));
+        return;
+      }
+
+      if (eventType === "ironclaw.gate") {
+        setRunState((prev) => ({
+          ...prev,
+          phase: "awaiting_approval",
+          gateRef: typeof payload?.gateRef === "string" ? payload.gateRef : prev.gateRef,
+          gateHeadline: typeof payload?.headline === "string" ? payload.headline : prev.gateHeadline,
+          gateBody: typeof payload?.body === "string" ? payload.body : prev.gateBody,
+          activeToolName: typeof payload?.toolName === "string" ? payload.toolName : prev.activeToolName,
+        }));
+        return;
+      }
+
+      if (eventType === "ironclaw.auth-required") {
+        setRunState((prev) => ({
+          ...prev,
+          phase: "auth_required",
+          authRequestRef:
+            typeof payload?.authRequestRef === "string" ? payload.authRequestRef : prev.authRequestRef,
+          authHeadline: typeof payload?.headline === "string" ? payload.headline : prev.authHeadline,
+          authBody: typeof payload?.body === "string" ? payload.body : prev.authBody,
+          authUrl: typeof payload?.authorizationUrl === "string" ? payload.authorizationUrl : prev.authUrl,
+        }));
+        return;
+      }
+
+      if (eventType === "ironclaw.final-reply") {
+        setRunState((prev) => ({
+          ...prev,
+          phase: "finalizing",
+          activeToolName: undefined,
+        }));
+        return;
+      }
+
+      if (eventType === "ironclaw.failed") {
+        setRunState((prev) => ({
+          ...prev,
+          phase: "failed",
+          message: typeof payload?.message === "string" ? payload.message : "Run failed",
+          activeToolName: undefined,
+        }));
+        return;
+      }
+
+      if (eventType === "ironclaw.cancelled") {
+        setRunState((prev) => ({
+          ...prev,
+          phase: "cancelled",
+          message: "Run was cancelled",
+          activeToolName: undefined,
+        }));
+      }
     },
     onError: (error) => {
       console.error("[useIronclawChat]", error);
@@ -105,15 +309,6 @@ export function useIronclawChat(
       chat.setMessages(initialMessages);
     }
   }, [initialMessages, chat]);
-
-  useEffect(() => {
-    if (runState.phase !== "finalizing" || !runState.replyMessageId) return;
-
-    const hasPaintedReply = chat.messages.some((message) => message.id === runState.replyMessageId);
-    if (!hasPaintedReply) return;
-
-    setRunState({ phase: "idle", replyMessageId: undefined, activeToolName: undefined });
-  }, [chat.messages, runState.phase, runState.replyMessageId]);
 
   const sendMessageWithAttachments = useCallback(
     (content: string, attachments?: StagedAttachment[]) => {
@@ -137,6 +332,18 @@ export function useIronclawChat(
     [apiClient, threadId],
   );
 
+  const completeFinalization = useCallback(() => {
+    setRunState((prev) => {
+      if (prev.phase !== "finalizing") return prev;
+      return {
+        ...prev,
+        phase: "idle",
+        activeToolName: undefined,
+        replyMessageId: undefined,
+      };
+    });
+  }, []);
+
   return {
     messages: chat.messages,
     sendMessage: sendMessageWithAttachments,
@@ -144,6 +351,7 @@ export function useIronclawChat(
     stop: chat.stop,
     setMessages: chat.setMessages,
     resolveGate,
+    completeFinalization,
     runState,
   };
 }

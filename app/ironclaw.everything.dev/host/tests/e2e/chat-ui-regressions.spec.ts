@@ -133,8 +133,8 @@ test.describe("Chat UI regressions", () => {
           });
           return;
         }
-        if (p.includes("threads.getTimeline")) {
-          const tid = body?.input?.id ?? "test";
+        if (p.includes("conversation.getMessages") || p.includes("threads.getTimeline")) {
+          const tid = body?.input?.threadId ?? body?.input?.id ?? "test";
           const res = await fetch(`${rebornMock.baseUrl}/api/webchat/v2/threads/${tid}/timeline`, {
             headers: { Authorization: `Bearer ${rebornMock.token}` },
           });
@@ -145,8 +145,8 @@ test.describe("Chat UI regressions", () => {
           });
           return;
         }
-        if (p.includes("threads.sendMessage")) {
-          const tid = body?.input?.id ?? "test";
+        if (p.includes("conversation.sendMessage") || p.includes("threads.sendMessage")) {
+          const tid = body?.input?.threadId ?? body?.input?.id ?? "test";
           const content = body?.input?.content ?? "";
           rebornMock.setScenario("stream-final-reply");
           const res = await fetch(`${rebornMock.baseUrl}/api/webchat/v2/threads/${tid}/messages`, {
@@ -164,8 +164,8 @@ test.describe("Chat UI regressions", () => {
           });
           return;
         }
-        if (p.includes("threads.streamEvents") || p.includes("streamEvents")) {
-          const tid = body?.input?.id ?? "test";
+        if (p.includes("conversation.live") || p.includes("threads.streamEvents") || p.includes("streamEvents")) {
+          const tid = body?.input?.threadId ?? body?.input?.id ?? "test";
           const sseUrl = `${rebornMock.baseUrl}/api/webchat/v2/threads/${tid}/events?token=${rebornMock.token}`;
           const res = await fetch(sseUrl);
           await route.fulfill({

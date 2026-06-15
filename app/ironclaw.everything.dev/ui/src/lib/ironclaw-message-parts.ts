@@ -8,6 +8,10 @@ export interface IronclawToolResultEnvelope {
   truncated: boolean;
 }
 
+export interface RestMessageToPartsOptions {
+  toolCallIdFallback?: string;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -75,7 +79,11 @@ export function parseIronclawToolResultEnvelope(content: unknown): IronclawToolR
   }
 }
 
-export function restMessageToParts(role: string, text: string): MessagePart[] {
+export function restMessageToParts(
+  role: string,
+  text: string,
+  options: RestMessageToPartsOptions = {},
+): MessagePart[] {
   const trimmed = text.trim();
   if (role !== "assistant" || !trimmed) {
     return [{ type: "text" as const, content: trimmed }];
@@ -83,51 +91,73 @@ export function restMessageToParts(role: string, text: string): MessagePart[] {
 
   try {
     const parsed = JSON.parse(trimmed);
-    if (!isRecord(parsed) || parsed.version !== 1) {
+    if (!isRecord(parsed)) {
       return [{ type: "text" as const, content: trimmed }];
     }
 
-    if (typeof parsed.capability_id === "string" && typeof parsed.invocation_id === "string") {
-      const toolCallId = parsed.invocation_id as string;
-      const displayName = typeof parsed.title === "string" ? parsed.title : parsed.capability_id;
-      const outputText = asText(parsed.output_preview ?? parsed.output_summary ?? "");
-      const status = typeof parsed.status === "string" ? parsed.status : undefined;
-      const isError = status === "failed" || status === "error" || status === "killed";
-      const toolOutput = {
-        output: outputText,
-        output_kind: asOptionalText(parsed.output_kind),
-        truncated: Boolean(parsed.truncated),
-        input_summary: asOptionalText(parsed.input_summary),
-        title: displayName,
-      };
+    const isVersionedTool =
+      parsed.version === 1 &&
+      typeof parsed.capability_id === "string" &&
+      typeof parsed.invocation_id === "string";
 
-      return [
-        {
-          type: "tool-call" as const,
-          id: toolCallId,
-          name: displayName,
-          arguments: parsed.input_summary ? JSON.stringify({ input: parsed.input_summary }) : "{}",
-          output: toolOutput,
-          state: "input-complete" as const,
-        },
-        {
-          type: "tool-result" as const,
-          toolCallId,
-          content: serializeIronclawToolResultEnvelope({
-            output: outputText,
-            outputKind: asOptionalText(parsed.output_kind),
-            truncated: Boolean(parsed.truncated),
-            inputSummary: asOptionalText(parsed.input_summary),
-            title: displayName,
-          }),
-          state: isError ? ("error" as const) : ("complete" as const),
-        },
-      ];
+    const looksLikeEnvelope =
+      isVersionedTool || typeof parsed.output === "string" || typeof parsed.title === "string";
+
+    if (!looksLikeEnvelope) {
+      if (parsed.result_ref) {
+        return [];
+      }
+      return [{ type: "text" as const, content: trimmed }];
     }
 
-    if (parsed.result_ref) {
-      return [];
-    }
+    const toolCallId =
+      typeof parsed.invocation_id === "string"
+        ? parsed.invocation_id
+        : options.toolCallIdFallback ??
+          (typeof parsed.capability_id === "string"
+            ? parsed.capability_id
+            : typeof parsed.title === "string"
+              ? parsed.title
+              : "tool-call");
+    const displayName =
+      typeof parsed.title === "string"
+        ? parsed.title
+        : typeof parsed.capability_id === "string"
+          ? parsed.capability_id
+          : "unknown";
+    const outputText = asText(parsed.output_preview ?? parsed.output_summary ?? parsed.output ?? "");
+    const status = typeof parsed.status === "string" ? parsed.status : undefined;
+    const isError = status === "failed" || status === "error" || status === "killed";
+    const toolOutput = {
+      output: outputText,
+      output_kind: asOptionalText(parsed.output_kind),
+      truncated: Boolean(parsed.truncated),
+      input_summary: asOptionalText(parsed.input_summary),
+      title: displayName,
+    };
+
+    return [
+      {
+        type: "tool-call" as const,
+        id: toolCallId,
+        name: displayName,
+        arguments: parsed.input_summary ? JSON.stringify({ input: parsed.input_summary }) : "{}",
+        output: toolOutput,
+        state: "input-complete" as const,
+      },
+      {
+        type: "tool-result" as const,
+        toolCallId,
+        content: serializeIronclawToolResultEnvelope({
+          output: outputText,
+          outputKind: asOptionalText(parsed.output_kind),
+          truncated: Boolean(parsed.truncated),
+          inputSummary: asOptionalText(parsed.input_summary),
+          title: displayName,
+        }),
+        state: isError ? ("error" as const) : ("complete" as const),
+      },
+    ];
   } catch {
     return [{ type: "text" as const, content: trimmed }];
   }

@@ -17,7 +17,7 @@ import {
   Terminal,
   Wrench,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
 import { formatBytes } from "@/lib/attachments";
@@ -47,7 +47,7 @@ function toolIcon(name: string) {
   return Wrench;
 }
 
-function ToolCallCard({
+export function ToolCallCard({
   name,
   state,
   result,
@@ -65,7 +65,9 @@ function ToolCallCard({
   verbose?: boolean;
 }) {
   const isApproval = state === "approval-requested" && approval?.needsApproval;
-  const [expanded, setExpanded] = useState(isApproval);
+  const autoExpandToolsRef = useRef(new Set(["get-near-ai-key", "setup-ironclaw-reborn", "get near ai key", "setup ironclaw reborn"]));
+  const shouldAutoExpand = isApproval || autoExpandToolsRef.current.has(name.toLowerCase());
+  const [expanded, setExpanded] = useState(shouldAutoExpand);
 
   const isLoading = state === "awaiting-input" || state === "input-streaming";
   const hasFinalResult = !!result || call?.output !== undefined;

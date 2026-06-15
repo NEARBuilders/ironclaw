@@ -91,6 +91,35 @@ export const ConversationSendAckSchema = z.object({
   activeRunId: z.string().optional(),
 });
 
+export const ConversationLiveChunkSchema = z.object({
+  type: z.enum([
+    "RUN_STARTED",
+    "RUN_FINISHED",
+    "RUN_ERROR",
+    "TOOL_CALL_START",
+    "TOOL_CALL_ARGS",
+    "TOOL_CALL_END",
+    "CUSTOM",
+  ]),
+  threadId: z.string(),
+  runId: z.string().optional(),
+  messageId: z.string().optional(),
+  role: z.enum(["assistant", "tool"]).optional(),
+  toolCallId: z.string().optional(),
+  toolCallName: z.string().optional(),
+  toolName: z.string().optional(),
+  index: z.number().optional(),
+  delta: z.string().optional(),
+  args: z.string().optional(),
+  input: z.unknown().optional(),
+  result: z.string().optional(),
+  state: z.string().optional(),
+  finishReason: z.string().nullable().optional(),
+  message: z.string().optional(),
+  name: z.string().optional(),
+  value: z.unknown().optional(),
+});
+
 export const ConversationEventSchema = z.object({
   type: z.enum([
     "snapshot",
@@ -148,7 +177,7 @@ export const ConversationEventSchema = z.object({
     .optional(),
   reply: z.object({ text: z.string(), turnRunId: z.string() }).optional(),
   prompt: z
-    .object({ turnRunId: z.string(), gateRef: z.string(), headline: z.string(), body: z.string() })
+    .object({ turnRunId: z.string(), gateRef: z.string().optional(), headline: z.string(), body: z.string() })
     .optional(),
   authPrompt: z
     .object({
@@ -285,6 +314,22 @@ export const contract = oc.router({
         }),
       )
       .output(ConversationSendAckSchema)
+      .errors({ UNAUTHORIZED, NOT_FOUND }),
+
+    live: oc
+      .route({
+        method: "GET",
+        path: "/conversation/threads/{threadId}/live",
+        summary: "Stream a live conversation run",
+      })
+      .input(
+        z.object({
+          threadId: z.string(),
+          runId: z.string().optional(),
+          afterCursor: z.string().optional(),
+        }),
+      )
+      .output(eventIterator(ConversationLiveChunkSchema))
       .errors({ UNAUTHORIZED, NOT_FOUND }),
 
     stream: oc

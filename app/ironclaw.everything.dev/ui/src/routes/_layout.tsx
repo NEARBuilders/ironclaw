@@ -217,7 +217,7 @@ function Layout() {
           </main>
 
           {pathname !== "/" && (
-            <footer className="shrink-0 flex justify-center py-6 pb-20 sm:pb-6">
+            <footer className="shrink-0 flex justify-center py-6 sm:pb-6">
               <a
                 href="https://near.dev"
                 target="_blank"

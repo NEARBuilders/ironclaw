@@ -17,6 +17,7 @@ import {
 } from "./db/schema";
 import { createAuthMiddleware } from "./lib/auth";
 import { normalizeThread, normalizeTimelinePage } from "./lib/conversation";
+import { createConversationLiveHandler } from "./lib/conversation-live";
 import { createConversationStreamHandler } from "./lib/conversation-stream";
 import type { PluginsClient } from "./lib/plugins-types.gen";
 
@@ -674,6 +675,10 @@ export default createPlugin.withPlugins<PluginsClient>()({
               eventCursor: raw.eventCursor ?? undefined,
             };
           }),
+
+        live: builder.conversation.live
+          .use(requireAuth)
+          .handler(createConversationLiveHandler(s)),
 
         stream: builder.conversation.stream.use(requireAuth).handler(createConversationStreamHandler(s)),
       },

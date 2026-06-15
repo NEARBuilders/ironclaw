@@ -90,6 +90,8 @@ export function createConversationStreamHandler(services: { ironclaw: (ctx: any)
     let snapshotYielded = false;
     let runActive = false;
     let needsReconcile = false;
+    let lastIdleReconcile = 0;
+    const IDLE_RECONCILE_THROTTLE_MS = 1000;
 
     try {
       const rawStream = await ic.threads.streamEvents({
@@ -136,6 +138,11 @@ export function createConversationStreamHandler(services: { ironclaw: (ctx: any)
             needsReconcile = true;
             continue;
           }
+
+          if (Date.now() - lastIdleReconcile < IDLE_RECONCILE_THROTTLE_MS) {
+            continue;
+          }
+
           try {
             const page = await fetchTimelinePage(ic, threadId);
             const reconcileEvents = buildReconcileEvents(page, threadId, knownIds, snapshotYielded);
@@ -143,6 +150,7 @@ export function createConversationStreamHandler(services: { ironclaw: (ctx: any)
               if (event.type === "snapshot") snapshotYielded = true;
               yield event;
             }
+            lastIdleReconcile = Date.now();
             needsReconcile = false;
           } catch (e) {
             console.error("[convStream] projection sync failed:", e);
