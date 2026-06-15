@@ -186,9 +186,11 @@ function ChatAreaCore({
         ))}
         {showLoading ? (
           <div className="flex items-end gap-2">
-            <div className="shrink-0 w-6 h-6 sm:w-7 sm:h-7 rounded-full overflow-hidden border border-border bg-card flex items-center justify-center mb-0.5">
-              <img src="/logo.png" alt="IronClaw" className="w-full h-full object-contain p-0.5" />
-            </div>
+            <img
+              src="/logo.png"
+              alt="IronClaw"
+              className="shrink-0 w-6 h-6 sm:w-7 sm:h-7 mb-0.5 transition-transform duration-300 ease-out hover:scale-125 hover:-rotate-12 hover:drop-shadow-[0_0_8px_rgba(17,145,240,0.6)] cursor-pointer"
+            />
             <div className="rounded-2xl rounded-bl-sm bg-muted px-4 py-2.5">
               <div className="flex items-center gap-1">
                 <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:0ms]" />

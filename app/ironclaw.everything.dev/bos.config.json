@@ -23,15 +23,15 @@
         "ALLOW_UNTRUSTED_SSR",
         "CSP_STRICT"
       ],
-      "production": "https://elliot-braem-4939-host-ironclaw-nearbuilders-8ccf6aea7-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-4949-host-ironclaw-nearbuilders-734215595-ze.zephyrcloud.app",
       "integrity": "sha384-uzbBU2DfN9ozBwVXUPjGyv+w29xMfBYmNTYnKuQLsxvzNTufAO6PWH6QrpPa51bB"
     },
     "ui": {
       "development": "local:ui",
-      "ssr": "https://elliot-braem-4936-ui-ironclaw-nearbuilders-927853c84-ze.zephyrcloud.app",
-      "ssrIntegrity": "sha384-VE+zFf3RNb/k7cmvLsx7jv5fbzXFkoH0E6qRAm6Pa+i1tyukzR3C0OwaKBwrWj8C",
-      "production": "https://elliot-braem-4935-ui-ironclaw-nearbuilders-7f3b1b0f1-ze.zephyrcloud.app",
-      "integrity": "sha384-Xl/sdCzLNNsj/5UnahfCzLOOr4tYHJxtpQcdelbN0DhYlexJkubQG9Bi25/FnVrD"
+      "ssr": "https://elliot-braem-4946-ui-ironclaw-nearbuilders-c6580b165-ze.zephyrcloud.app",
+      "ssrIntegrity": "sha384-nfWp+CPT/9LqiQMZ+ICblnKhgzrv60sX7PhevY2AkbdlYxGM64EH7RkSX0pNIFr5",
+      "production": "https://elliot-braem-4945-ui-ironclaw-nearbuilders-6408f278b-ze.zephyrcloud.app",
+      "integrity": "sha384-yBH4ItHGeOYbYXvhhICW/WP7p/RNxI0pC/DdqG1id2wnHKvc6VouNqOtvpLtB1vG"
     },
     "api": {
       "development": "local:api",
@@ -39,7 +39,7 @@
         "API_DATABASE_URL",
         "IRONCLAW_BASE_URL"
       ],
-      "production": "https://elliot-braem-4937-api-ironclaw-nearbuilders-b0e39a027-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-4947-api-ironclaw-nearbuilders-02572bae9-ze.zephyrcloud.app",
       "integrity": "sha384-8NGal8rGSGjBPYAPSSIXHNYStx9dnbWXZO2DgLJJ9GTx+8M9uHgPeS2+GWO96oDU"
     }
   },
@@ -53,7 +53,7 @@
         "IRONCLAW_BASE_URL",
         "IRONCLAW_API_TOKEN"
       ],
-      "production": "https://elliot-braem-4938-every-plugin-ironclaw-ironclaw--770c82e6d-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-4948-every-plugin-ironclaw-ironclaw--f398811c4-ze.zephyrcloud.app",
       "integrity": "sha384-Qa3PzOv3QpwTcmsPeaaIg8fCHwDRK5c9AWFognsEUS49YnDHT7K3Ekxv4+xGaW9f"
     }
   }

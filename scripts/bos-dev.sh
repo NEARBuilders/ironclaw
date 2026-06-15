@@ -2,10 +2,12 @@
 # Launch IronClaw Reborn with the everything-dev BOS toolchain.
 #
 #   --local           starts the everything-dev dev stack locally.
+#   --tunnel          starts Reborn locally + exposes via tunnel for the production UI.
 #   <account>/<gateway>  starts a production-like host against a remote gateway.
 #
 # Usage:
 #   scripts/bos-dev.sh --local                                # local everything-dev stack
+#   scripts/bos-dev.sh --tunnel                               # Reborn + tunnel
 #   scripts/bos-dev.sh work.efiz.near/ironclaw.everything.dev  # remote gateway
 #
 # Before running, export your provider's API key, e.g.:
@@ -44,16 +46,19 @@ IRONCLAW_TRIGGER_POLLER_ENABLED="${IRONCLAW_TRIGGER_POLLER_ENABLED:-true}"
 ARG="${1:-}"
 if [ "$ARG" = "--local" ]; then
   MODE="local"
+elif [ "$ARG" = "--tunnel" ]; then
+  MODE="tunnel"
 elif [[ "$ARG" =~ ^[a-z0-9_.-]+/[a-z0-9_.-]+$ ]]; then
   MODE="remote"
   ACCOUNT="${ARG%%/*}"
   DOMAIN="${ARG#*/}"
 else
-  echo "Usage: $0 [--local | <account>/<gateway>]" >&2
+  echo "Usage: $0 [--local | --tunnel | <account>/<gateway>]" >&2
   echo "" >&2
   echo "Examples:" >&2
   echo "  $0 --local                                           # Local everything-dev stack" >&2
-  echo "  $0 work.efiz.near/ironclaw.everything.dev          # Remote gateway" >&2
+  echo "  $0 --tunnel                                          # Reborn + tunnel" >&2
+  echo "  $0 work.efiz.near/ironclaw.everything.dev            # Remote gateway" >&2
   exit 1
 fi
 
@@ -148,9 +153,16 @@ fi
 cleanup() {
   echo ""
   echo "Shutting down..."
+  if [ -n "${TAIL_PID:-}" ]; then
+    kill "$TAIL_PID" 2>/dev/null || true
+  fi
+  if [ -n "${TUNNEL_PID:-}" ]; then
+    kill "$TUNNEL_PID" 2>/dev/null || true
+  fi
   if [ -n "${REBORN_PID:-}" ]; then
     kill "$REBORN_PID" 2>/dev/null || true
   fi
+  rm -f "${REBORN_LOG:-}" "${TUNNEL_LOG:-}" 2>/dev/null || true
   exit 0
 }
 trap cleanup SIGINT SIGTERM
@@ -223,6 +235,128 @@ BANNER
   cd "$EVDEV_DIR"
   bun run dev || true
   cleanup
+fi
+
+# ─────────────────────────────────────────────────────────────────────
+# Tunnel mode — start Reborn locally + expose via tunnel for the
+# production everything-dev UI (ironclaw.everything.dev).
+# The local dev stack is not started; the user connects via Settings.
+# ─────────────────────────────────────────────────────────────────────
+if [ "$MODE" = "tunnel" ]; then
+  REBORN_LOG="$(mktemp)"
+  echo "==> Starting ironclaw-reborn on http://$REBORN_HOST:$REBORN_PORT (log: $REBORN_LOG)"
+  "${CARGO[@]}" serve --confirm-host-access --host "$REBORN_HOST" --port "$REBORN_PORT" > "$REBORN_LOG" 2>&1 &
+  REBORN_PID=$!
+
+  sleep 2
+
+  TUNNEL_CMD=""
+  if command -v cloudflared &>/dev/null; then
+    TUNNEL_CMD="cloudflared"
+  elif command -v ngrok &>/dev/null; then
+    TUNNEL_CMD="ngrok"
+  elif command -v bore &>/dev/null; then
+    TUNNEL_CMD="bore"
+  fi
+
+  if [ -z "$TUNNEL_CMD" ]; then
+    echo ""
+    echo "error: no tunnel tool found. Install one of:" >&2
+    echo "  cloudflared   brew install cloudflared    (recommended, no account needed)" >&2
+    echo "  ngrok         brew install ngrok           (requires free account)" >&2
+    echo "  bore          cargo install bore-cli       (simple, no account)" >&2
+    echo "" >&2
+    cleanup
+    exit 1
+  fi
+
+  printf "==> Starting tunnel via %s..." "$TUNNEL_CMD"
+
+  TUNNEL_LOG="$(mktemp)"
+  TUNNEL_URL=""
+
+  set +e
+  case "$TUNNEL_CMD" in
+    cloudflared)
+      cloudflared tunnel --url "http://$REBORN_HOST:$REBORN_PORT" > "$TUNNEL_LOG" 2>&1 &
+      TUNNEL_PID=$!
+      for i in $(seq 1 30); do
+        TUNNEL_URL="$(grep -oE 'https://[a-zA-Z0-9_.-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | tail -1 || true)"
+        [ -n "$TUNNEL_URL" ] && break
+        printf "."
+        sleep 1
+      done
+      printf "\n"
+      ;;
+    ngrok)
+      ngrok http "$REBORN_HOST:$REBORN_PORT" --log=stdout > "$TUNNEL_LOG" 2>&1 &
+      TUNNEL_PID=$!
+      for i in $(seq 1 15); do
+        TUNNEL_URL="$(grep -oE '"public_url":"https://[^"]+' "$TUNNEL_LOG" 2>/dev/null | head -1 | sed 's/"public_url":"//' || true)"
+        [ -n "$TUNNEL_URL" ] && break
+        printf "."
+        sleep 1
+      done
+      printf "\n"
+      ;;
+    bore)
+      bore local "$REBORN_PORT" --to bore.pub > "$TUNNEL_LOG" 2>&1 &
+      TUNNEL_PID=$!
+      for i in $(seq 1 10); do
+        TUNNEL_URL="$(grep -oE 'https?://[a-zA-Z0-9.:-]+' "$TUNNEL_LOG" 2>/dev/null | head -1 || true)"
+        [ -n "$TUNNEL_URL" ] && break
+        printf "."
+        sleep 1
+      done
+      printf "\n"
+      if [ -n "$TUNNEL_URL" ]; then
+        TUNNEL_URL="http://$TUNNEL_URL"
+      fi
+      ;;
+  esac
+  set -e
+
+  if [ -z "$TUNNEL_URL" ]; then
+    printf "\n"
+    printf "warning: could not detect tunnel URL (last lines of tunnel log):\n" >&2
+    tail -5 "$TUNNEL_LOG" >&2
+    TUNNEL_URL="(see tunnel log: $TUNNEL_LOG)"
+  fi
+
+  cat << BANNER
+
+══════════════════════════════════════════════════════════════════
+ IronClaw Reborn — MODE: TUNNEL
+══════════════════════════════════════════════════════════════════
+
+  >>> Tunnel URL:  $TUNNEL_URL
+  >>> Token:       $IRONCLAW_REBORN_WEBUI_TOKEN
+
+  ┌─ Step 1 ─────────────────────────────────────────────────┐
+  │  Open the Setup page:                                     │
+  │    https://ironclaw.everything.dev/setup                  │
+  └──────────────────────────────────────────────────────────┘
+
+  ┌─ Step 2 ─────────────────────────────────────────────────┐
+  │  Click "Set up locally", fill in the form:                │
+  │    Tunnel URL:  $TUNNEL_URL                              │
+  │    Token:       $IRONCLAW_REBORN_WEBUI_TOKEN             │
+  └──────────────────────────────────────────────────────────┘
+
+  ┌─ Step 3 ─────────────────────────────────────────────────┐
+  │  Click Save. The sidebar shows (●) Connected when ready. │
+  └──────────────────────────────────────────────────────────┘
+
+  Reborn home: $IRONCLAW_REBORN_HOME
+
+  Press Ctrl+C to stop
+
+BANNER
+
+  tail -f "$REBORN_LOG" &
+  TAIL_PID=$!
+
+  wait
 fi
 
 # ─────────────────────────────────────────────────────────────────────
