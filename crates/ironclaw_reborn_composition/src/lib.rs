@@ -32,6 +32,7 @@ mod available_extensions;
 mod budget;
 mod budget_events;
 mod bundled_skills;
+mod communication_context;
 mod default_system_prompt;
 mod error;
 mod extension_activation_credentials;
@@ -180,8 +181,9 @@ pub use input::{OAuthClientConfig, RebornBuildInput, RebornRuntimeProcessBinding
 #[cfg(feature = "webui-v2-beta")]
 pub use ironclaw_auth::GoogleOAuthRouteConfig;
 pub use ironclaw_product_workflow::{
-    LifecycleExtensionSource, LifecycleExtensionSummary, LifecyclePhase, LifecycleProductPayload,
-    LifecycleProductResponse,
+    AccessSessionService, LifecycleExtensionSource, LifecycleExtensionSummary, LifecyclePhase,
+    LifecycleProductPayload, LifecycleProductResponse, RebornServicesError, RebornServicesErrorCode,
+    RebornServicesErrorKind,
 };
 #[cfg(any(feature = "libsql", feature = "postgres"))]
 pub use ironclaw_runtime_policy::{
@@ -327,8 +329,9 @@ pub use webui_rate_limit::RateLimitConfigError;
 #[cfg(feature = "webui-v2-beta")]
 pub use webui_serve::{
     ProtectedRouteMount, PublicRouteDrain, PublicRouteDrains, PublicRouteMount,
-    WebuiAuthentication, WebuiAuthenticator, WebuiServeConfig, WebuiServeConfigError,
-    WebuiServeError, WebuiV2App, webui_v2_app, webui_v2_app_with_lifecycle,
+    WebUiV2Capabilities, WebuiAuthentication, WebuiAuthenticator, WebuiServeConfig,
+    WebuiServeConfigError, WebuiServeError, WebuiV2App, webui_v2_app,
+    webui_v2_app_with_lifecycle,
 };
 
 /// Re-exported identity vocabulary host binaries need to construct

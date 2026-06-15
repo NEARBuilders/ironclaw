@@ -28,21 +28,22 @@ use ironclaw_product_workflow::{
     RebornCancelRunResponse, RebornConnectableChannelListResponse, RebornCreateThreadResponse,
     RebornDeleteThreadRequest, RebornDeleteThreadResponse, RebornExtensionActionResponse,
     RebornExtensionListResponse, RebornExtensionRegistryResponse, RebornListAutomationsResponse,
-    RebornListThreadsResponse, RebornOperatorCommandPlaneResponse, RebornOperatorConfigGetResponse,
-    RebornOperatorConfigListResponse, RebornOperatorConfigSetRequest,
-    RebornOperatorConfigValidateRequest, RebornOperatorConfigValidateResponse,
-    RebornOperatorLogsQuery, RebornOperatorServiceLifecycleRequest, RebornOperatorSetupRequest,
-    RebornOperatorSetupResponse, RebornOutboundDeliveryTargetListResponse,
-    RebornOutboundPreferencesResponse, RebornResolveGateResponse, RebornServicesApi,
-    RebornServicesError, RebornServicesErrorCode, RebornServicesErrorKind,
-    RebornSetOutboundPreferencesRequest, RebornSetupExtensionResponse, RebornSkillActionResponse,
-    RebornSkillContentResponse, RebornSkillListResponse, RebornSkillSearchResponse,
-    RebornStreamEventsRequest, RebornSubmitTurnResponse, RebornTimelineRequest,
-    RebornTimelineResponse, SetActiveLlmRequest, UpsertLlmProviderRequest,
+    RebornListThreadsResponse, RebornGetThreadStateRequest, RebornGetThreadStateResponse, RebornOperatorCommandPlaneResponse,
+    RebornOperatorConfigGetResponse, RebornOperatorConfigListResponse,
+    RebornOperatorConfigSetRequest, RebornOperatorConfigValidateRequest,
+    RebornOperatorConfigValidateResponse, RebornOperatorLogsQuery,
+    RebornOperatorServiceLifecycleRequest, RebornOperatorSetupRequest, RebornOperatorSetupResponse,
+    RebornOutboundDeliveryTargetListResponse, RebornOutboundPreferencesResponse,
+    RebornResolveGateResponse, RebornServicesApi, RebornServicesError, RebornServicesErrorCode,
+    RebornServicesErrorKind, RebornSetOutboundPreferencesRequest, RebornSetupExtensionResponse,
+    RebornSkillActionResponse, RebornSkillContentResponse, RebornSkillListResponse,
+    RebornSkillSearchResponse, RebornStreamEventsRequest, RebornSubmitTurnResponse,
+    RebornTimelineRequest, RebornTimelineResponse, SetActiveLlmRequest, UpsertLlmProviderRequest,
     WebUiAuthenticatedCaller, WebUiCancelRunRequest, WebUiCreateThreadRequest,
     WebUiInboundValidationCode, WebUiInboundValidationError, WebUiListAutomationsRequest,
-    WebUiListThreadsRequest, WebUiResolveGateRequest, WebUiSendMessageRequest,
-    WebUiSetupExtensionRequest,
+    WebUiListThreadsRequest, WebUiMintAccessSessionRequest, WebUiMintAccessSessionResponse,
+    WebUiResolveGateRequest, WebUiSendMessageRequest, WebUiSetupExtensionRequest, WebUiAttachmentCapabilities,
+    webui_attachment_capabilities,
 };
 use serde::{Deserialize, Serialize};
 
@@ -56,6 +57,11 @@ pub struct WebUiV2SessionResponse {
     pub tenant_id: String,
     pub user_id: String,
     pub capabilities: WebUiV2Capabilities,
+    /// Inline-attachment contract (allowed `accept` tokens + size budgets)
+    /// the browser advertises on its file picker. Generated from the shared
+    /// format registry so the picker can never drift from the server's
+    /// allowed set; the send-message decode remains authoritative.
+    pub attachments: WebUiAttachmentCapabilities,
 }
 
 /// `GET /api/webchat/v2/session`
@@ -67,6 +73,7 @@ pub async fn get_session(
         tenant_id: caller.tenant_id.to_string(),
         user_id: caller.user_id.to_string(),
         capabilities,
+        attachments: webui_attachment_capabilities(),
     })
 }
 
@@ -1245,6 +1252,38 @@ async fn ws_drain_loop(
             }
         }
     }
+}
+
+/// `GET /api/webchat/v2/threads/{thread_id}/state`
+///
+/// Returns the authoritative thread state for UI rebuild: all messages,
+/// summary artifacts, and thread metadata in a single response.
+pub async fn get_thread_state(
+    State(state): State<WebUiV2State>,
+    Extension(caller): Extension<WebUiAuthenticatedCaller>,
+    Path(thread_id): Path<String>,
+) -> Result<Json<RebornGetThreadStateResponse>, WebUiV2HttpError> {
+    let response = state
+        .services()
+        .get_thread_state(caller, RebornGetThreadStateRequest { thread_id })
+        .await?;
+    Ok(Json(response))
+}
+
+/// `POST /api/webchat/v2/operator/access-sessions`
+///
+/// Mint a tenant-scoped signed session token. Only available on operator
+/// routes; the descriptor enforces operator auth.
+pub async fn operator_create_access_session(
+    State(state): State<WebUiV2State>,
+    Extension(caller): Extension<WebUiAuthenticatedCaller>,
+    Json(body): Json<WebUiMintAccessSessionRequest>,
+) -> Result<Json<WebUiMintAccessSessionResponse>, WebUiV2HttpError> {
+    let response = state
+        .services()
+        .mint_access_session(caller, body)
+        .await?;
+    Ok(Json(response))
 }
 
 /// Send a WS frame (or close, when `frame` is `None`) bounded by

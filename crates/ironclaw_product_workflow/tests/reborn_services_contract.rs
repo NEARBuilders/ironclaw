@@ -77,7 +77,7 @@ use ironclaw_turns::{
     InMemoryTurnStateStore, ReplyTargetBindingRef, ResumeTurnPrecondition, ResumeTurnRequest,
     ResumeTurnResponse, RunProfileId, RunProfileVersion, SourceBindingRef, SubmitTurnRequest,
     SubmitTurnResponse, TurnActor, TurnCapacityResource, TurnCoordinator, TurnError, TurnId,
-    TurnRunId, TurnRunState, TurnScope, TurnStatus,
+    TurnOriginKind, TurnRunId, TurnRunState, TurnScope, TurnStatus,
 };
 use secrecy::SecretString;
 use serde_json::json;
@@ -145,6 +145,8 @@ fn fake_thread_history(owner: &WebUiAuthenticatedCaller, thread_id: &str) -> Thr
             title: Some("M2 facade contract thread".to_string()),
             metadata_json: None,
             goal: None,
+            created_at: None,
+            updated_at: None,
         },
         messages: vec![ThreadMessageRecord {
             message_id: ThreadMessageId::new(),
@@ -325,6 +327,14 @@ impl FakeTurnCoordinator {
             .map(|request| request.scope.clone())
     }
 
+    fn last_submission_origin_kind(&self) -> Option<TurnOriginKind> {
+        self.submissions
+            .lock()
+            .expect("lock")
+            .last()
+            .and_then(|request| request.product_context.as_ref().map(|c| c.origin))
+    }
+
     fn last_cancellation_scope(&self) -> Option<TurnScope> {
         self.cancellations
             .lock()
@@ -448,6 +458,7 @@ impl TurnCoordinator for FakeTurnCoordinator {
             credential_requirements: Vec::new(),
             failure: None,
             event_cursor: EventCursor(17),
+            product_context: None,
         })
     }
 }
@@ -542,6 +553,7 @@ impl TurnCoordinator for BlockingSubmitCoordinator {
             credential_requirements: Vec::new(),
             failure: None,
             event_cursor: EventCursor(29),
+            product_context: None,
         })
     }
 }
@@ -1452,6 +1464,8 @@ impl SessionThreadService for ScriptedThreadService {
                     title: None,
                     metadata_json: None,
                     goal: None,
+                    created_at: None,
+                    updated_at: None,
                 },
                 messages: Vec::new(),
                 summary_artifacts: Vec::new(),
@@ -1804,6 +1818,11 @@ async fn submit_turn_uses_facade_and_thread_history_without_route_store_access()
     assert_eq!(
         submission_scope.project_id.expect("project").as_str(),
         "project-alpha"
+    );
+    assert_eq!(
+        coordinator.last_submission_origin_kind(),
+        Some(TurnOriginKind::WebUi),
+        "WebUI submit must produce WebUi origin"
     );
 }
 
@@ -7779,6 +7798,8 @@ async fn list_threads_breaks_out_when_cursor_does_not_advance_for_automation_thr
             "trigger-scheduled-summary",
         )),
         goal: None,
+        created_at: None,
+        updated_at: None,
     };
     let stalled_cursor = "cursor-stalled".to_string();
     let thread_service = Arc::new(ScriptedThreadService::list_pages(vec![
@@ -7842,6 +7863,8 @@ async fn list_threads_caps_filtered_pages_when_automation_threads_dominate() {
             "trigger-scheduled-summary",
         )),
         goal: None,
+        created_at: None,
+        updated_at: None,
     };
     let responses = (0..20)
         .map(|index| ListThreadsForScopeResponse {
@@ -8082,6 +8105,70 @@ async fn submit_turn_lands_attachments_and_persists_refs_on_the_user_message() {
             .is_some_and(|key| key.ends_with("-landed")),
         "expected landed storage_key, got {:?}",
         attachment_ref.storage_key
+    );
+}
+
+#[tokio::test]
+async fn get_timeline_returns_attachment_refs_on_the_user_message() {
+    use base64::Engine;
+
+    // The browser renders attachment cards from the timeline, and they must
+    // survive a page refresh. The browser's surface is `get_timeline`, not
+    // `list_thread_history`, so drive that path (test through the caller) and
+    // assert the projected `ThreadMessageRecord` still carries the refs.
+    let threads: Arc<dyn SessionThreadService> = Arc::new(InMemorySessionThreadService::default());
+    let coordinator = Arc::new(FakeTurnCoordinator::default());
+    let lander = Arc::new(RecordingLander::default());
+    let services = RebornServices::new(Arc::clone(&threads), coordinator.clone())
+        .with_inbound_attachments(lander.clone());
+    create_thread_for(&services, caller(), "thread-alpha").await;
+
+    let csv_b64 = base64::engine::general_purpose::STANDARD.encode(b"a,b\n1,2\n");
+    services
+        .submit_turn(
+            caller(),
+            serde_json::from_value::<WebUiSendMessageRequest>(json!({
+                "client_action_id": "send-att",
+                "thread_id": "thread-alpha",
+                "content": "spreadsheet attached",
+                "attachments": [{
+                    "mime_type": "text/csv",
+                    "filename": "data.csv",
+                    "data_base64": csv_b64,
+                }],
+            }))
+            .expect("request"),
+        )
+        .await
+        .expect("submit succeeds");
+
+    let timeline = services
+        .get_timeline(
+            caller(),
+            RebornTimelineRequest {
+                thread_id: "thread-alpha".to_string(),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("timeline");
+
+    let user_message = timeline
+        .messages
+        .iter()
+        .find(|message| message.kind == MessageKind::User)
+        .expect("user message present in timeline");
+    assert_eq!(user_message.attachments.len(), 1);
+    let attachment_ref = &user_message.attachments[0];
+    assert_eq!(attachment_ref.kind, AttachmentKind::Document);
+    assert_eq!(attachment_ref.mime_type, "text/csv");
+    assert_eq!(attachment_ref.filename.as_deref(), Some("data.csv"));
+    assert!(
+        attachment_ref
+            .storage_key
+            .as_deref()
+            .is_some_and(|key| !key.is_empty()),
+        "timeline ref must carry a non-empty storage_key so the agent can re-read it later"
     );
 }
 

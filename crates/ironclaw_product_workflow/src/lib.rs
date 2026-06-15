@@ -142,7 +142,7 @@ pub use ironclaw_product_adapters::{
 pub use reborn_services::{
     AUTOMATION_LIST_DEFAULT_PAGE_SIZE, AUTOMATION_LIST_MAX_PAGE_SIZE,
     AUTOMATION_RUN_HISTORY_DEFAULT_PAGE_SIZE, AUTOMATION_RUN_HISTORY_MAX_PAGE_SIZE,
-    AutomationListRequest, AutomationProductFacade, CodexLoginStart,
+    AccessSessionService, AutomationListRequest, AutomationProductFacade, CodexLoginStart,
     ConnectableChannelsProductFacade, ExtensionCredentialSetupService,
     ExtensionCredentialStatusRequest, ExtensionCredentialSubmitRequest, InboundAttachmentLander,
     LlmActiveSelection, LlmConfigService, LlmConfigServiceError, LlmConfigSnapshot,
@@ -157,8 +157,9 @@ pub use reborn_services::{
     RebornDeleteThreadResponse, RebornExtensionActionResponse, RebornExtensionCredentialSetup,
     RebornExtensionInfo, RebornExtensionListResponse, RebornExtensionOnboardingPayload,
     RebornExtensionOnboardingState, RebornExtensionRegistryEntry, RebornExtensionRegistryResponse,
-    RebornExtensionSetupField, RebornExtensionSetupSecret, RebornGetRunStateRequest,
-    RebornGetRunStateResponse, RebornListAutomationsResponse, RebornListThreadsResponse,
+    RebornExtensionSetupField, RebornExtensionSetupSecret,     RebornGetRunStateRequest,
+    RebornGetRunStateResponse, RebornGetThreadStateRequest, RebornGetThreadStateResponse,
+    RebornListAutomationsResponse, RebornListThreadsResponse,
     RebornLogEntry, RebornLogLevel, RebornLogQueryRequest, RebornLogQueryResponse,
     RebornOperatorArea, RebornOperatorCommandPlaneResponse, RebornOperatorConfigDiagnostic,
     RebornOperatorConfigDiagnosticSeverity, RebornOperatorConfigEntry,
@@ -187,13 +188,15 @@ pub use reborn_services::{
     TriggerRunThreadScope, UnsupportedAutomationProductFacade, UnsupportedOperatorLogsService,
     UnsupportedOperatorServiceLifecycleService, UnsupportedOperatorStatusService,
     UnsupportedOutboundPreferencesProductFacade, UpsertLlmProviderRequest,
+    WebUiMintAccessSessionRequest, WebUiMintAccessSessionResponse,
     normalize_operator_log_context_value,
 };
 
 pub use webui_inbound::{
-    WebUiAuthenticatedCaller, WebUiCancelReason, WebUiCancelRunRequest, WebUiCreateThreadRequest,
-    WebUiGateResolution, WebUiInboundAttachment, WebUiInboundCommand, WebUiInboundValidationCode,
-    WebUiInboundValidationError, WebUiListAutomationsRequest, WebUiListThreadsRequest,
-    WebUiResolveGateRequest, WebUiSendMessageRequest, WebUiSetupExtensionRequest,
+    WebUiAttachmentCapabilities, WebUiAuthenticatedCaller, WebUiCancelReason,
+    WebUiCancelRunRequest, WebUiCreateThreadRequest, WebUiGateResolution, WebUiInboundAttachment,
+    WebUiInboundCommand, WebUiInboundValidationCode, WebUiInboundValidationError,
+    WebUiListAutomationsRequest, WebUiListThreadsRequest, WebUiResolveGateRequest,
+    WebUiSendMessageRequest, WebUiSetupExtensionRequest, webui_attachment_capabilities,
 };
 pub use workflow::DefaultProductWorkflow;
