@@ -1,27 +1,25 @@
 import { Link } from "@tanstack/react-router";
-import { PanelLeft, RefreshCw, Settings } from "lucide-react";
+import { PanelLeft, Settings, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
 import type { ThreadState } from "@/hooks/use-thread-state";
 
 interface ChatIdentityBarProps {
   threadState: ThreadState | null;
-  onRebuild: () => void;
-  onToggleMeta: () => void;
-  isRebuilding?: boolean;
   onOpenMobileSidebar?: () => void;
   onToggleDesktopSidebar?: () => void;
   activeThreadTitle?: string;
+  verbose?: boolean;
+  onToggleVerbose?: () => void;
 }
 
 export function ChatIdentityBar({
   threadState,
-  onRebuild,
-  onToggleMeta,
-  isRebuilding,
   onOpenMobileSidebar,
   onToggleDesktopSidebar,
   activeThreadTitle,
+  verbose,
+  onToggleVerbose,
 }: ChatIdentityBarProps) {
   const { status: connectionStatus } = useIronclawStatus();
 
@@ -77,25 +75,21 @@ export function ChatIdentityBar({
         )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={onToggleMeta}
-          title="Thread info"
-        >
-          <span className="text-xs font-semibold text-muted-foreground">&#8862;</span>
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={onRebuild}
-          disabled={isRebuilding}
-          title="Rebuild thread from server"
-        >
-          <RefreshCw size={12} className={isRebuilding ? "animate-spin" : ""} />
-        </Button>
+        {onToggleVerbose && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-7 w-7 transition-colors ${
+              verbose
+                ? "text-primary bg-primary/10 hover:bg-primary/20"
+                : "text-muted-foreground"
+            }`}
+            onClick={onToggleVerbose}
+            title={verbose ? "Verbose mode on — click to disable" : "Enable verbose mode"}
+          >
+            <SlidersHorizontal size={12} />
+          </Button>
+        )}
         <Link to="/setup" className="flex items-center">
           <Button variant="ghost" size="icon" className="h-7 w-7" title="IronClaw settings">
             <Settings size={12} />

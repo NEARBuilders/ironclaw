@@ -737,7 +737,8 @@ impl SessionThreadService for InMemorySessionThreadService {
         let start_index = match request.cursor.as_deref() {
             Some(cursor) => matching
                 .iter()
-                .position(|record| record.thread_id.as_str() > cursor)
+                .position(|record| record.thread_id.as_str() == cursor)
+                .map(|pos| pos + 1)
                 .unwrap_or(matching.len()),
             None => 0,
         };

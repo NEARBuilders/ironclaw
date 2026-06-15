@@ -212,7 +212,7 @@ function Layout() {
             </div>
           </header>
 
-          <main className="flex-1 w-full min-h-0 overflow-hidden flex flex-col">
+          <main className="flex-1 w-full min-h-0 overflow-hidden flex flex-col pb-[3.75rem] sm:pb-0">
             <Outlet />
           </main>
 

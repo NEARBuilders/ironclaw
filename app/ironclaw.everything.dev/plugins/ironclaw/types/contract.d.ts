@@ -61,6 +61,8 @@ export declare const ThreadSchema: z.ZodObject<{
         refinedAtSequence: z.ZodNumber;
         refinementCount: z.ZodNumber;
     }, z.core.$strip>>;
+    createdAt: z.ZodOptional<z.ZodString>;
+    updatedAt: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 export declare const ThreadListSchema: z.ZodObject<{
     data: z.ZodArray<z.ZodObject<{
@@ -80,6 +82,8 @@ export declare const ThreadListSchema: z.ZodObject<{
             refinedAtSequence: z.ZodNumber;
             refinementCount: z.ZodNumber;
         }, z.core.$strip>>;
+        createdAt: z.ZodOptional<z.ZodString>;
+        updatedAt: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>>;
     meta: z.ZodObject<{
         total: z.ZodNumber;
@@ -178,6 +182,8 @@ export declare const ThreadStateSchema: z.ZodObject<{
             refinedAtSequence: z.ZodNumber;
             refinementCount: z.ZodNumber;
         }, z.core.$strip>>;
+        createdAt: z.ZodOptional<z.ZodString>;
+        updatedAt: z.ZodOptional<z.ZodString>;
     }, z.core.$strip>;
     messages: z.ZodArray<z.ZodObject<{
         messageId: z.ZodString;
@@ -638,6 +644,8 @@ export declare const contract: {
                     refinedAtSequence: z.ZodNumber;
                     refinementCount: z.ZodNumber;
                 }, z.core.$strip>>;
+                createdAt: z.ZodOptional<z.ZodString>;
+                updatedAt: z.ZodOptional<z.ZodString>;
             }, z.core.$strip>>;
             meta: z.ZodObject<{
                 total: z.ZodNumber;
@@ -1135,6 +1143,8 @@ export declare const contract: {
                     refinedAtSequence: z.ZodNumber;
                     refinementCount: z.ZodNumber;
                 }, z.core.$strip>>;
+                createdAt: z.ZodOptional<z.ZodString>;
+                updatedAt: z.ZodOptional<z.ZodString>;
             }, z.core.$strip>;
             messages: z.ZodArray<z.ZodObject<{
                 messageId: z.ZodString;

@@ -1,5 +1,5 @@
 import { consumeEventIterator } from "@orpc/client";
-import type { StreamChunk, UIMessage } from "@tanstack/ai/client";
+import type { UIMessage } from "@tanstack/ai/client";
 import { useChat } from "@tanstack/ai-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiClient } from "@/app";
@@ -24,6 +24,7 @@ interface RunState {
   authHeadline?: string;
   authBody?: string;
   authUrl?: string;
+  activeToolName?: string;
 }
 
 export type { RunState };
@@ -35,238 +36,6 @@ function messageTextContent(message: UIMessage): string {
     .join(" ");
 }
 
-function createIronclawStream({
-  apiClient,
-  threadId,
-  content,
-  clientActionId,
-  attachments,
-  onRunStarted,
-  onRunStateChange,
-  signal,
-}: {
-  apiClient: ApiClient;
-  threadId: string;
-  content: string;
-  clientActionId: string;
-  attachments?: StagedAttachment[];
-  onRunStarted: (runId: string) => void;
-  onRunStateChange: (update: Partial<RunState>) => void;
-  signal: AbortSignal;
-}): AsyncIterable<StreamChunk> {
-  return {
-    [Symbol.asyncIterator]() {
-      const queue: Array<Record<string, unknown>> = [];
-      const waiters: Array<(result: IteratorResult<Record<string, unknown>>) => void> = [];
-      let closed = false;
-      let unsubscribe: (() => Promise<void>) | null = null;
-
-      const push = (chunk: Record<string, unknown>) => {
-        if (closed) return;
-        const waiter = waiters.shift();
-        if (waiter) {
-          waiter({ value: chunk, done: false });
-          return;
-        }
-        queue.push(chunk);
-      };
-
-      const finish = () => {
-        if (closed) return;
-        closed = true;
-        if (unsubscribe) {
-          const u = unsubscribe;
-          unsubscribe = null;
-          void u();
-        }
-        while (waiters.length > 0) {
-          const waiter = waiters.shift();
-          waiter?.({ value: undefined, done: true });
-        }
-      };
-
-      const fail = (message: string) => {
-        push({ type: "RUN_ERROR", message });
-        finish();
-      };
-
-      signal.addEventListener(
-        "abort",
-        () => {
-          finish();
-        },
-        { once: true },
-      );
-
-      void (async () => {
-        let runId: string;
-        let replyMessageId = "reply-pending";
-
-        try {
-          const accepted = await apiClient.ironclaw.threads.sendMessage({
-            id: threadId,
-            content,
-            clientActionId,
-            attachments: attachments?.map((a) => ({
-              mimeType: a.mimeType,
-              filename: a.filename,
-              dataBase64: a.dataBase64,
-            })),
-          });
-          runId = accepted.runId ?? accepted.activeRunId ?? crypto.randomUUID();
-          replyMessageId = `reply-${runId}`;
-          onRunStarted(runId);
-          onRunStateChange({ phase: "running", runId });
-          push({ type: "RUN_STARTED", threadId, runId });
-
-          const afterCursor = accepted.eventCursor != null ? String(accepted.eventCursor) : undefined;
-
-          unsubscribe = consumeEventIterator(
-            apiClient.ironclaw.threads.streamEvents({ id: threadId, afterCursor }),
-            {
-              onEvent: (event: any) => {
-                if (closed) return;
-
-                switch (event.type) {
-                  case "accepted": {
-                    onRunStateChange({
-                      phase: "running",
-                      runId: event.ack?.runId ?? runId,
-                      message: undefined,
-                    });
-                    break;
-                  }
-                  case "running": {
-                    onRunStateChange({ phase: "running", runId: event.runState?.runId ?? runId });
-                    break;
-                  }
-                  case "gate": {
-                    const g = event.prompt ?? {};
-                    onRunStateChange({
-                      phase: "awaiting_approval",
-                      gateRef: g.gateRef,
-                      gateHeadline: g.headline,
-                      gateBody: g.body,
-                    });
-                    push({
-                      type: "GATE_REQUIRED",
-                      runId,
-                      gateRef: g.gateRef,
-                      headline: g.headline,
-                      body: g.body,
-                    });
-                    break;
-                  }
-                  case "auth_required": {
-                    const a = event.authPrompt ?? {};
-                    onRunStateChange({
-                      phase: "auth_required",
-                      authRequestRef: a.authRequestRef,
-                      authHeadline: a.headline,
-                      authBody: a.body,
-                      authUrl: a.authorizationUrl,
-                    });
-                    push({
-                      type: "AUTH_REQUIRED",
-                      runId,
-                      authRequestRef: a.authRequestRef,
-                      headline: a.headline,
-                      body: a.body,
-                      authorizationUrl: a.authorizationUrl,
-                    });
-                    break;
-                  }
-                  case "final_reply": {
-                    const reply = event.reply ?? {};
-                    if (reply.text) {
-                      push({
-                        type: "TEXT_MESSAGE_START",
-                        messageId: replyMessageId,
-                        role: "assistant",
-                      });
-                      push({
-                        type: "TEXT_MESSAGE_CONTENT",
-                        messageId: replyMessageId,
-                        delta: reply.text,
-                        content: reply.text,
-                      });
-                      push({ type: "TEXT_MESSAGE_END", messageId: replyMessageId });
-                    }
-                    break;
-                  }
-                  case "failed": {
-                    const failMsg =
-                      event.response?.status ?? event.runState?.failure ?? "Run failed";
-                    const msg = typeof failMsg === "string" ? failMsg : JSON.stringify(failMsg);
-                    onRunStateChange({ phase: "failed", message: msg });
-                    push({ type: "RUN_FAILED", runId, message: msg });
-                    finish();
-                    break;
-                  }
-                  case "cancelled": {
-                    onRunStateChange({ phase: "cancelled", message: "Run was cancelled" });
-                    push({ type: "RUN_CANCELLED", runId });
-                    finish();
-                    break;
-                  }
-                  case "capability_progress":
-                  case "capability_activity":
-                  case "capability_display_preview": {
-                    push({ type: "CAPABILITY_UPDATED", runId, event });
-                    break;
-                  }
-                  case "projection_snapshot":
-                  case "projection_update":
-                    break;
-                  case "keep_alive":
-                    break;
-                  default:
-                    break;
-                }
-              },
-              onError: (err: any) => {
-                const msg = err instanceof Error ? err.message : String(err);
-                onRunStateChange({ phase: "disconnected", message: msg });
-                fail(msg);
-              },
-              onFinish: (_state: any) => {
-                push({ type: "RUN_FINISHED", runId, finishReason: "stop" });
-                finish();
-              },
-            },
-          );
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error);
-          onRunStateChange({ phase: "failed", message: msg });
-          fail(msg);
-        }
-      })();
-
-      return {
-        next(): Promise<IteratorResult<StreamChunk>> {
-          if (queue.length > 0) {
-            const value = queue.shift()!;
-            return Promise.resolve({ value: value as StreamChunk, done: false });
-          }
-          if (closed) {
-            return Promise.resolve({ value: undefined, done: true });
-          }
-          return new Promise<IteratorResult<StreamChunk>>((resolve) => {
-            waiters.push(resolve as (result: IteratorResult<Record<string, unknown>>) => void);
-          });
-        },
-        return(): Promise<IteratorResult<StreamChunk>> {
-          finish();
-          return Promise.resolve({ value: undefined, done: true });
-        },
-        [Symbol.asyncIterator]() {
-          return this;
-        },
-      };
-    },
-  };
-}
-
 export function useIronclawChat(
   threadId: string,
   apiClient: ApiClient,
@@ -275,41 +44,290 @@ export function useIronclawChat(
   const activeRunIdRef = useRef<string | null>(null);
   const pendingAttachmentsRef = useRef<StagedAttachment[]>([]);
   const [runState, setRunState] = useState<RunState>({ phase: "idle" });
+  const onRunStateChangeRef = useRef<(update: Partial<RunState>) => void>(() => {});
+
+  onRunStateChangeRef.current = (update) => {
+    setRunState((prev) => ({ ...prev, ...update }));
+  };
 
   const initialMessagesRef = useRef(initialMessages);
 
   const chat = useChat({
     threadId,
     initialMessages,
-    fetcher: async ({ messages }, { signal }) => {
-      const lastUser = [...messages].reverse().find((message) => message.role === "user");
+    fetcher: async function* ({ messages }, { signal }) {
+      const lastUser = [...messages].reverse().find((m) => m.role === "user");
       const content = lastUser ? messageTextContent(lastUser) : "";
       const attachments = pendingAttachmentsRef.current;
       pendingAttachmentsRef.current = [];
 
-      setRunState({ phase: "submitted", message: undefined });
+      onRunStateChangeRef.current({ phase: "submitted", message: undefined });
 
-      return createIronclawStream({
-        apiClient,
-        threadId,
+      const accepted = await apiClient.ironclaw.threads.sendMessage({
+        id: threadId,
         content,
         clientActionId: `ui-${crypto.randomUUID()}`,
-        attachments,
-        signal,
-        onRunStarted: (runId) => {
-          activeRunIdRef.current = runId;
-        },
-        onRunStateChange: (update) => {
-          setRunState((prev) => ({ ...prev, ...update }));
-        },
+        attachments: attachments?.map((a) => ({
+          mimeType: a.mimeType,
+          filename: a.filename,
+          dataBase64: a.dataBase64,
+        })),
       });
+
+      const runId = accepted.runId ?? accepted.activeRunId ?? crypto.randomUUID();
+      activeRunIdRef.current = runId;
+      onRunStateChangeRef.current({ phase: "running", runId });
+
+      yield { type: "RUN_STARTED" as const, threadId, runId };
+
+      const replyMessageId = `reply-${runId}`;
+      const afterCursor =
+        accepted.eventCursor != null ? String(accepted.eventCursor) : undefined;
+
+      const activeToolCalls = new Map<
+        string,
+        { toolCallId: string; toolName: string }
+      >();
+      const pendingPreviews = new Map<
+        string,
+        {
+          title?: string;
+          inputSummary?: string;
+          output: string;
+          outputKind?: string;
+          truncated?: boolean;
+        }
+      >();
+
+      let done = false;
+      const buffer: any[] = [];
+      let resolveNext: (() => void) | null = null;
+
+      function notify() {
+        const r = resolveNext;
+        resolveNext = null;
+        r?.();
+      }
+
+      const unsubscribe = consumeEventIterator(
+        apiClient.ironclaw.threads.streamEvents({ id: threadId, afterCursor }),
+        {
+          onEvent: (event: any) => {
+            const type = event.type as string;
+
+            switch (type) {
+              case "accepted":
+              case "running": {
+                const crr = event.runState?.runId ?? event.ack?.runId ?? runId;
+                onRunStateChangeRef.current({
+                  phase: "running",
+                  runId: crr,
+                  message: undefined,
+                  gateRef: undefined,
+                  gateHeadline: undefined,
+                  gateBody: undefined,
+                  authRequestRef: undefined,
+                  authHeadline: undefined,
+                  authBody: undefined,
+                  authUrl: undefined,
+                });
+                break;
+              }
+
+              case "gate": {
+                const g = event.prompt ?? {};
+                onRunStateChangeRef.current({
+                  phase: "awaiting_approval",
+                  gateRef: g.gateRef,
+                  gateHeadline: g.headline,
+                  gateBody: g.body,
+                });
+                const approvalContext = g.approvalContext ?? {};
+                const gateToolName = approvalContext.toolName ?? "";
+                const gateToolCallId =
+                  g.gateRef ??
+                  (gateToolName ? `gate-${gateToolName}-${runId}` : `gate-${runId}`);
+                buffer.push({ type: "TOOL_CALL_START" as const, toolCallId: gateToolCallId, toolCallName: gateToolName || "approval", toolName: gateToolName || "approval" });
+                buffer.push({ type: "TOOL_CALL_END" as const, toolCallId: gateToolCallId, toolCallName: gateToolName || "approval" });
+                buffer.push({
+                  type: "CUSTOM" as const,
+                  name: "approval-requested",
+                  value: {
+                    toolCallId: gateToolCallId,
+                    toolName: gateToolName || "approval",
+                    input: JSON.stringify(approvalContext),
+                    approval: { id: g.gateRef, needsApproval: true },
+                  },
+                });
+                activeToolCalls.set(gateToolCallId, { toolCallId: gateToolCallId, toolName: gateToolName || "approval" });
+                notify();
+                break;
+              }
+
+              case "auth_required": {
+                const a = event.authPrompt ?? {};
+                onRunStateChangeRef.current({
+                  phase: "auth_required",
+                  authRequestRef: a.authRequestRef,
+                  authHeadline: a.headline,
+                  authBody: a.body,
+                  authUrl: a.authorizationUrl,
+                });
+                break;
+              }
+
+              case "capability_progress":
+                break;
+
+              case "capability_activity": {
+                const act = event.activity ?? {};
+                const invId = act.invocationId as string | undefined;
+                const capId = act.capabilityId as string | undefined;
+                const actStatus = act.status as string | undefined;
+                const errKind = act.errorKind as string | undefined;
+                if (!invId || !capId) break;
+
+                if (actStatus === "started" || actStatus === "running") {
+                  if (!activeToolCalls.has(invId)) {
+                    const displayName = pendingPreviews.get(invId)?.title ?? capId;
+                    activeToolCalls.set(invId, { toolCallId: invId, toolName: displayName });
+                    onRunStateChangeRef.current({ activeToolName: displayName });
+                    buffer.push({ type: "TOOL_CALL_START" as const, toolCallId: invId, toolCallName: displayName, toolName: displayName });
+                    notify();
+                  }
+                } else if (actStatus === "completed" || actStatus === "failed" || actStatus === "killed") {
+                  const isToolError = actStatus === "failed" || actStatus === "killed";
+                  const toolState = isToolError ? "output-error" : "output-available";
+                  const preview = pendingPreviews.get(invId);
+                  const displayTitle = preview?.title ?? capId;
+                  buffer.push({ type: "TOOL_CALL_END" as const, toolCallId: invId, toolCallName: displayTitle, state: toolState });
+                  buffer.push({
+                    type: "TOOL_CALL_RESULT" as const,
+                    messageId: replyMessageId,
+                    toolCallId: invId,
+                    content: JSON.stringify({
+                      output: preview?.output ?? (errKind ? `Error: ${errKind}` : ""),
+                      output_kind: preview?.outputKind ?? null,
+                      truncated: preview?.truncated ?? false,
+                      input_summary: preview?.inputSummary ?? null,
+                      title: displayTitle,
+                    }),
+                    state: toolState,
+                  });
+                  pendingPreviews.delete(invId);
+                  activeToolCalls.delete(invId);
+                  onRunStateChangeRef.current({ activeToolName: undefined });
+                  notify();
+                }
+                break;
+              }
+
+              case "capability_display_preview": {
+                const prev = event.preview ?? {};
+                const prevInvId = prev.invocationId as string | undefined;
+                if (prevInvId) {
+                  const previewTitle = prev.title as string | undefined;
+                  const previewOutput =
+                    (prev.outputSummary as string) ?? (prev.outputPreview as string) ?? "";
+                  pendingPreviews.set(prevInvId, {
+                    title: previewTitle,
+                    inputSummary: prev.inputSummary as string | undefined,
+                    output: previewOutput,
+                    outputKind: prev.outputKind as string | undefined,
+                    truncated: !!(prev.truncated as boolean | undefined),
+                  });
+                  if (!activeToolCalls.has(prevInvId)) {
+                    const prevCapId = prev.capabilityId as string | undefined;
+                    const displayName = previewTitle ?? prevCapId ?? "unknown";
+                    activeToolCalls.set(prevInvId, { toolCallId: prevInvId, toolName: displayName });
+                    onRunStateChangeRef.current({ activeToolName: displayName });
+                    buffer.push({ type: "TOOL_CALL_START" as const, toolCallId: prevInvId, toolCallName: displayName, toolName: displayName });
+                    notify();
+                  }
+                }
+                break;
+              }
+
+              case "final_reply": {
+                const reply = event.reply ?? {};
+                onRunStateChangeRef.current({ activeToolName: undefined });
+                if (reply.text) {
+                  buffer.push({ type: "TEXT_MESSAGE_START" as const, messageId: replyMessageId, role: "assistant" as const });
+                  buffer.push({ type: "TEXT_MESSAGE_CONTENT" as const, messageId: replyMessageId, delta: reply.text });
+                  buffer.push({ type: "TEXT_MESSAGE_END" as const, messageId: replyMessageId });
+                }
+                buffer.push({ type: "RUN_FINISHED" as const, threadId, runId });
+                done = true;
+                notify();
+                break;
+              }
+
+              case "failed": {
+                const failMsg =
+                  event.response?.status ?? event.runState?.failure ?? "Run failed";
+                const msg = typeof failMsg === "string" ? failMsg : JSON.stringify(failMsg);
+                onRunStateChangeRef.current({ phase: "failed", message: msg, activeToolName: undefined });
+                buffer.push({ type: "RUN_ERROR" as const, threadId, message: msg });
+                done = true;
+                notify();
+                break;
+              }
+
+              case "cancelled": {
+                onRunStateChangeRef.current({ phase: "cancelled", message: "Run was cancelled", activeToolName: undefined });
+                buffer.push({ type: "RUN_FINISHED" as const, threadId, runId });
+                done = true;
+                notify();
+                break;
+              }
+
+              case "projection_snapshot":
+              case "projection_update":
+              case "keep_alive":
+                break;
+            }
+          },
+          onError: (err: any) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            onRunStateChangeRef.current({ phase: "disconnected", message: msg, activeToolName: undefined });
+            buffer.push({ type: "RUN_ERROR" as const, threadId, message: msg });
+            done = true;
+            notify();
+          },
+          onFinish: () => {
+            if (!done) {
+              buffer.push({ type: "RUN_FINISHED" as const, threadId, runId });
+              done = true;
+              notify();
+            }
+          },
+        },
+      );
+
+      signal.addEventListener("abort", () => { done = true; notify(); void unsubscribe(); }, { once: true });
+
+      try {
+        while (true) {
+          if (buffer.length > 0) {
+            yield buffer.shift();
+          } else if (done) {
+            break;
+          } else {
+            await new Promise<void>((resolve) => { resolveNext = resolve; });
+          }
+        }
+        yield* buffer;
+      } finally {
+        void unsubscribe();
+      }
     },
     onError: (error) => {
       console.error("[useIronclawChat]", error);
-      setRunState({
+      setRunState((prev) => ({
+        ...prev,
         phase: "failed",
         message: error instanceof Error ? error.message : String(error),
-      });
+      }));
     },
   });
 
@@ -321,12 +339,7 @@ export function useIronclawChat(
   }, [initialMessages, chat]);
 
   useEffect(() => {
-    if (
-      !chat.isLoading &&
-      runState.phase !== "idle" &&
-      runState.phase !== "failed" &&
-      runState.phase !== "cancelled"
-    ) {
+    if (!chat.isLoading && runState.phase !== "idle" && runState.phase !== "failed" && runState.phase !== "cancelled") {
       setRunState({ phase: "idle" });
     }
   }, [chat.isLoading, runState.phase]);
@@ -341,11 +354,8 @@ export function useIronclawChat(
 
   const resolveGate = useCallback(
     async (gateRef: string, approved: boolean) => {
-      chat.addToolApprovalResponse({ id: gateRef, approved });
       const runId = activeRunIdRef.current;
-      if (!runId) {
-        throw new Error("Missing run ID for gate resolution");
-      }
+      if (!runId) throw new Error("Missing run ID for gate resolution");
       await apiClient.ironclaw.threads.resolveGate({
         id: threadId,
         runId,
@@ -353,7 +363,7 @@ export function useIronclawChat(
         resolution: approved ? "approved" : "denied",
       });
     },
-    [apiClient, chat, threadId],
+    [apiClient, threadId],
   );
 
   return {
