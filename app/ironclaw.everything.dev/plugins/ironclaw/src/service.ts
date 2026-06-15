@@ -499,6 +499,8 @@ export class IronclawService {
         "keep_alive",
       ];
 
+      const terminalTypes = new Set(["final_reply", "cancelled", "failed"]);
+
       const transformEvent = (raw: any): ChatEvent => {
         const base: any = {
           cursor: raw.cursor ?? undefined,
@@ -616,6 +618,14 @@ export class IronclawService {
               const event = transformEvent(raw);
               if (event.cursor) cursor = event.cursor;
               push(event);
+              if (terminalTypes.has(event.type)) {
+                sessionEnded = true;
+                if (pendingResolve) {
+                  const r = pendingResolve;
+                  pendingResolve = null;
+                  r(null);
+                }
+              }
             } catch {
               /* skip parse errors */
             }
@@ -652,6 +662,10 @@ export class IronclawService {
           for (const type of eventTypes) {
             offEvent(es, type, handlers[type]!);
           }
+        }
+
+        if (sessionEnded) {
+          return;
         }
 
         // Exponential backoff with jitter to avoid reconnect storms.

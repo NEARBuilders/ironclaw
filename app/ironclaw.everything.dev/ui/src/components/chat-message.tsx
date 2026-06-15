@@ -1,5 +1,4 @@
 import type { UIMessage } from "@tanstack/ai-react";
-import { ChatMessage as UiChatMessage } from "@tanstack/ai-react-ui";
 import {
   AlertCircle,
   CheckCircle2,
@@ -22,6 +21,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Markdown } from "@/components/ui/markdown";
 import { formatBytes } from "@/lib/attachments";
+import { parseIronclawToolResultEnvelope } from "@/lib/ironclaw-message-parts";
 import { cn } from "@/lib/utils";
 
 interface ChatMessageProps {
@@ -51,6 +51,7 @@ function ToolCallCard({
   name,
   state,
   result,
+  call,
   approval,
   onApprove,
   verbose,
@@ -58,6 +59,7 @@ function ToolCallCard({
   name: string;
   state: string;
   result?: { content: string | unknown[]; state: string } | null;
+  call?: { output?: unknown; state?: string; input?: unknown } | null;
   approval?: { id: string; needsApproval: boolean; approved?: boolean };
   onApprove?: (approved: boolean) => void;
   verbose?: boolean;
@@ -65,38 +67,32 @@ function ToolCallCard({
   const isApproval = state === "approval-requested" && approval?.needsApproval;
   const [expanded, setExpanded] = useState(isApproval);
 
-  const isLoading = state === "input-streaming" || state === "input-complete";
-  const isComplete = state === "complete" || state === "output-available";
-  const isError = state === "output-error" || state === "error";
+  const isLoading = state === "awaiting-input" || state === "input-streaming";
+  const hasFinalResult = !!result || call?.output !== undefined;
+  const isComplete =
+    hasFinalResult &&
+    (state === "input-complete" || state === "approval-responded" || state === "complete" || state === "output-available");
+  const isError = state === "error" || state === "output-error" || result?.state === "error";
   const isKilled = state === "killed";
 
-  let displayOutput = "";
-  let inputSummary: string | null = null;
-  let outputKind: string | null = null;
-  let isTruncated = false;
-  let titleFromEnvelope: string | null = null;
-
-  if (result) {
-    const raw = typeof result.content === "string" ? result.content : "";
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object") {
-          displayOutput = parsed.output ?? parsed.text ?? parsed.result ?? "";
-          outputKind = parsed.output_kind ?? null;
-          isTruncated = !!parsed.truncated;
-          inputSummary = parsed.input_summary ?? null;
-          titleFromEnvelope = parsed.title ?? null;
-        }
-      } catch {
-        displayOutput = raw;
-      }
-    }
-  }
+  const envelope = parseIronclawToolResultEnvelope(result?.content ?? call?.output);
+  const displayOutput =
+    envelope?.output ??
+    (typeof result?.content === "string"
+      ? result.content
+      : typeof call?.output === "string"
+        ? call.output
+        : call?.output != null
+          ? JSON.stringify(call.output)
+          : "");
+  const inputSummary = envelope?.inputSummary ?? null;
+  const outputKind = envelope?.outputKind ?? null;
+  const isTruncated = envelope?.truncated ?? false;
+  const titleFromEnvelope = envelope?.title ?? null;
 
   const displayName = titleFromEnvelope || name;
   const hasOutput = !!displayOutput;
-  const hasInput = !!inputSummary;
+  const hasInput = !!inputSummary || !!call?.input;
   const Icon = toolIcon(displayName);
 
   return (
@@ -111,10 +107,7 @@ function ToolCallCard({
       <button
         type="button"
         onClick={() => !isApproval && setExpanded(!expanded)}
-        className={cn(
-          "flex w-full items-center gap-2 px-2.5 py-1.5 text-left",
-          isApproval && "cursor-default"
-        )}
+        className={cn("flex w-full items-center gap-2 px-2 py-1 text-left", isApproval && "cursor-default")}
       >
         <Icon
           size={12}
@@ -147,19 +140,10 @@ function ToolCallCard({
       </button>
 
       {isApproval && (
-        <div className="border-t border-amber-500/20 px-2.5 py-2 space-y-2">
-          {result?.content && (
-            <p className="text-muted-foreground text-[11px] leading-relaxed">
-              {(() => {
-                try {
-                  const p = JSON.parse(result.content as string);
-                  return p.body ?? p.headline ?? "";
-                } catch {
-                  return typeof result.content === "string" ? result.content : "";
-                }
-              })()}
-            </p>
-          )}
+        <div className="border-t border-amber-500/20 px-2 py-1.5 space-y-2">
+          <p className="text-muted-foreground text-[11px] leading-relaxed">
+            {displayOutput || "Approve or deny this tool call to continue."}
+          </p>
           <div className="flex gap-1.5">
             <Button
               size="sm"
@@ -186,13 +170,13 @@ function ToolCallCard({
       {!isApproval && expanded && (hasInput || hasOutput || (verbose && result)) && (
         <div className="border-t border-border divide-y divide-border/50">
           {hasInput && (
-            <div className="px-2.5 py-1.5">
+            <div className="px-2 py-1.5">
               <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide mb-0.5">Input</p>
               <p className="text-muted-foreground/80 leading-relaxed">{inputSummary}</p>
             </div>
           )}
           {hasOutput && (
-            <div className="px-2.5 py-1.5">
+            <div className="px-2 py-1.5">
               <div className="flex items-center gap-1.5 mb-0.5">
                 <p className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide">Output</p>
                 {outputKind && (
@@ -212,7 +196,7 @@ function ToolCallCard({
             </div>
           )}
           {verbose && result && (
-            <div className="px-2.5 py-1.5 text-[10px] text-muted-foreground/50 font-mono space-y-0.5">
+            <div className="px-2 py-1.5 text-[10px] text-muted-foreground/50 font-mono space-y-0.5">
               <div>state: {result.state}</div>
               {outputKind && <div>kind: {outputKind}</div>}
             </div>
@@ -300,15 +284,63 @@ export function ChatMessage({ message, isOptimistic, status, onApproveTool, verb
 
   const toolResults = useMemo(() => {
     const map = new Map<string, { content: string | unknown[]; state: string }>();
+    const calls = new Map<string, { output?: unknown; state?: string; input?: unknown }>();
     for (const part of message.parts) {
+      if (part.type === "tool-call") {
+        calls.set(part.id, {
+          output: (part as any).output,
+          state: part.state,
+          input: (part as any).input,
+        });
+      }
       if (part.type === "tool-result") {
         map.set(part.toolCallId, { content: part.content, state: part.state });
       }
     }
-    return map;
+    return { results: map, calls };
   }, [message.parts]);
 
   const hasToolCalls = message.parts.some((p) => p.type === "tool-call");
+
+  const renderPart = (part: any, index: number) => {
+    if (part.type === "text") {
+      return (
+        <Markdown
+          key={`${message.id}-text-${index}`}
+          content={part.content ?? part.text ?? ""}
+          className="[&_p]:mb-0 [&_ul]:mb-0 [&_ol]:mb-0 [&_pre]:mb-0 [&_h1]:mt-0 [&_h1]:mb-0 [&_h2]:mt-0 [&_h2]:mb-0 [&_h3]:mt-0 [&_h3]:mb-0 [&_blockquote]:mb-0 [&_hr]:my-2"
+        />
+      );
+    }
+
+    if (part.type === "thinking" || part.type === "reasoning") {
+      return (
+        <div
+          key={`${message.id}-${part.type}-${index}`}
+          className="rounded-lg border border-dashed border-muted-foreground/20 bg-muted/30 px-3 py-2 text-xs italic text-muted-foreground"
+        >
+          {part.content}
+        </div>
+      );
+    }
+
+    if (part.type === "tool-call") {
+      return (
+        <ToolCallCard
+          key={part.id}
+          name={part.name}
+          state={part.state}
+          result={toolResults.results.get(part.id) ?? null}
+          call={toolResults.calls.get(part.id) ?? null}
+          approval={part.approval}
+          onApprove={onApproveTool ? (approved) => onApproveTool(part.id, approved) : undefined}
+          verbose={verbose}
+        />
+      );
+    }
+
+    return null;
+  };
 
   return (
     <div className={cn("group flex w-full", isUser ? "justify-end" : "justify-start")}>
@@ -336,32 +368,9 @@ export function ChatMessage({ message, isOptimistic, status, onApproveTool, verb
         {isUser ? (
           <p className="whitespace-pre-wrap break-words">{textContent}</p>
         ) : (
-          <UiChatMessage
-            message={message}
-            className={hasToolCalls ? "space-y-1" : "space-y-2"}
-            defaultToolRenderer={({ id, name, state, approval }) => (
-              <ToolCallCard
-                name={name}
-                state={state}
-                result={toolResults.get(id)}
-                approval={approval}
-                onApprove={onApproveTool ? (approved) => onApproveTool(id, approved) : undefined}
-                verbose={verbose}
-              />
-            )}
-            toolResultRenderer={() => null}
-            thinkingPartRenderer={({ content }) => (
-              <div className="rounded-lg border border-dashed border-muted-foreground/20 bg-muted/30 px-3 py-2 text-xs italic text-muted-foreground">
-                {content}
-              </div>
-            )}
-            textPartRenderer={({ content }) => (
-              <Markdown
-                content={content}
-                className="[&_p]:mb-0 [&_ul]:mb-0 [&_ol]:mb-0 [&_pre]:mb-0 [&_h1]:mt-0 [&_h1]:mb-0 [&_h2]:mt-0 [&_h2]:mb-0 [&_h3]:mt-0 [&_h3]:mb-0 [&_blockquote]:mb-0 [&_hr]:my-2"
-              />
-            )}
-          />
+          <div className={hasToolCalls ? "space-y-1" : "space-y-2"}>
+            {message.parts.map(renderPart)}
+          </div>
         )}
         {attachments && attachments.length > 0 ? (
           <div className="space-y-1">

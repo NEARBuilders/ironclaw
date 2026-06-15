@@ -1,4 +1,3 @@
-import type { MessagePart } from "@tanstack/ai";
 import type { UIMessage } from "@tanstack/ai-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -31,6 +30,7 @@ import { useIronclawChat } from "@/hooks/use-ironclaw-chat";
 import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
 import { useVerboseMode } from "@/hooks/use-verbose-mode";
 import { openIronclawEventSource } from "@/lib/ironclaw-sse";
+import { restMessageToParts } from "@/lib/ironclaw-message-parts";
 
 export const Route = createFileRoute("/_layout/")({
   component: ChatPage,
@@ -54,59 +54,6 @@ function toolIconForName(name: string) {
   if (n.includes("browser") || n.includes("screenshot") || n.includes("page") || n.includes("click"))
     return Monitor;
   return Wrench;
-}
-
-function restMessageToParts(role: string, text: string): MessagePart[] {
-  if (role !== "assistant" || !text) {
-    return [{ type: "text" as const, content: text.trim() }];
-  }
-
-  try {
-    const parsed = JSON.parse(text);
-    if (!parsed || typeof parsed !== "object" || parsed.version !== 1) {
-      return [{ type: "text" as const, content: text.trim() }];
-    }
-
-    if (parsed.capability_id && parsed.invocation_id) {
-      const toolCallId = parsed.invocation_id as string;
-      const displayName = (parsed.title as string) ?? (parsed.capability_id as string);
-      const outputText = parsed.output_preview ?? parsed.output_summary ?? "";
-      const status = parsed.status as string | undefined;
-      const isError = status === "failed" || status === "error" || status === "killed";
-
-      const contentEnvelope = JSON.stringify({
-        output: typeof outputText === "string" ? outputText : JSON.stringify(outputText),
-        output_kind: parsed.output_kind ?? null,
-        truncated: !!parsed.truncated,
-        input_summary: parsed.input_summary ?? null,
-        title: displayName,
-      });
-
-      return [
-        {
-          type: "tool-call" as const,
-          id: toolCallId,
-          name: displayName,
-          arguments: parsed.input_summary ? JSON.stringify({ input: parsed.input_summary }) : "{}",
-          state: "complete" as const,
-        },
-        {
-          type: "tool-result" as const,
-          toolCallId,
-          content: contentEnvelope,
-          state: isError ? ("error" as const) : ("complete" as const),
-        },
-      ];
-    }
-
-    if (parsed.result_ref) {
-      return [];
-    }
-  } catch {
-    // not JSON — fall through to plain text
-  }
-
-  return [{ type: "text" as const, content: text.trim() }];
 }
 
 function ChatArea({
@@ -196,8 +143,16 @@ function ChatArea({
     return () => handle.close();
   }, [threadId, fetchThreadMessages, chat.setMessages]);
 
+  const isBusy =
+    chat.runState.phase === "submitted" ||
+    chat.runState.phase === "running" ||
+    chat.runState.phase === "finalizing" ||
+    chat.runState.phase === "awaiting_approval" ||
+    chat.runState.phase === "auth_required";
+
   useEffect(() => {
-    if (!chat.error || chat.isLoading) return;
+    if (chat.runState.phase !== "disconnected") return;
+    if (isBusy) return;
 
     void (async () => {
       try {
@@ -211,36 +166,43 @@ function ChatArea({
         console.error("[ChatArea] error recovery sync failed", err);
       }
     })();
-  }, [chat.error, chat.isLoading, chat.setMessages, fetchThreadMessages]);
+  }, [chat.runState.phase, isBusy, chat.setMessages, fetchThreadMessages]);
 
   const handleSend = useCallback(
     (content: string, attachments?: any[]) => {
-      if (!content.trim() || chat.isLoading) return;
+      if (!content.trim() || isBusy) return;
       chat.sendMessage(content, attachments);
     },
-    [chat.sendMessage, chat.isLoading],
+    [chat.sendMessage, isBusy],
   );
 
   const messages = chat.messages;
   const runState = chat.runState;
-  const isStreaming =
-    runState.phase === "submitted" ||
-    runState.phase === "running" ||
-    runState.phase === "awaiting_approval" ||
-    runState.phase === "auth_required";
-  const isEmpty = messages.length === 0 && !isStreaming && !loadingInitial;
+  const isEmpty = messages.length === 0 && !isBusy && !loadingInitial;
+
+  const lastAssistantHasText = messages
+    .filter((m) => m.role === "assistant")
+    .slice(-1)[0]
+    ?.parts?.some((p) => p.type === "text" && p.content?.trim())
+    ?? false;
 
   const progressLabel = useMemo(() => {
     if (runState.phase === "submitted") return "Sending\u2026";
     if (runState.phase === "running") {
-      if (runState.activeToolName) return `Using ${runState.activeToolName}\u2026`;
+      if (runState.activeToolName && !lastAssistantHasText) return `Using ${runState.activeToolName}\u2026`;
       return "Thinking\u2026";
     }
+    if (runState.phase === "finalizing") return "Thinking\u2026";
+    if (runState.phase === "awaiting_approval") return "Waiting for approval\u2026";
+    if (runState.phase === "auth_required") return "Waiting for authorization\u2026";
     return null;
-  }, [runState.phase, runState.activeToolName]);
+  }, [runState.phase, runState.activeToolName, lastAssistantHasText]);
 
-  const ProgressIcon = runState.activeToolName
-    ? toolIconForName(runState.activeToolName)
+  const toolActive = runState.activeToolName && !lastAssistantHasText;
+  const ProgressIcon = runState.phase === "awaiting_approval" || runState.phase === "auth_required"
+    ? ShieldCheck
+    : toolActive
+      ? toolIconForName(runState.activeToolName!)
     : null;
 
   const threadState = threadMeta
@@ -303,7 +265,7 @@ function ChatArea({
 
       <ChatMessageList
         loading={loadingInitial}
-        streamLoading={isStreaming}
+        streamLoading={isBusy}
         empty={isEmpty}
         emptyMessage={
           threadMetaError ? "Failed to load thread" : "No messages yet. Send a message to start."
@@ -342,7 +304,7 @@ function ChatArea({
         onSend={handleSend}
         onStop={chat.stop}
         placeholder="Type a message..."
-        isSending={chat.isLoading}
+        isSending={isBusy}
         attachmentCapabilities={attachmentCapabilities}
       />
     </>
