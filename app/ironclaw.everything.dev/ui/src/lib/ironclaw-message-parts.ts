@@ -181,10 +181,38 @@ export function messagesToUIMessages(rawMessages: ConversationMessageType[]): UI
     const raw = rawMessages[i];
 
     if (raw.role !== "assistant") {
+      const parts = restMessageToParts(raw.role, raw.text ?? "", { toolCallIdFallback: raw.id });
+      if (raw.attachments?.length) {
+        for (const att of raw.attachments) {
+          if (att.kind === "image") {
+            const attId = `attachment-${att.id}`;
+            (parts as any[]).push({
+              type: "tool-call",
+              id: attId,
+              name: "attachment",
+              arguments: JSON.stringify({ filename: att.filename, mimeType: att.mimeType }),
+              state: "input-complete",
+            });
+            (parts as any[]).push({
+              type: "tool-result",
+              toolCallId: attId,
+              state: "complete",
+              content: JSON.stringify({
+                kind: "image",
+                threadId: raw.threadId,
+                messageId: raw.id,
+                attachmentId: att.id,
+                mimeType: att.mimeType,
+                filename: att.filename,
+              }),
+            });
+          }
+        }
+      }
       result.push({
         id: raw.id,
         role: raw.role,
-        parts: restMessageToParts(raw.role, raw.text ?? "", { toolCallIdFallback: raw.id }),
+        parts,
         createdAt: raw.createdAt ? new Date(raw.createdAt) : undefined,
       });
       i++;
@@ -193,10 +221,38 @@ export function messagesToUIMessages(rawMessages: ConversationMessageType[]): UI
 
     const runId = raw.runId;
     if (!runId) {
+      const parts = restMessageToParts("assistant", raw.text ?? "", { toolCallIdFallback: raw.id });
+      if (raw.attachments?.length) {
+        for (const att of raw.attachments) {
+          if (att.kind === "image") {
+            const attId = `attachment-${att.id}`;
+            (parts as any[]).push({
+              type: "tool-call",
+              id: attId,
+              name: "attachment",
+              arguments: JSON.stringify({ filename: att.filename, mimeType: att.mimeType }),
+              state: "input-complete",
+            });
+            (parts as any[]).push({
+              type: "tool-result",
+              toolCallId: attId,
+              state: "complete",
+              content: JSON.stringify({
+                kind: "image",
+                threadId: raw.threadId,
+                messageId: raw.id,
+                attachmentId: att.id,
+                mimeType: att.mimeType,
+                filename: att.filename,
+              }),
+            });
+          }
+        }
+      }
       result.push({
         id: raw.id,
         role: "assistant",
-        parts: restMessageToParts("assistant", raw.text ?? "", { toolCallIdFallback: raw.id }),
+        parts,
         createdAt: raw.createdAt ? new Date(raw.createdAt) : undefined,
       });
       i++;
@@ -226,6 +282,35 @@ export function messagesToUIMessages(rawMessages: ConversationMessageType[]): UI
       if (toolParts.length > 0 || otherParts.length > 0) {
         allParts.push(...toolParts, ...otherParts);
       }
+
+      if (g.attachments?.length) {
+        for (const att of g.attachments) {
+          if (att.kind === "image") {
+            const attId = `attachment-${att.id}`;
+            allParts.push({
+              type: "tool-call" as const,
+              id: attId,
+              name: "attachment",
+              arguments: JSON.stringify({ filename: att.filename, mimeType: att.mimeType }),
+              state: "input-complete" as const,
+            });
+            allParts.push({
+              type: "tool-result" as const,
+              toolCallId: attId,
+              state: "complete" as const,
+              content: JSON.stringify({
+                kind: "image",
+                threadId: g.threadId,
+                messageId: g.id,
+                attachmentId: att.id,
+                mimeType: att.mimeType,
+                filename: att.filename,
+              }),
+            });
+          }
+        }
+      }
+
       if (textParts.length > 0) {
         allParts.push(...textParts);
       }

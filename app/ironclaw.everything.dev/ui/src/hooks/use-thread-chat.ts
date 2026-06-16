@@ -1,6 +1,7 @@
 import { useSyncExternalStore, useCallback, useEffect, useRef } from "react";
 import type { UIMessage } from "@tanstack/ai";
 import { useApiClient } from "@/app";
+import type { StagedAttachment } from "@/lib/attachments";
 import { threadChatManager } from "./use-thread-chat-manager";
 
 interface UseThreadChatOptions {
@@ -63,8 +64,8 @@ export function useThreadChat({ threadId, initialMessages }: UseThreadChatOption
   );
 
   const sendMessage = useCallback(
-    (content: string) => {
-      threadChatManager.sendMessage(threadId, content);
+    (content: string, attachments?: StagedAttachment[]) => {
+      threadChatManager.sendMessage(threadId, content, attachments);
     },
     [threadId],
   );

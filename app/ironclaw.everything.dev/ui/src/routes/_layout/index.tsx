@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { type ConversationThread, useConversationThreads } from "@/hooks/use-conversation";
-import type { AttachmentLimits } from "@/lib/attachments";
+import type { AttachmentLimits, StagedAttachment } from "@/lib/attachments";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
 import { useVerboseMode } from "@/hooks/use-verbose-mode";
@@ -136,15 +136,15 @@ function ChatAreaCore({
   const isBusy = chat.isLoading;
 
   const handleSend = useCallback(
-    (content: string) => {
+    (content: string, attachments?: StagedAttachment[]) => {
       if (!content.trim() || isBusy) return;
-      chat.sendMessage(content);
+      chat.sendMessage(content, attachments);
     },
     [chat.sendMessage, isBusy],
   );
 
   const firstPendingApproval = chat.pendingApprovals[0];
-  const showLoading = chat.isLoading || chat.error != null;
+  const showLoading = chat.isLoading;
 
   const threadState = threadMeta
     ? {

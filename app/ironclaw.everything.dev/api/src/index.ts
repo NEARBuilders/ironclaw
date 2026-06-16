@@ -621,6 +621,22 @@ export default createPlugin.withPlugins<PluginsClient>()({
             .use(requireAuth)
             .use(ic.credentials)
             .handler(h1(services, (ic) => ic.threads.getState)),
+          listFiles: builder.ironclaw.threads.listFiles
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.threads.listFiles)),
+          statFile: builder.ironclaw.threads.statFile
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.threads.statFile)),
+          downloadFile: builder.ironclaw.threads.downloadFile
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.threads.downloadFile)),
+          getAttachment: builder.ironclaw.threads.getAttachment
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.threads.getAttachment)),
         },
 
         automations: {

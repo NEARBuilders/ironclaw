@@ -26,7 +26,15 @@ function notify(threadId: string) {
   }
 }
 
-async function connectStream(threadId: string, content: string) {
+function stagedToBridgeFormat(a: any) {
+  return {
+    mimeType: a.mimeType,
+    filename: a.filename ?? undefined,
+    dataBase64: a.dataBase64,
+  };
+}
+
+async function connectStream(threadId: string, content: string, attachments?: any[]) {
   const session = sessions.get(threadId);
   if (!session) return;
 
@@ -40,12 +48,14 @@ async function connectStream(threadId: string, content: string) {
   session.pendingApprovals = [];
 
   try {
+    const forwardedAttachments = attachments?.map(stagedToBridgeFormat);
     const response = await fetch(`/api/conversation/threads/${encodeURIComponent(threadId)}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         threadId,
         messages: [{ id: crypto.randomUUID(), role: "user" as const, content }],
+        forwardedProps: forwardedAttachments ? { attachments: forwardedAttachments } : undefined,
       }),
       signal: ac.signal,
     });
@@ -88,7 +98,13 @@ async function connectStream(threadId: string, content: string) {
     if (err instanceof Error && err.name === "AbortError") return;
     const current = sessions.get(threadId);
     if (current && current.abortController === ac) {
-      current.error = err instanceof Error ? err.message : String(err);
+      const message = err instanceof Error ? err.message : String(err);
+      current.error = message;
+      current.messages.push({
+        id: `error-${Date.now()}`,
+        role: "system",
+        parts: [{ type: "text", content: message }],
+      });
     }
   } finally {
     const current = sessions.get(threadId);
@@ -129,6 +145,13 @@ function handleChunk(threadId: string, chunk: any) {
           state: chunk.type === "RUN_ERROR" ? "error" : "complete",
         });
       }
+    }
+    if (chunk.type === "RUN_ERROR" && chunk.message) {
+      session.messages.push({
+        id: `error-${Date.now()}`,
+        role: "system",
+        parts: [{ type: "text", content: chunk.message }],
+      });
     }
     session.version++;
     notify(threadId);
@@ -290,17 +313,45 @@ export const threadChatManager = {
     }
   },
 
-  sendMessage(threadId: string, content: string) {
+  sendMessage(threadId: string, content: string, attachments?: any[]) {
     const session = sessions.get(threadId);
     if (!session || session.isLoading) return;
+    const parts: any[] = [{ type: "text", content }];
+    if (attachments?.length) {
+      for (const a of attachments) {
+        if (a.kind === "image") {
+          parts.push({
+            type: "tool-call",
+            id: `att-${crypto.randomUUID()}`,
+            name: "attachment",
+            arguments: JSON.stringify({ filename: a.filename, mimeType: a.mimeType }),
+            state: "input-complete",
+          });
+          parts.push({
+            type: "tool-result",
+            toolCallId: (parts[parts.length - 1] as any).id,
+            state: "complete",
+            content: JSON.stringify({
+              kind: "image",
+              threadId,
+              messageId: `pending-${crypto.randomUUID()}`,
+              attachmentId: a.id,
+              mimeType: a.mimeType,
+              filename: a.filename,
+              inlineBase64: a.dataBase64,
+            }),
+          });
+        }
+      }
+    }
     session.messages.push({
       id: `pending-${crypto.randomUUID()}`,
       role: "user",
-      parts: [{ type: "text", content }],
+      parts,
     });
     session.version++;
     notify(threadId);
-    connectStream(threadId, content);
+    connectStream(threadId, content, attachments);
   },
 
   stop(threadId: string) {

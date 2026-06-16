@@ -1,5 +1,5 @@
+import type { AcceptedResponse, ChatEvent } from "../../../plugins/ironclaw/src/contract";
 import { ConversationLiveChunkSchema } from "../contract";
-import type { ChatEvent } from "../../../plugins/ironclaw/src/contract";
 
 type LiveChunkType =
   | "RUN_STARTED"
@@ -66,15 +66,20 @@ function resolveToolCallId(
 }
 
 function extractEventRunId(event: ChatEvent): string | undefined {
+  const ack = event.ack;
+  const ackRunId = ack
+    ? ack.outcome === "rejected_busy"
+      ? ack.activeRunId
+      : ack.runId
+    : undefined;
   return (
-    event.ack?.runId ||
-    event.ack?.activeRunId ||
-    event.response?.runId ||
-    event.reply?.turnRunId ||
-    event.progress?.turnRunId ||
-    event.activity?.turnRunId ||
-    event.preview?.turnRunId ||
-    undefined
+    ackRunId ??
+    (event.response?.runId ||
+      event.reply?.turnRunId ||
+      event.progress?.turnRunId ||
+      event.activity?.turnRunId ||
+      event.preview?.turnRunId ||
+      undefined)
   );
 }
 
@@ -148,17 +153,26 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
     const content = (lastUserMsg?.content as string) ?? "";
     const attachments = (forwardedProps?.attachments as any[] | undefined) ?? undefined;
 
-    const ack = await ic.threads.sendMessage({
+    const ack: AcceptedResponse = await ic.threads.sendMessage({
       id: threadId,
       content,
       clientActionId,
       attachments,
     });
-    const ackRunId: string | undefined = ack.runId ?? ack.activeRunId;
-    const eventCursor = ack.eventCursor;
+
+    if (ack.outcome === "rejected_busy") {
+      yield createChunk({
+        type: "RUN_ERROR",
+        threadId,
+        message: ack.notice ?? "Message rejected, thread is busy",
+      });
+      return;
+    }
+
+    const ackRunId = ack.runId;
     const upstream = await ic.threads.streamEvents({
       id: threadId,
-      afterCursor: String(eventCursor),
+      afterCursor: undefined,
     });
     const pendingPreviews = new Map<string, ChatEvent["preview"]>();
     const activeToolCalls = new Set<string>();

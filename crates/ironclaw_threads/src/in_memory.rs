@@ -4,7 +4,6 @@ use std::{
 };
 
 use async_trait::async_trait;
-use chrono::Utc;
 use ironclaw_host_api::ThreadId;
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -86,7 +85,6 @@ impl SessionThreadService for InMemorySessionThreadService {
             return Ok(existing.record.clone());
         }
 
-        let now = Utc::now();
         let record = SessionThreadRecord {
             scope: request.scope,
             thread_id: thread_id.clone(),
@@ -94,8 +92,8 @@ impl SessionThreadService for InMemorySessionThreadService {
             title: request.title,
             metadata_json: request.metadata_json,
             goal: None,
-            created_at: Some(now),
-            updated_at: Some(now),
+            created_at: None,
+            updated_at: None,
         };
         state.threads.insert(
             thread_id,
@@ -731,14 +729,13 @@ impl SessionThreadService for InMemorySessionThreadService {
                 record
             })
             .collect();
-        // Most-recent-first order.
-        matching.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        // Stable order so opaque cursor → resumption is deterministic.
+        matching.sort_by(|a, b| a.thread_id.as_str().cmp(b.thread_id.as_str()));
 
         let start_index = match request.cursor.as_deref() {
             Some(cursor) => matching
                 .iter()
-                .position(|record| record.thread_id.as_str() == cursor)
-                .map(|pos| pos + 1)
+                .position(|record| record.thread_id.as_str() > cursor)
                 .unwrap_or(matching.len()),
             None => 0,
         };

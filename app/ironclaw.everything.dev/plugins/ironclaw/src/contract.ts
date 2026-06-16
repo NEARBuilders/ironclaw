@@ -9,6 +9,30 @@ const Errors = {
   GATEWAY_ERROR: { status: 502, message: "Ironclaw gateway error" },
 };
 
+export const ProjectFsEntrySchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  kind: z.enum(["file", "directory", "symlink", "other"]),
+});
+
+export const ProjectFsListSchema = z.object({
+  entries: z.array(ProjectFsEntrySchema),
+});
+
+export const ProjectFsStatSchema = z.object({
+  path: z.string(),
+  kind: z.enum(["file", "directory", "symlink", "other"]),
+  sizeBytes: z.number(),
+  mimeType: z.string(),
+});
+
+export const DownloadFileResponseSchema = z.object({
+  contentBase64: z.string(),
+  mimeType: z.string(),
+  filename: z.string(),
+  sizeBytes: z.number(),
+});
+
 export const AttachmentCapabilitiesSchema = z.object({
   accept: z.array(z.string()),
   maxCount: z.number(),
@@ -118,18 +142,38 @@ export const ThreadStateSchema = z.object({
   ),
 });
 
-export const AcceptedResponseSchema = z.object({
-  outcome: z.string(),
+const AcceptedResponseCommon = {
   threadId: z.string(),
   acceptedMessageRef: z.string(),
-  runId: z.string().optional(),
-  activeRunId: z.string().optional(),
-  turnId: z.string().optional(),
-  status: z.string(),
-  resolvedRunProfileId: z.string().optional(),
-  resolvedRunProfileVersion: z.number().optional(),
-  eventCursor: z.number().optional(),
-});
+};
+
+export const AcceptedResponseSchema = z.discriminatedUnion("outcome", [
+  z.object({
+    ...AcceptedResponseCommon,
+    outcome: z.literal("submitted"),
+    runId: z.string(),
+    turnId: z.string(),
+    status: z.string(),
+    resolvedRunProfileId: z.string(),
+    resolvedRunProfileVersion: z.number(),
+    eventCursor: z.number(),
+  }),
+  z.object({
+    ...AcceptedResponseCommon,
+    outcome: z.literal("rejected_busy"),
+    activeRunId: z.string().nullable().optional(),
+    status: z.string().nullable().optional(),
+    eventCursor: z.number().nullable().optional(),
+    notice: z.string(),
+  }),
+  z.object({
+    ...AcceptedResponseCommon,
+    outcome: z.literal("already_submitted"),
+    runId: z.string(),
+    status: z.string(),
+    eventCursor: z.number(),
+  }),
+]);
 
 export const GateResolutionSchema = z.enum([
   "approved",
@@ -156,16 +200,34 @@ export const ChatEventSchema = z.object({
     "keep_alive",
   ]),
   ack: z
-    .object({
-      outcome: z.string(),
-      threadId: z.string(),
-      runId: z.string().optional(),
-      activeRunId: z.string().optional(),
-      acceptedMessageRef: z.string(),
-      status: z.string(),
-      turnId: z.string().optional(),
-      eventCursor: z.number().optional(),
-    })
+    .discriminatedUnion("outcome", [
+      z.object({
+        outcome: z.literal("submitted"),
+        threadId: z.string(),
+        acceptedMessageRef: z.string(),
+        runId: z.string(),
+        turnId: z.string(),
+        status: z.string(),
+        eventCursor: z.number(),
+      }),
+      z.object({
+        outcome: z.literal("rejected_busy"),
+        threadId: z.string(),
+        acceptedMessageRef: z.string(),
+        activeRunId: z.string().nullable().optional(),
+        status: z.string().nullable().optional(),
+        eventCursor: z.number().nullable().optional(),
+        notice: z.string(),
+      }),
+      z.object({
+        outcome: z.literal("already_submitted"),
+        threadId: z.string(),
+        acceptedMessageRef: z.string(),
+        runId: z.string(),
+        status: z.string(),
+        eventCursor: z.number(),
+      }),
+    ])
     .optional(),
   progress: z
     .object({
@@ -620,6 +682,67 @@ export const contract = oc.router({
       })
       .input(z.object({ id: z.string() }))
       .output(ThreadStateSchema)
+      .errors(Errors),
+
+    listFiles: oc
+      .route({
+        method: "GET",
+        path: "/threads/{id}/files",
+        summary: "List files in the thread's project workspace",
+      })
+      .input(
+        z.object({
+          id: z.string(),
+          path: z.string().optional(),
+        }),
+      )
+      .output(ProjectFsListSchema)
+      .errors(Errors),
+
+    statFile: oc
+      .route({
+        method: "GET",
+        path: "/threads/{id}/files/stat",
+        summary: "Get metadata for a project file",
+      })
+      .input(
+        z.object({
+          id: z.string(),
+          path: z.string(),
+        }),
+      )
+      .output(ProjectFsStatSchema)
+      .errors(Errors),
+
+    downloadFile: oc
+      .route({
+        method: "GET",
+        path: "/threads/{id}/files/content",
+        summary: "Download a file from the thread's project workspace",
+      })
+      .input(
+        z.object({
+          id: z.string(),
+          path: z.string(),
+        }),
+      )
+      .output(DownloadFileResponseSchema)
+      .errors(Errors),
+
+    getAttachment: oc
+      .route({
+        method: "GET",
+        path: "/threads/{id}/messages/{messageId}/attachments/{attachmentId}",
+        summary: "Get attachment bytes from a message",
+      })
+      .input(
+        z.object({
+          id: z.string(),
+          messageId: z.string(),
+          attachmentId: z.string(),
+        }),
+      )
+      .output(DownloadFileResponseSchema)
       .errors(Errors),
   },
 

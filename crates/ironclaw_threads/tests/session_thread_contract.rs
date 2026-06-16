@@ -2534,7 +2534,7 @@ async fn list_threads_for_scope_is_scope_filtered_and_paginated() {
         .await
         .unwrap();
 
-    // Scope filter: A sees only A's threads, most recent first.
+    // Scope filter: A sees only A's threads, sorted deterministically.
     let scope_a_all = service
         .list_threads_for_scope(ListThreadsForScopeRequest {
             scope: scope_a.clone(),
@@ -2548,13 +2548,13 @@ async fn list_threads_for_scope_is_scope_filtered_and_paginated() {
         .iter()
         .map(|record| record.thread_id.as_str())
         .collect();
-    assert_eq!(ids, ["t-a-003", "t-a-002", "t-a-001"]);
+    assert_eq!(ids, ["t-a-001", "t-a-002", "t-a-003"]);
     assert!(
         scope_a_all.next_cursor.is_none(),
         "no more pages when page size > total",
     );
 
-    // Pagination: limit=2 → first page is [003, 002] with cursor=002.
+    // Pagination: limit=2 → first page is [001, 002] with cursor=002.
     let page_1 = service
         .list_threads_for_scope(ListThreadsForScopeRequest {
             scope: scope_a.clone(),
@@ -2568,10 +2568,10 @@ async fn list_threads_for_scope_is_scope_filtered_and_paginated() {
         .iter()
         .map(|record| record.thread_id.as_str())
         .collect();
-    assert_eq!(page_1_ids, ["t-a-003", "t-a-002"]);
+    assert_eq!(page_1_ids, ["t-a-001", "t-a-002"]);
     assert_eq!(page_1.next_cursor.as_deref(), Some("t-a-002"));
 
-    // Follow-up: cursor=002 → next page is [001] with no further cursor.
+    // Follow-up: cursor=002 → next page is [003] with no further cursor.
     let page_2 = service
         .list_threads_for_scope(ListThreadsForScopeRequest {
             scope: scope_a.clone(),
@@ -2585,7 +2585,7 @@ async fn list_threads_for_scope_is_scope_filtered_and_paginated() {
         .iter()
         .map(|record| record.thread_id.as_str())
         .collect();
-    assert_eq!(page_2_ids, ["t-a-001"]);
+    assert_eq!(page_2_ids, ["t-a-003"]);
     assert!(page_2.next_cursor.is_none());
 
     // Cross-scope safety: scope B sees only its own thread, never A's.
