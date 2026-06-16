@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
-import { Check, Cloud, Terminal } from "lucide-react";
+import { Check, Cloud, Shuffle, Terminal } from "lucide-react";
 import { toast } from "sonner";
 import { useMemo } from "react";
 import type { Organization } from "@/app";
@@ -169,6 +169,18 @@ export function UserNav() {
           <DropdownMenuLabel className="text-xs text-muted-foreground">
             connection
           </DropdownMenuLabel>
+          <DropdownMenuItem
+            onClick={() => switchMode("auto")}
+            className="gap-2 text-xs cursor-pointer"
+          >
+            <div className="flex h-4 w-4 items-center justify-center">
+              {connectionMode === "auto" && (
+                <Check size={12} className="text-[color:var(--near-green)]" />
+              )}
+            </div>
+            <Shuffle size={12} className="shrink-0" />
+            Auto (prefer local tunnel)
+          </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => switchMode("hosted")}
             className="gap-2 text-xs cursor-pointer"

@@ -33,7 +33,14 @@ export const IronclawSettingsSchema = z.object({
   apiToken: z.string(),
   hasToken: z.boolean().optional(),
   updatedAt: z.iso.datetime().optional(),
+  scope: z.enum(["personal", "organization", "platform"]).optional(),
 });
+
+const IronclawScopeSchema = z
+  .enum(["personal", "organization", "platform"])
+  .optional()
+  .default("personal");
+const IronclawModeSchema = z.enum(["auto", "hosted", "local"]);
 
 const ConversationAttachmentInputSchema = z.object({
   mimeType: z.string(),
@@ -222,6 +229,7 @@ export const contract = oc.router({
           path: "/ironclaw/settings",
           summary: "Get ironclaw connection settings",
         })
+        .input(z.object({ scope: IronclawScopeSchema }).optional())
         .output(IronclawSettingsSchema)
         .errors({ UNAUTHORIZED, NOT_FOUND }),
 
@@ -235,6 +243,7 @@ export const contract = oc.router({
           z.object({
             tunnelUrl: z.string().url(),
             apiToken: z.string().optional(),
+            scope: IronclawScopeSchema,
           }),
         )
         .output(z.object({ success: z.boolean() }))
@@ -246,6 +255,26 @@ export const contract = oc.router({
           path: "/ironclaw/settings",
           summary: "Delete ironclaw connection settings",
         })
+        .input(z.object({ scope: IronclawScopeSchema }).optional())
+        .output(z.object({ success: z.boolean() }))
+        .errors({ UNAUTHORIZED }),
+
+      getMode: oc
+        .route({
+          method: "GET",
+          path: "/ironclaw/settings/mode",
+          summary: "Get user's ironclaw connection mode preference",
+        })
+        .output(z.object({ mode: IronclawModeSchema }))
+        .errors({ UNAUTHORIZED }),
+
+      setMode: oc
+        .route({
+          method: "PUT",
+          path: "/ironclaw/settings/mode",
+          summary: "Set user's ironclaw connection mode preference",
+        })
+        .input(z.object({ mode: IronclawModeSchema }))
         .output(z.object({ success: z.boolean() }))
         .errors({ UNAUTHORIZED }),
     },
