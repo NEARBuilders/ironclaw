@@ -1,9 +1,98 @@
 import type { ToolCallPart, ToolResultPart, UIMessage } from "@tanstack/ai";
-import { AlertCircle, Copy } from "lucide-react";
-import { useState } from "react";
+import { AlertCircle, ChevronDown, Copy, FileIcon, Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useApiClient } from "@/app";
 import { ActivityRun } from "@/components/activity-run";
 import { Markdown } from "@/components/ui/markdown";
 import { cn } from "@/lib/utils";
+
+function InlineAttachmentImage({
+  threadId,
+  messageId,
+  attachmentId,
+  mimeType,
+  filename,
+  inlineBase64,
+}: {
+  threadId: string;
+  messageId: string;
+  attachmentId: string;
+  mimeType?: string;
+  filename?: string;
+  inlineBase64?: string;
+}) {
+  const apiClient = useApiClient();
+  const [src, setSrc] = useState<string | null>(null);
+  const [error, setError] = useState(false);
+  const blobUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (inlineBase64) {
+          const binaryStr = atob(inlineBase64);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: mimeType ?? "image/png" });
+          const url = URL.createObjectURL(blob);
+          blobUrlRef.current = url;
+          if (!cancelled) setSrc(url);
+          return;
+        }
+        const result = await apiClient.ironclaw.threads.getAttachment({
+          id: threadId,
+          messageId,
+          attachmentId,
+        });
+        if (cancelled) return;
+        const binaryStr = atob(result.contentBase64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: result.mimeType });
+        const url = URL.createObjectURL(blob);
+        blobUrlRef.current = url;
+        setSrc(url);
+      } catch {
+        if (!cancelled) setError(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    };
+  }, [apiClient, threadId, messageId, attachmentId, inlineBase64]);
+
+  if (error) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-muted-foreground">
+        <FileIcon size={14} />
+        {filename ?? "attachment"}
+      </div>
+    );
+  }
+
+  if (!src) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-border bg-muted px-3 py-6">
+        <Loader2 size={16} className="animate-spin text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">Loading image...</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={filename ?? "attachment"}
+      className="max-h-64 w-auto rounded-lg object-cover"
+    />
+  );
+}
 
 interface ChatMessageProps {
   message: UIMessage;
@@ -24,8 +113,10 @@ function RenderedBlocks({ parts, messageId }: { parts: React.ReactNode[]; messag
 
 export function ChatMessage({ message, isOptimistic, status, verbose }: ChatMessageProps) {
   const isUser = message.role === "user";
+  const isSystem = message.role === "system";
   const isFailed = status === "failed";
   const [copied, setCopied] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
 
   const handleCopy = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -44,6 +135,82 @@ export function ChatMessage({ message, isOptimistic, status, verbose }: ChatMess
     .map((p) => p.content)
     .join(" ");
 
+  const errorData = message.parts.find((p: any) => p.type === "error-data") as
+    | { type: "error-data"; content: unknown }
+    | undefined;
+
+  if (isSystem) {
+    return (
+      <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 max-w-[85%] sm:max-w-[78%] lg:max-w-[70%]">
+        <AlertCircle size={14} className="shrink-0 text-destructive mt-0.5" />
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-destructive">Error</p>
+          <Markdown
+            content={textContent}
+            className="text-sm text-destructive/80 [&_p]:mb-0"
+          />
+          {errorData && (
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setDetailsExpanded((v) => !v)}
+                aria-expanded={detailsExpanded}
+                className="flex items-center gap-1 text-xs text-destructive/60 hover:text-destructive transition-colors"
+              >
+                <ChevronDown
+                  size={12}
+                  className={detailsExpanded ? "rotate-0" : "-rotate-90"}
+                />
+                {detailsExpanded ? "Hide details" : "Error details"}
+              </button>
+              {detailsExpanded && (
+                <pre className="mt-2 rounded bg-destructive/10 p-2 text-xs text-destructive/80 whitespace-pre-wrap overflow-x-auto max-h-48 overflow-y-auto">
+                  {typeof errorData.content === "string"
+                    ? errorData.content
+                    : JSON.stringify(errorData.content, null, 2)}
+                </pre>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const attachmentImages = (() => {
+    const images: Array<{
+      key: string;
+      threadId: string;
+      messageId: string;
+      attachmentId: string;
+      mimeType?: string;
+      filename?: string;
+      inlineBase64?: string;
+    }> = [];
+    for (const p of message.parts) {
+      if (p.type !== "tool-call" || p.name !== "attachment") continue;
+      const result = toolResultMap.get(p.id);
+      if (!result) continue;
+      try {
+        const data: Record<string, unknown> = JSON.parse(
+          typeof result.content === "string" ? result.content : "{}",
+        );
+        if (data.kind === "image" && typeof data.threadId === "string") {
+          images.push({
+            key: p.id,
+            threadId: String(data.threadId),
+            messageId: String(data.messageId ?? ""),
+            attachmentId: String(data.attachmentId ?? ""),
+            mimeType: typeof data.mimeType === "string" ? data.mimeType : undefined,
+            filename: typeof data.filename === "string" ? data.filename : undefined,
+            inlineBase64: typeof data.inlineBase64 === "string" ? data.inlineBase64 : undefined,
+          });
+        }
+      } catch {}
+    }
+    return images;
+  })();
+
   function buildBlocks(): React.ReactNode[] {
     const blocks: React.ReactNode[] = [];
     let toolGroup: ToolCallPart[] = [];
@@ -60,6 +227,19 @@ export function ChatMessage({ message, isOptimistic, status, verbose }: ChatMess
 
     for (const p of message.parts) {
       if (p.type === "tool-call") {
+        if (p.name === "attachment") {
+          flushToolGroup();
+          const result = toolResultMap.get(p.id);
+          if (result) {
+            try {
+              const data = JSON.parse(typeof result.content === "string" ? result.content : "{}");
+              if (data.kind === "image") {
+                blocks.push(<InlineAttachmentImage key={p.id} {...data} />);
+              }
+            } catch {}
+          }
+          continue;
+        }
         toolGroup.push(p);
         continue;
       }
@@ -125,7 +305,14 @@ export function ChatMessage({ message, isOptimistic, status, verbose }: ChatMess
           </div>
         )}
         {isUser ? (
-          <p className="whitespace-pre-wrap break-words">{textContent}</p>
+          <>
+            {textContent && (
+              <p className="whitespace-pre-wrap break-words">{textContent}</p>
+            )}
+            {attachmentImages.map(({ key, ...img }) => (
+              <InlineAttachmentImage key={key} {...img} />
+            ))}
+          </>
         ) : (
           <RenderedBlocks parts={blocks} messageId={message.id} />
         )}

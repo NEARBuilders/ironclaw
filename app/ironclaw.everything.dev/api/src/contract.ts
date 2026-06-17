@@ -29,7 +29,7 @@ export const LeaderboardEntrySchema = z.object({
 });
 
 export const IronclawSettingsSchema = z.object({
-  tunnelUrl: z.string().url(),
+  baseUrl: z.string().url(),
   apiToken: z.string(),
   hasToken: z.boolean().optional(),
   updatedAt: z.iso.datetime().optional(),
@@ -159,6 +159,7 @@ export const ConversationLiveChunkSchema = z.object({
   state: z.string().optional(),
   finishReason: z.string().nullable().optional(),
   message: z.string().optional(),
+  details: z.string().optional(),
   name: z.string().optional(),
   value: z.unknown().optional(),
 });
@@ -241,7 +242,7 @@ export const contract = oc.router({
         })
         .input(
           z.object({
-            tunnelUrl: z.string().url(),
+            baseUrl: z.string().url(),
             apiToken: z.string().optional(),
             scope: IronclawScopeSchema,
           }),

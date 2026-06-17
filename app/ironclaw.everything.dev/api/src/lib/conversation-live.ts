@@ -1,5 +1,5 @@
+import type { AcceptedResponse, ChatEvent } from "../../../plugins/ironclaw/src/contract";
 import { ConversationLiveChunkSchema } from "../contract";
-import type { ChatEvent } from "../../../plugins/ironclaw/src/contract";
 
 type LiveChunkType =
   | "RUN_STARTED"
@@ -31,6 +31,7 @@ type LiveChunk = {
   state?: string;
   finishReason?: string | null;
   message?: string;
+  details?: string;
   name?: string;
   value?: unknown;
 };
@@ -38,6 +39,22 @@ type LiveChunk = {
 function normalizeMessage(value: unknown): string {
   if (value instanceof Error) return value.message;
   return typeof value === "string" ? value : String(value);
+}
+
+function normalizeDetails(value: unknown): string | undefined {
+  if (!value) return undefined;
+  if (value instanceof Error) {
+    const stack = value.stack;
+    const msg = value.message;
+    if (stack && stack !== msg) return stack;
+    return msg;
+  }
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
 
 function serializeToolResultEnvelope(envelope: {
@@ -66,15 +83,20 @@ function resolveToolCallId(
 }
 
 function extractEventRunId(event: ChatEvent): string | undefined {
+  const ack = event.ack;
+  const ackRunId = ack
+    ? ack.outcome === "rejected_busy"
+      ? ack.activeRunId
+      : ack.runId
+    : undefined;
   return (
-    event.ack?.runId ||
-    event.ack?.activeRunId ||
-    event.response?.runId ||
-    event.reply?.turnRunId ||
-    event.progress?.turnRunId ||
-    event.activity?.turnRunId ||
-    event.preview?.turnRunId ||
-    undefined
+    ackRunId ??
+    (event.response?.runId ||
+      event.reply?.turnRunId ||
+      event.progress?.turnRunId ||
+      event.activity?.turnRunId ||
+      event.preview?.turnRunId ||
+      undefined)
   );
 }
 
@@ -148,17 +170,27 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
     const content = (lastUserMsg?.content as string) ?? "";
     const attachments = (forwardedProps?.attachments as any[] | undefined) ?? undefined;
 
-    const ack = await ic.threads.sendMessage({
+    const ack: AcceptedResponse = await ic.threads.sendMessage({
       id: threadId,
       content,
       clientActionId,
       attachments,
     });
-    const ackRunId: string | undefined = ack.runId ?? ack.activeRunId;
-    const eventCursor = ack.eventCursor;
+
+    if (ack.outcome === "rejected_busy") {
+      yield createChunk({
+        type: "RUN_ERROR",
+        threadId,
+        message: ack.notice ?? "Message rejected, thread is busy",
+        details: `Rejected outcome: ${ack.outcome}, activeRunId: ${ack.activeRunId ?? "unknown"}`,
+      });
+      return;
+    }
+
+    const ackRunId = ack.runId;
     const upstream = await ic.threads.streamEvents({
       id: threadId,
-      afterCursor: String(eventCursor),
+      afterCursor: undefined,
     });
     const pendingPreviews = new Map<string, ChatEvent["preview"]>();
     const activeToolCalls = new Set<string>();
@@ -491,10 +523,11 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
           const runState = raw.runState;
           const failure = runState?.failure;
           const message = normalizeMessage(failure ?? raw.response ?? "Run failed");
+          const details = normalizeDetails(runState);
           const chunk = emitRunStarted(eventRunId);
           if (chunk) yield chunk;
-          yield emitCustom("ironclaw.failed", { runId: eventRunId, message, runState }, eventRunId);
-          yield createChunk({ type: "RUN_ERROR", threadId, runId: eventRunId, message });
+          yield emitCustom("ironclaw.failed", { runId: eventRunId, message, details, runState }, eventRunId);
+          yield createChunk({ type: "RUN_ERROR", threadId, runId: eventRunId, message, details });
           return;
         }
 
@@ -695,12 +728,13 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
                 if (isFailed) {
                   const msg =
                     ((rs.raw.failureSummary ?? rs.raw.failure_summary) as string) ?? `Run ${st}`;
+                  const details = normalizeDetails(rs.raw);
                   yield emitCustom(
                     "ironclaw.failed",
-                    { runId, message: msg, runState: rs.raw },
+                    { runId, message: msg, details, runState: rs.raw },
                     runId,
                   );
-                  yield createChunk({ type: "RUN_ERROR", threadId, runId, message: msg });
+                  yield createChunk({ type: "RUN_ERROR", threadId, runId, message: msg, details });
                   return;
                 }
                 if (st === "cancelled") {
@@ -805,6 +839,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
         threadId,
         runId: ackRunId ?? crypto.randomUUID(),
         message: normalizeMessage(error),
+        details: normalizeDetails(error),
       });
     } finally {
       if (typeof upstream.return === "function") {

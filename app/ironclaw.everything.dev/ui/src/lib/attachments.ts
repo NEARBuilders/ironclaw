@@ -1,3 +1,10 @@
+interface DownloadFileResponse {
+  contentBase64: string;
+  mimeType: string;
+  filename: string;
+  sizeBytes: number;
+}
+
 interface AttachmentLimits {
   accept: string[];
   maxCount: number;
@@ -16,6 +23,16 @@ interface StagedAttachment {
 }
 
 export type { AttachmentLimits, StagedAttachment };
+
+export function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
 
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -126,4 +143,21 @@ export async function stageFiles(
   }
 
   return { staged, errors };
+}
+
+export function downloadFile(response: DownloadFileResponse): void {
+  const binaryStr = atob(response.contentBase64);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+  const blob = new Blob([bytes], { type: response.mimeType });
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = response.filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(blobUrl);
 }

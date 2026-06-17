@@ -7,12 +7,15 @@ import type {
   AutomationSchema,
   ChatEventSchema,
   ConnectableChannelSchema,
+  DownloadFileResponseSchema,
   ExtensionActionResponseSchema,
   ExtensionRegistryEntrySchema,
   ExtensionSchema,
   ExtensionSetupDetailSchema,
   OutboundPreferencesSchema,
   OutboundTargetSchema,
+  ProjectFsEntrySchema,
+  ProjectFsStatSchema,
   SessionSchema,
   SkillActionResponseSchema,
   SkillContentResponseSchema,
@@ -44,6 +47,9 @@ type SkillActionResponse = z.infer<typeof SkillActionResponseSchema>;
 type ConnectableChannel = z.infer<typeof ConnectableChannelSchema>;
 type ThreadState = z.infer<typeof ThreadStateSchema>;
 type AttachmentCapabilities = z.infer<typeof AttachmentCapabilitiesSchema>;
+type ProjectFsEntry = z.infer<typeof ProjectFsEntrySchema>;
+type ProjectFsStat = z.infer<typeof ProjectFsStatSchema>;
+type DownloadFileResponse = z.infer<typeof DownloadFileResponseSchema>;
 
 const BODY_METHODS = new Set(["POST", "PUT", "PATCH"]);
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -183,6 +189,16 @@ export class IronclawService {
     this.token = token;
   }
 
+  private arrayBufferToBase64(buffer: ArrayBuffer): string {
+    let binary = "";
+    const bytes = new Uint8Array(buffer);
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+    }
+    return btoa(binary);
+  }
+
   private async request<T>(
     method: string,
     path: string,
@@ -220,10 +236,41 @@ export class IronclawService {
         throw new IronclawUpstreamError(response.status, method, path, errorBody);
       }
 
-      return response.json();
+      return response.json() as Promise<T>;
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private async requestBinary(
+    method: string,
+    path: string,
+    params?: Record<string, string | undefined>,
+  ): Promise<{ bytes: ArrayBuffer; mimeType: string; filename: string; sizeBytes: number }> {
+    const url = new URL(`${this.baseUrl}${path}`);
+    if (params) {
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined) url.searchParams.set(key, value);
+      }
+    }
+
+    const response = await fetch(url.toString(), {
+      method,
+      headers: { Authorization: `Bearer ${this.token}` },
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      throw new IronclawUpstreamError(response.status, method, path, errorBody);
+    }
+
+    const bytes = await response.arrayBuffer();
+    const mimeType = response.headers.get("Content-Type") ?? "application/octet-stream";
+    const disposition = response.headers.get("Content-Disposition") ?? "";
+    const filename = disposition.match(/filename="?(.+?)"?$/)?.[1] ?? "download";
+    const sizeBytes = Number(response.headers.get("Content-Length")) || bytes.byteLength;
+
+    return { bytes, mimeType, filename, sizeBytes };
   }
 
   ping() {
@@ -350,32 +397,40 @@ export class IronclawService {
           `/api/webchat/v2/threads/${encodeURIComponent(id)}/messages`,
           body,
         );
-        const base = {
-          outcome: raw.outcome,
-          threadId: raw.thread_id,
-          acceptedMessageRef: raw.accepted_message_ref,
-          status: raw.status,
-        };
         if (raw.outcome === "submitted") {
           return {
-            ...base,
+            outcome: "submitted" as const,
+            threadId: raw.thread_id,
+            acceptedMessageRef: raw.accepted_message_ref,
             runId: raw.run_id,
             turnId: raw.turn_id,
+            status: raw.status,
             resolvedRunProfileId: raw.resolved_run_profile_id,
             resolvedRunProfileVersion: raw.resolved_run_profile_version,
             eventCursor: raw.event_cursor,
           } as AcceptedResponse;
         }
-        if (raw.outcome === "deferred_busy") {
+        if (raw.outcome === "rejected_busy") {
           return {
-            ...base,
-            activeRunId: raw.active_run_id,
-            eventCursor: raw.event_cursor,
+            outcome: "rejected_busy" as const,
+            threadId: raw.thread_id,
+            acceptedMessageRef: raw.accepted_message_ref,
+            activeRunId: raw.active_run_id ?? undefined,
+            status: raw.status ?? undefined,
+            eventCursor: raw.event_cursor ?? undefined,
+            notice: raw.notice ?? "",
           } as AcceptedResponse;
         }
+        console.warn("[ironclaw] sendMessage unexpected outcome", {
+          outcome: raw.outcome,
+          threadId: raw.thread_id,
+        });
         return {
-          ...base,
+          outcome: "already_submitted" as const,
+          threadId: raw.thread_id,
+          acceptedMessageRef: raw.accepted_message_ref,
           runId: raw.run_id,
+          status: raw.status,
           eventCursor: raw.event_cursor,
         } as AcceptedResponse;
       },
@@ -506,16 +561,41 @@ export class IronclawService {
           type: raw.type,
         };
         if (raw.ack) {
-          base.ack = {
-            outcome: raw.ack.outcome,
-            threadId: raw.ack.thread_id,
-            runId: raw.ack.run_id ?? undefined,
-            activeRunId: raw.ack.active_run_id ?? undefined,
-            acceptedMessageRef: raw.ack.accepted_message_ref,
-            status: raw.ack.status,
-            turnId: raw.ack.turn_id ?? undefined,
-            eventCursor: raw.ack.event_cursor ?? undefined,
-          };
+          const outcome = raw.ack.outcome;
+          if (outcome === "submitted") {
+            base.ack = {
+              outcome: "submitted" as const,
+              threadId: raw.ack.thread_id,
+              acceptedMessageRef: raw.ack.accepted_message_ref,
+              runId: raw.ack.run_id,
+              turnId: raw.ack.turn_id,
+              status: raw.ack.status,
+              eventCursor: raw.ack.event_cursor,
+            };
+          } else if (outcome === "rejected_busy") {
+            base.ack = {
+              outcome: "rejected_busy" as const,
+              threadId: raw.ack.thread_id,
+              acceptedMessageRef: raw.ack.accepted_message_ref,
+              activeRunId: raw.ack.active_run_id ?? undefined,
+              status: raw.ack.status ?? undefined,
+              eventCursor: raw.ack.event_cursor ?? undefined,
+              notice: raw.ack.notice ?? "",
+            };
+          } else {
+            console.warn("[ironclaw] streamEvents unknown ack outcome", {
+              outcome: raw.ack.outcome,
+              threadId: raw.ack.thread_id,
+            });
+            base.ack = {
+              outcome: "already_submitted" as const,
+              threadId: raw.ack.thread_id,
+              acceptedMessageRef: raw.ack.accepted_message_ref,
+              runId: raw.ack.run_id,
+              status: raw.ack.status,
+              eventCursor: raw.ack.event_cursor,
+            };
+          }
         }
         if (raw.progress) {
           base.progress = {
@@ -880,7 +960,7 @@ export class IronclawService {
           "GET",
           `/api/webchat/v2/extensions/${encodeURIComponent(name)}/setup`,
         );
-        return transformKeys(raw);
+        return transformKeys(raw) as z.infer<typeof ExtensionSetupDetailSchema>;
       },
       catch: (error: unknown) =>
         new Error(
@@ -1086,6 +1166,105 @@ export class IronclawService {
           `Failed to get thread state: ${error instanceof Error ? error.message : String(error)}`,
         );
       },
+    });
+  }
+
+  listProjectFiles(
+    id: string,
+    path?: string,
+  ): Effect.Effect<{ entries: ProjectFsEntry[] }, Error> {
+    return Effect.tryPromise({
+      try: async () => {
+        const raw: any = await this.request(
+          "GET",
+          `/api/webchat/v2/threads/${encodeURIComponent(id)}/files`,
+          undefined,
+          { path },
+        );
+        return {
+          entries: (raw.entries ?? []).map((e: any) => ({
+            name: e.name,
+            path: e.path,
+            kind: e.kind,
+          })),
+        };
+      },
+      catch: (error: unknown) =>
+        new Error(
+          `Failed to list project files: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+    });
+  }
+
+  statProjectFile(id: string, path: string): Effect.Effect<ProjectFsStat, Error> {
+    return Effect.tryPromise({
+      try: async () => {
+        const raw: any = await this.request(
+          "GET",
+          `/api/webchat/v2/threads/${encodeURIComponent(id)}/files/stat`,
+          undefined,
+          { path },
+        );
+        return {
+          path: raw.stat.path,
+          kind: raw.stat.kind,
+          sizeBytes: raw.stat.size_bytes,
+          mimeType: raw.stat.mime_type,
+        } as ProjectFsStat;
+      },
+      catch: (error: unknown) =>
+        new Error(
+          `Failed to stat project file: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+    });
+  }
+
+  fetchFileContent(id: string, path: string): Effect.Effect<DownloadFileResponse, Error> {
+    return Effect.tryPromise({
+      try: async () => {
+        const result = await this.requestBinary(
+          "GET",
+          `/api/webchat/v2/threads/${encodeURIComponent(id)}/files/content`,
+          { path },
+        );
+        const contentBase64 = this.arrayBufferToBase64(result.bytes);
+        return {
+          contentBase64,
+          mimeType: result.mimeType,
+          filename: result.filename,
+          sizeBytes: result.sizeBytes,
+        } as DownloadFileResponse;
+      },
+      catch: (error: unknown) =>
+        new Error(
+          `Failed to download file: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+    });
+  }
+
+  getAttachment(
+    threadId: string,
+    messageId: string,
+    attachmentId: string,
+  ): Effect.Effect<DownloadFileResponse, Error> {
+    return Effect.tryPromise({
+      try: async () => {
+        const result = await this.requestBinary(
+          "GET",
+          `/api/webchat/v2/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`,
+        );
+        const contentBase64 = this.arrayBufferToBase64(result.bytes);
+        return {
+          contentBase64,
+          mimeType: result.mimeType,
+          filename: result.filename,
+          sizeBytes: result.sizeBytes,
+        } as DownloadFileResponse;
+      },
+      catch: (error: unknown) =>
+        new Error(
+          `Failed to get attachment: ${error instanceof Error ? error.message : String(error)}`,
+        ),
     });
   }
 

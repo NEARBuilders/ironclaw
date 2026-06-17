@@ -196,6 +196,40 @@ export default createPlugin({
         getState: builder.threads.getState
           .use(requireAuth)
           .handler(ri((svc, input) => Effect.runPromise(svc.getThreadState(input.id)))),
+
+        listFiles: builder.threads.listFiles
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) =>
+              Effect.runPromise(svc.listProjectFiles(input.id, input.path)),
+            ),
+          ),
+
+        statFile: builder.threads.statFile
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) =>
+              Effect.runPromise(svc.statProjectFile(input.id, input.path)),
+            ),
+          ),
+
+        downloadFile: builder.threads.downloadFile
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) =>
+              Effect.runPromise(svc.fetchFileContent(input.id, input.path)),
+            ),
+          ),
+
+        getAttachment: builder.threads.getAttachment
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) =>
+              Effect.runPromise(
+                svc.getAttachment(input.id, input.messageId, input.attachmentId),
+              ),
+            ),
+          ),
       },
 
       automations: {
