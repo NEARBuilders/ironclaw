@@ -1,8 +1,8 @@
 import { Paperclip, Send, Square, X } from "lucide-react";
-import { type KeyboardEvent, useRef, useState } from "react";
+import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { type AttachmentLimits, type StagedAttachment, stageFiles } from "@/lib/attachments";
 
 interface ChatInputProps {
@@ -25,6 +25,14 @@ export function ChatInput({
   const [value, setValue] = useState("");
   const [staged, setStaged] = useState<StagedAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
 
   const handleSend = () => {
     const trimmed = value.trim();
@@ -34,7 +42,7 @@ export function ChatInput({
     setStaged([]);
   };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -93,12 +101,12 @@ export function ChatInput({
             ))}
           </div>
         ) : null}
-        <div className="flex items-center gap-2">
+        <div className="flex items-end gap-2">
           <Button
             type="button"
             size="icon"
             variant="ghost"
-            className="shrink-0 h-9 w-9 text-muted-foreground hover:text-foreground"
+            className="shrink-0 h-10 w-10 sm:h-9 sm:w-9 text-muted-foreground hover:text-foreground"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || isSending}
             title="Attach file"
@@ -113,15 +121,18 @@ export function ChatInput({
             accept={attachmentCapabilities?.accept?.join(",") ?? "*/*"}
             onChange={handleFilePick}
           />
-          <Input
+          <Textarea
+            ref={textareaRef}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={placeholder}
             onKeyDown={handleKeyDown}
             disabled={disabled}
+            className="min-h-0 resize-none text-base sm:text-sm"
+            rows={1}
           />
           {isSending && onStop ? (
-            <Button size="icon" variant="secondary" onClick={onStop} title="Stop generating">
+            <Button size="icon" variant="secondary" onClick={onStop} title="Stop generating" className="h-10 w-10 sm:h-9 sm:w-9">
               <Square size={14} className="fill-current" />
             </Button>
           ) : (
@@ -129,6 +140,7 @@ export function ChatInput({
               size="icon"
               onClick={handleSend}
               disabled={!value.trim() || isSending || disabled}
+              className="h-10 w-10 sm:h-9 sm:w-9"
             >
               <Send size={14} />
             </Button>
