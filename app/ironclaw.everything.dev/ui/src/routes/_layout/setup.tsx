@@ -804,7 +804,7 @@ function IronclawPage() {
                 />
                 <span className="text-xs text-muted-foreground flex-1">
                   {isConnected
-                    ? `Connected via ${connectionMode === "hosted" ? "hosted agent" : "local binary"}`
+                    ? `Connected via ${connectionMode === "hosted" ? "deployed" : "tunnel"}`
                     : connectionStatus === "disconnected"
                       ? "Connection lost — check your agent and try refreshing"
                       : "Not connected — configure your connection below"}
@@ -824,24 +824,6 @@ function IronclawPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="rounded-xl border-2 border-border bg-card p-6 opacity-40 blur-[2px] pointer-events-none select-none">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                  <Cloud size={18} className="text-muted-foreground" />
-                </div>
-                <div>
-                  <h3 className="text-base font-semibold text-muted-foreground">Hosted Agent</h3>
-                  <p className="text-xs text-muted-foreground">unavailable</p>
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground mb-4">
-                Connect through the shared hosted agent. Generate an API key and set it in Settings.
-              </p>
-              <Button disabled variant="outline">
-                Get started
-              </Button>
-            </div>
-
             <div
               onClick={scrollToLocalSetup}
               className="rounded-xl border-2 border-primary/20 bg-card p-6 hover:border-primary/40 transition-colors text-left cursor-pointer"
@@ -851,12 +833,13 @@ function IronclawPage() {
                   <Terminal size={18} className="text-primary" />
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold text-foreground">Local Binary</h3>
-                  <p className="text-xs text-muted-foreground">run your own</p>
+                  <h3 className="text-base font-semibold text-foreground">Tunnel</h3>
+                  <p className="text-xs text-muted-foreground">run locally, expose with ngrok</p>
                 </div>
               </div>
               <p className="text-sm text-muted-foreground mb-4">
-                Run your own ironclaw binary locally.
+                Run ironclaw-reborn on your machine and expose it with ngrok or Cloudflare Tunnel.
+                Paste the tunnel URL into Settings — ideal for staging and sharing a live preview.
               </p>
               <Button
                 type="button"
@@ -865,8 +848,34 @@ function IronclawPage() {
                   scrollToLocalSetup();
                 }}
               >
-                Set up locally
+                Set up tunnel
               </Button>
+            </div>
+
+            <div
+              onClick={() => window.location.href = "/settings/ironclaw"}
+              className="rounded-xl border-2 border-primary/20 bg-card p-6 hover:border-primary/40 transition-colors text-left cursor-pointer"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                  <Cloud size={18} className="text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">Deploy Your Own</h3>
+                  <p className="text-xs text-muted-foreground">Docker, Railway, or VPS</p>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Deploy IronClaw on a server, generate an API token, and connect via Settings. Share
+                API keys with your team — each user gets their own dashboard.
+              </p>
+              <Link
+                to="/settings/ironclaw"
+                onClick={(e) => e.stopPropagation()}
+                className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-4 text-sm font-bold text-primary-foreground hover:opacity-90 transition-opacity"
+              >
+                Connect via Settings
+              </Link>
             </div>
           </div>
 
@@ -874,7 +883,7 @@ function IronclawPage() {
             <div className="rounded-xl border border-border bg-card p-4 sm:p-6 space-y-4">
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
-                  <p className="text-sm font-semibold text-foreground">Local Binary Setup</p>
+                  <p className="text-sm font-semibold text-foreground">Tunnel Setup</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {allBinaryComplete
                       ? "All steps complete!"

@@ -304,6 +304,15 @@ export default createPlugin.withPlugins<PluginsClient>()({
         return next({ context });
       }
 
+      // No credentials resolved from any source
+      const isAuthenticated = !!(context.userId || context.apiKey?.userId);
+      if (isAuthenticated) {
+        throw new ORPCError("PRECONDITION_FAILED", {
+          message:
+            "No IronClaw connection configured. Visit /setup to get started or check Settings → IronClaw.",
+        });
+      }
+
       return next({ context });
     });
 

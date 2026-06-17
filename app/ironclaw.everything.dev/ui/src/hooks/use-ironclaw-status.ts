@@ -1,6 +1,8 @@
+import { useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import type { z } from "every-plugin/zod";
-import { useApiClient } from "@/app";
+import { useApiClient, useAuthClient } from "@/app";
 import { getConnectionMode, type ConnectionMode } from "@/hooks/use-connection-mode";
 import type { SessionSchema } from "../../../plugins/ironclaw/src/contract.ts";
 
@@ -47,27 +49,45 @@ export function useIronclawStatus(): {
 } {
   const apiClient = useApiClient();
   const queryClient = useQueryClient();
+  const auth = useAuthClient();
 
   const { data, isFetching, isError, refetch } = useQuery({
     queryKey: ironclawStatusQueryKey,
     queryFn: async () => {
+      const authSession = await auth.getSession();
+      if (!authSession?.data) {
+        return { connected: false, session: null, attachmentCapabilities: null };
+      }
       try {
-        const session = await apiClient.ironclaw.session();
+        const apiSession = await apiClient.ironclaw.session();
         markWasConnected();
         return {
           connected: true,
-          session,
-          attachmentCapabilities: session?.capabilities?.attachments ?? null,
+          session: apiSession,
+          attachmentCapabilities: apiSession?.capabilities?.attachments ?? null,
         };
-      } catch {
-        const capsStr = sessionStorage.getItem("ironclaw-attachment-caps");
-        await apiClient.ironclaw.ping();
-        markWasConnected();
-        return {
-          connected: true,
-          session: null,
-          attachmentCapabilities: capsStr ? JSON.parse(capsStr) : null,
-        };
+      } catch (err: any) {
+        const isNotConfigured =
+          err?.code === "PRECONDITION_FAILED" || err?.message?.includes("No IronClaw connection configured");
+        if (isNotConfigured) {
+          clearWasConnected();
+          return { connected: false, session: null, attachmentCapabilities: null };
+        }
+        let pingOk = false;
+        try {
+          await apiClient.ironclaw.ping();
+          pingOk = true;
+        } catch {}
+        if (pingOk) {
+          markWasConnected();
+          const capsStr = sessionStorage.getItem("ironclaw-attachment-caps");
+          return {
+            connected: true,
+            session: null,
+            attachmentCapabilities: capsStr ? JSON.parse(capsStr) : null,
+          };
+        }
+        throw err;
       }
     },
     refetchInterval: 10_000,
@@ -80,11 +100,31 @@ export function useIronclawStatus(): {
   let status: IronclawConnectionStatus;
   if (isFetching && data === undefined) {
     status = "checking";
-  } else if (isError || data === undefined) {
+  } else if (isError || data === undefined || data === null) {
     status = getWasConnected() ? "disconnected" : "never-connected";
+  } else if (!data.connected) {
+    status = "never-connected";
   } else {
     status = "connected";
   }
+
+  const prevStatus = useRef<IronclawConnectionStatus>(status);
+  useEffect(() => {
+    if (prevStatus.current === "checking" && status === "disconnected") {
+      prevStatus.current = status;
+      return;
+    }
+    if (prevStatus.current === "connected" && status === "disconnected") {
+      if (!isToastShown()) {
+        markToastShown();
+        toast.error("Lost connection to your IronClaw instance. Check Settings \u2192 IronClaw or set up a new connection.");
+      }
+    }
+    if (status === "connected") {
+      clearToastShown();
+    }
+    prevStatus.current = status;
+  }, [status]);
 
   const disconnect = async () => {
     clearWasConnected();
@@ -101,4 +141,24 @@ export function useIronclawStatus(): {
     session: data?.session ?? null,
     attachmentCapabilities: data?.attachmentCapabilities ?? null,
   };
+}
+
+function isToastShown(): boolean {
+  try {
+    return sessionStorage.getItem("ironclaw-toast") === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markToastShown() {
+  try {
+    sessionStorage.setItem("ironclaw-toast", "1");
+  } catch {}
+}
+
+function clearToastShown() {
+  try {
+    sessionStorage.removeItem("ironclaw-toast");
+  } catch {}
 }

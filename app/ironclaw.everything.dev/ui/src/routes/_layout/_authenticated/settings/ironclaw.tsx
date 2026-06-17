@@ -297,37 +297,26 @@ function IronclawSettings() {
       <div className="rounded-lg border border-border bg-muted/50 px-4 py-3 space-y-1.5">
         <p className="text-xs font-medium text-foreground">How to set up a tunnel</p>
         <p className="text-xs text-muted-foreground">
-          Run your ironclaw binary locally, then expose it with ngrok:
+          Run <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">./scripts/bos-dev.sh --tunnel</code> from the repo root to start Reborn
+          locally with an ngrok tunnel. It prints the Tunnel URL and API Token above.
         </p>
-        <code className="block rounded bg-secondary px-2 py-1.5 text-xs font-mono text-foreground">
-          ngrok http http://localhost:3001
-        </code>
-        <p className="text-xs text-muted-foreground">
-          Copy the ngrok URL into the Tunnel URL field above. The API Token must match the bearer
-          token configured on your Reborn binary.
-        </p>
-        <div className="rounded-md border border-border bg-secondary/30 px-3 py-2 mt-2">
-          <p className="text-xs font-medium text-foreground">Required environment variable</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            The{" "}
-            <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
-              IRONCLAW_REBORN_WEBUI_TOKEN
-            </code>{" "}
-            environment variable must be set on your Reborn binary. Use the same value as the API
-            Token above.
-          </p>
-          <code className="mt-1.5 block rounded bg-secondary px-2 py-1.5 text-xs font-mono text-foreground">
-            export IRONCLAW_REBORN_WEBUI_TOKEN=&quot;your-api-token-here&quot;
-          </code>
-        </div>
-
-        <div className="pt-2 border-t border-border mt-3">
-          <p className="text-xs font-medium text-foreground">Connection mode</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Switch between using your own local binary or the shared hosted agent from the{" "}
-            <strong className="text-foreground">connection</strong> section in your profile menu.
+        <div className="space-y-0.5 mt-1">
+          <p className="text-xs text-muted-foreground">
+            <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">./scripts/bos-dev.sh --local</code> starts the everything-dev stack
+            on localhost (no tunnel needed).
           </p>
         </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          Alternatively, run your binary directly with{" "}
+          <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
+            ngrok http http://localhost:3001
+          </code>{" "}
+          and set{" "}
+          <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
+            IRONCLAW_REBORN_WEBUI_TOKEN
+          </code>{" "}
+          to match the API Token above.
+        </p>
       </div>
     </div>
   );

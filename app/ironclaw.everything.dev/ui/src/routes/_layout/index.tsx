@@ -1,14 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bot, ExternalLink, FileText, MessageCircle, Zap } from "lucide-react";
+import { ExternalLink, FileText, MessageCircle, Zap } from "lucide-react";
+import ironclawLogo from "@/assets/ironclaw-attack.png";
 
 export const Route = createFileRoute("/_layout/")({
   head: () => ({
     meta: [
-      { title: "Personal IronClaw Dashboard | NEAR Builders" },
+      { title: "IronClaw Dashboard | NEAR Builders" },
       {
         name: "description",
         content:
-          "Tunnel your IronClaw agent through this dashboard. Spawn and customize a frontend for your agent.",
+          "Deploy your IronClaw agent, connect via tunnel, or run locally. Share API keys and collaborate through this dashboard.",
       },
     ],
   }),
@@ -20,31 +21,25 @@ function LandingPage() {
     <div className="flex min-h-[calc(100dvh-4rem)] flex-col overflow-auto">
       <div className="flex-1">
         <div className="mx-auto w-full max-w-4xl px-4 py-12 sm:px-6 sm:py-16 pb-20 sm:pb-12">
-          <div className="text-center space-y-6">
+          <div className="text-center space-y-3">
             <div className="flex justify-center mb-2">
-              <div className="flex h-16 w-16 items-center justify-center rounded-[16px] bg-foreground text-background">
-                <Bot size={32} />
-              </div>
+              <img
+                src={ironclawLogo}
+                alt="IronClaw"
+                className="h-20 w-20 object-contain"
+              />
             </div>
 
             <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
-              Personal IronClaw Dashboard
+              IronClaw Agent Dashboard
             </h1>
 
-            <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              Tunnel your agent through this dashboard.
-              <br />
-              Customize and deploy your own frontend interface.
+            <p className="text-base sm:text-lg text-muted-foreground font-medium max-w-xl mx-auto leading-relaxed">
+              Connect your agent three ways — deploy and share, tunnel for staging, or run locally in
+              dev. Each flow works with the same core dashboard.
             </p>
 
             <div className="flex items-center justify-center gap-3 pt-2">
-              <Link
-                to="/skill"
-                className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/5 px-5 py-2.5 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
-              >
-                <FileText size={14} />
-                Skill
-              </Link>
               <Link
                 to="/setup"
                 className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/5 px-5 py-2.5 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
@@ -52,7 +47,27 @@ function LandingPage() {
                 <Zap size={14} />
                 Setup
               </Link>
+              <Link
+                to="/skill"
+                className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/5 px-5 py-2.5 text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+              >
+                <FileText size={14} />
+                Skill
+              </Link>
             </div>
+
+            <p className="text-sm text-muted-foreground/60">
+              (and you can{" "}
+              <a
+                href="https://dev.everything.dev/about"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-muted-foreground transition-colors"
+              >
+                customize and deploy your own UI
+              </a>{" "}
+              too 😉)
+            </p>
           </div>
 
           <div className="mt-12 flex justify-center">
@@ -71,6 +86,8 @@ function LandingPage() {
                 </p>
                 <p className="text-sm text-muted-foreground mt-0.5">
                   Connect with the community building on NEAR
+                  <br />
+                  and get onboarded.
                 </p>
               </div>
               <ExternalLink

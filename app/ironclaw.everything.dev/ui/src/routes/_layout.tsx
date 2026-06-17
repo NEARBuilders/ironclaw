@@ -49,7 +49,7 @@ function Layout() {
   const account = getAccount(runtimeConfig);
   const isAuthenticated = !!session?.user;
   const userRole = getUserRole(isAuthenticated, session?.user?.role === "admin");
-  const { status: connectionStatus } = useIronclawStatus();
+  const { status: connectionStatus } = isAuthenticated ? useIronclawStatus() : { status: "never-connected" as const };
 
   const ironclawSidebarItems: SidebarItem[] = [
     ...(connectionStatus === "connected"

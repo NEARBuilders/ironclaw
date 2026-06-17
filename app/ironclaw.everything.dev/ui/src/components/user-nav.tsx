@@ -179,7 +179,7 @@ export function UserNav() {
               )}
             </div>
             <Shuffle size={12} className="shrink-0" />
-            Auto (prefer local tunnel)
+            Auto (prefer tunnel)
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => switchMode("hosted")}
@@ -191,7 +191,7 @@ export function UserNav() {
               )}
             </div>
             <Cloud size={12} className="shrink-0" />
-            Using hosted agent
+            Hosted
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => switchMode("local")}
@@ -203,7 +203,7 @@ export function UserNav() {
               )}
             </div>
             <Terminal size={12} className="shrink-0" />
-            Using my own binary
+            Tunnel
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => disconnectTunnelMutation.mutate()}
@@ -211,7 +211,7 @@ export function UserNav() {
             className="gap-2 text-xs cursor-pointer text-destructive focus:text-destructive"
           >
             <Terminal size={12} className="shrink-0" />
-            {disconnectTunnelMutation.isPending ? "Disconnecting..." : "Disconnect from tunnel"}
+            {disconnectTunnelMutation.isPending ? "Disconnecting..." : "Clear connection"}
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link to="/settings">settings</Link>
