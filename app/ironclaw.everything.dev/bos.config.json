@@ -23,15 +23,15 @@
         "ALLOW_UNTRUSTED_SSR",
         "CSP_STRICT"
       ],
-      "production": "https://elliot-braem-5034-host-ironclaw-nearbuilders-4f6bd5a09-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-5039-host-ironclaw-nearbuilders-fafdc2a60-ze.zephyrcloud.app",
       "integrity": "sha384-uzbBU2DfN9ozBwVXUPjGyv+w29xMfBYmNTYnKuQLsxvzNTufAO6PWH6QrpPa51bB"
     },
     "ui": {
       "development": "local:ui",
-      "ssr": "https://elliot-braem-5031-ui-ironclaw-nearbuilders-d91df7181-ze.zephyrcloud.app",
-      "ssrIntegrity": "sha384-CELYDmBdu6JsONw2ENPorS+U6atQxZ7illlT+g1oWQC6OQTeJT9oPFRogEmhY3DP",
-      "production": "https://elliot-braem-5030-ui-ironclaw-nearbuilders-6488a7169-ze.zephyrcloud.app",
-      "integrity": "sha384-jBz4lfezrRtzics33g+XnucC0kWpxzhKRP34zcYXGjX2fVsFG2bGALL+1dryVjdc"
+      "ssr": "https://elliot-braem-5036-ui-ironclaw-nearbuilders-a403164b2-ze.zephyrcloud.app",
+      "ssrIntegrity": "sha384-bES4ZxVSqq4+dZ4DOukdqst13DEZy25CHCImA86MNXbEFL08X8VooEvwUkludOjh",
+      "production": "https://elliot-braem-5035-ui-ironclaw-nearbuilders-656932412-ze.zephyrcloud.app",
+      "integrity": "sha384-5dbLg7Aiy+buXdE6b4mLAPHV67TsmBT7a8fNIiq4AcZaxYn5v6grTHFkTrEneV+3"
     },
     "api": {
       "development": "local:api",
@@ -40,7 +40,7 @@
         "IRONCLAW_BASE_URL",
         "BETTER_AUTH_SECRET"
       ],
-      "production": "https://elliot-braem-5032-api-ironclaw-nearbuilders-73b2cb5f8-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-5037-api-ironclaw-nearbuilders-bac865345-ze.zephyrcloud.app",
       "integrity": "sha384-kJU4LTN0U/uXrYaGpG9gPVFZV+JOeYt0Ug2y2aOsFcpVAJC+hTNqei9IbZkf1Sju"
     }
   },
@@ -54,7 +54,7 @@
         "IRONCLAW_BASE_URL",
         "IRONCLAW_API_TOKEN"
       ],
-      "production": "https://elliot-braem-5033-every-plugin-ironclaw-ironclaw--faad414c6-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-5038-every-plugin-ironclaw-ironclaw--6bdcaf3f0-ze.zephyrcloud.app",
       "integrity": "sha384-C16nqFILTg4xcYT3+kONmbT2jYpD+89JGmTxBvUhCXt9iED4NnuSbwaOCelAedg3"
     }
   }
