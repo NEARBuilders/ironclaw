@@ -62,7 +62,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{any, get},
 };
-use ironclaw_host_api::UserId;
+use ironclaw_host_api::{AgentId, ProjectId, TenantId, UserId};
 use ironclaw_reborn_composition::WebuiAuthenticator;
 use secrecy::{ExposeSecret, SecretString};
 use serde::Serialize;
@@ -238,7 +238,12 @@ pub struct EnvBearerAuthenticator {
     /// `SecretString` `Debug` impl is redacted, so no token material
     /// leaks into trace logs / panics that print this struct.
     token: SecretString,
+    /// Host-installation tenant id — stamped onto every authenticated
+    /// caller since this authenticator represents a single operator.
+    tenant_id: TenantId,
     user_id: UserId,
+    agent_id: Option<AgentId>,
+    project_id: Option<ProjectId>,
 }
 
 impl EnvBearerAuthenticator {
@@ -247,11 +252,25 @@ impl EnvBearerAuthenticator {
     /// passing an empty token is treated as a configuration error
     /// because a literal `Authorization: Bearer ` (no token) would
     /// then succeed.
-    pub fn new(token: SecretString, user_id: UserId) -> Result<Self, EnvBearerConfigError> {
+    /// `tenant_id` is the host-installation tenant stamped onto every
+    /// authenticated caller.
+    pub fn new(
+        token: SecretString,
+        tenant_id: TenantId,
+        user_id: UserId,
+        agent_id: Option<AgentId>,
+        project_id: Option<ProjectId>,
+    ) -> Result<Self, EnvBearerConfigError> {
         if token.expose_secret().is_empty() {
             return Err(EnvBearerConfigError::EmptyToken);
         }
-        Ok(Self { token, user_id })
+        Ok(Self {
+            token,
+            tenant_id,
+            user_id,
+            agent_id,
+            project_id,
+        })
     }
 }
 
@@ -278,8 +297,14 @@ impl WebuiAuthenticator for EnvBearerAuthenticator {
         let expected = self.token.expose_secret().as_bytes();
         let candidate = candidate.as_bytes();
         if expected.ct_eq(candidate).into() {
-            Some(ironclaw_reborn_composition::WebuiAuthentication::operator(
+            Some(ironclaw_reborn_composition::WebuiAuthentication::new(
+                self.tenant_id.clone(),
                 self.user_id.clone(),
+                self.agent_id.clone(),
+                self.project_id.clone(),
+                ironclaw_reborn_composition::WebUiV2Capabilities {
+                    operator_webui_config: true,
+                },
             ))
         } else {
             None
@@ -304,7 +329,10 @@ mod tests {
     async fn env_bearer_authenticator_accepts_exact_token() {
         let auth = EnvBearerAuthenticator::new(
             SecretString::from("right-token".to_string()),
+            TenantId::new("tenant-alpha").expect("tenant"),
             UserId::new("user-alpha").expect("user"),
+            None,
+            None,
         )
         .expect("auth");
         let result = auth.authenticate("right-token").await;
@@ -324,7 +352,10 @@ mod tests {
     async fn env_bearer_authenticator_rejects_wrong_token() {
         let auth = EnvBearerAuthenticator::new(
             SecretString::from("right-token".to_string()),
+            TenantId::new("tenant-alpha").expect("tenant"),
             UserId::new("user-alpha").expect("user"),
+            None,
+            None,
         )
         .expect("auth");
         assert!(auth.authenticate("wrong-token").await.is_none());
@@ -336,7 +367,10 @@ mod tests {
         // even though it would be a prefix of the configured token.
         let auth = EnvBearerAuthenticator::new(
             SecretString::from("right-token".to_string()),
+            TenantId::new("tenant-alpha").expect("tenant"),
             UserId::new("user-alpha").expect("user"),
+            None,
+            None,
         )
         .expect("auth");
         assert!(auth.authenticate("right").await.is_none());
@@ -347,7 +381,10 @@ mod tests {
     fn env_bearer_authenticator_rejects_empty_configured_token() {
         let err = EnvBearerAuthenticator::new(
             SecretString::from(String::new()),
+            TenantId::new("tenant-alpha").expect("tenant"),
             UserId::new("user-alpha").expect("user"),
+            None,
+            None,
         )
         .expect_err("empty token must be rejected at construction");
         assert!(matches!(err, EnvBearerConfigError::EmptyToken));

@@ -82,3 +82,5 @@ tests/fixtures/llm_traces/live/*.log
 # Local test artifacts
 .anvil/
 .codegraph/
+
+/app

@@ -2564,8 +2564,14 @@ pub async fn build_reborn_runtime(
         apply_startup_stored_llm_key(llm, crate::LlmKeyStore::new(services.secret_store())).await?;
     #[cfg(feature = "root-llm-provider")]
     if !has_nearai_mcp_bootstrap_config {
-        bootstrap_nearai_mcp_from_effective_llm(&services, llm.as_ref(), nearai_mcp_owner_scope)
-            .await?;
+        if let Err(error) = bootstrap_nearai_mcp_from_effective_llm(
+            &services, llm.as_ref(), nearai_mcp_owner_scope
+        ).await {
+            tracing::warn!(
+                %error,
+                "NEAR AI MCP bootstrap from LLM config skipped; continuing without it"
+            );
+        }
     }
     enforce_runtime_cutover_gate(profile, &services.readiness)?;
 

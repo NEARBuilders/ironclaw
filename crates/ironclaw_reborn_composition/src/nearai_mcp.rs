@@ -116,16 +116,7 @@ pub(crate) async fn nearai_mcp_bootstrap_config_from_llm_config(
         );
     }
 
-    let session = ironclaw_llm::create_session_manager(config.session.clone()).await;
-    if !session.has_token().await {
-        return Ok(None);
-    }
-    let token = session.get_token().await.map_err(|error| {
-        NearAiMcpBootstrapConfigError::SessionTokenRead {
-            reason: error.to_string(),
-        }
-    })?;
-    NearAiMcpBootstrapConfig::from_optional_parts(Some(config.nearai.base_url.clone()), Some(token))
+    Ok(None)
 }
 
 pub(crate) fn nearai_mcp_endpoint_from_base(

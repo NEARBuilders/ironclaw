@@ -490,7 +490,7 @@ async fn callback_handler(
 
     let bearer = match state
         .session_store
-        .create_session(state.tenant_id.clone(), user_id, state.session_lifetime)
+        .create_session(state.tenant_id.clone(), user_id, state.session_lifetime, None, None)
         .await
     {
         Ok(token) => token,

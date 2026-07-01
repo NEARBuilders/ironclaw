@@ -143,7 +143,7 @@ pub use ironclaw_product_adapters::{
 pub use reborn_services::{
     AUTOMATION_LIST_DEFAULT_PAGE_SIZE, AUTOMATION_LIST_MAX_PAGE_SIZE,
     AUTOMATION_RUN_HISTORY_DEFAULT_PAGE_SIZE, AUTOMATION_RUN_HISTORY_MAX_PAGE_SIZE,
-    AutomationListRequest, AutomationProductFacade, CodexLoginStart,
+    AccessSessionService, AutomationListRequest, AutomationProductFacade, CodexLoginStart,
     ConnectableChannelsProductFacade, ExtensionCredentialSetupService,
     ExtensionCredentialStatusRequest, ExtensionCredentialSubmitRequest, FilesystemBrowseReader,
     FsMount, InboundAttachmentLander, InboundAttachmentReader, LlmActiveSelection,
@@ -166,6 +166,7 @@ pub use reborn_services::{
     RebornExtensionSetupSecret, RebornFsListRequest, RebornFsListResponse, RebornFsMountInfo,
     RebornFsMountsResponse, RebornFsReadRequest, RebornFsStatRequest, RebornFsStatResponse,
     RebornGetProjectRequest, RebornGetRunStateRequest, RebornGetRunStateResponse,
+    RebornGetThreadStateRequest, RebornGetThreadStateResponse,
     RebornListAutomationsResponse, RebornListMembersRequest, RebornListMembersResponse,
     RebornListProjectsRequest, RebornListProjectsResponse, RebornListThreadsResponse,
     RebornLogEntry, RebornLogLevel, RebornLogQueryRequest, RebornLogQueryResponse,
@@ -201,7 +202,8 @@ pub use reborn_services::{
     StaticOperatorStatusService, TriggerRunThreadScope, UnsupportedAutomationProductFacade,
     UnsupportedOperatorLogsService, UnsupportedOperatorServiceLifecycleService,
     UnsupportedOperatorStatusService, UnsupportedOutboundPreferencesProductFacade,
-    UpsertLlmProviderRequest, normalize_operator_log_context_value,
+    UpsertLlmProviderRequest, WebUiMintAccessSessionRequest, WebUiMintAccessSessionResponse,
+    normalize_operator_log_context_value,
 };
 
 pub use webui_inbound::{

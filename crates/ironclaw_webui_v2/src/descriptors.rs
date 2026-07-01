@@ -92,6 +92,9 @@ pub const WEBUI_V2_ROUTE_LIST_PROJECT_MEMBERS: &str = "webui.v2.list_project_mem
 pub const WEBUI_V2_ROUTE_ADD_PROJECT_MEMBER: &str = "webui.v2.add_project_member";
 pub const WEBUI_V2_ROUTE_UPDATE_PROJECT_MEMBER: &str = "webui.v2.update_project_member";
 pub const WEBUI_V2_ROUTE_REMOVE_PROJECT_MEMBER: &str = "webui.v2.remove_project_member";
+pub const WEBUI_V2_ROUTE_GET_THREAD_STATE: &str = "webui.v2.get_thread_state";
+pub const WEBUI_V2_ROUTE_OPERATOR_CREATE_ACCESS_SESSION: &str =
+    "webui.v2.operator.create_access_session";
 
 pub const WEBUI_V2_PATTERN_CREATE_THREAD: &str = "/api/webchat/v2/threads";
 pub const WEBUI_V2_PATTERN_LIST_THREADS: &str = "/api/webchat/v2/threads";
@@ -173,6 +176,11 @@ pub const WEBUI_V2_PATTERN_PROJECT_DETAIL: &str = "/api/webchat/v2/projects/{pro
 pub const WEBUI_V2_PATTERN_PROJECT_MEMBERS: &str = "/api/webchat/v2/projects/{project_id}/members";
 pub const WEBUI_V2_PATTERN_PROJECT_MEMBER_DETAIL: &str =
     "/api/webchat/v2/projects/{project_id}/members/{user_id}";
+/// Thread state — return authoritative thread snapshot for UI rebuild.
+pub const WEBUI_V2_PATTERN_GET_THREAD_STATE: &str = "/api/webchat/v2/threads/{thread_id}/state";
+/// Operator access session minting — create tenant-scoped tokens.
+pub const WEBUI_V2_PATTERN_OPERATOR_CREATE_ACCESS_SESSION: &str =
+    "/api/webchat/v2/operator/access-sessions";
 
 /// Return the canonical [`IngressRouteDescriptor`] set for the WebChat v2
 /// beta route surface.
@@ -257,6 +265,8 @@ pub fn webui_v2_routes() -> Vec<IngressRouteDescriptor> {
         add_project_member_descriptor(),
         update_project_member_descriptor(),
         remove_project_member_descriptor(),
+        get_thread_state_descriptor(),
+        operator_create_access_session_descriptor(),
     ]
 }
 
@@ -298,6 +308,7 @@ pub fn is_webui_v2_operator_webui_config_route_id(route_id: &str) -> bool {
                 | WEBUI_V2_ROUTE_OPERATOR_STATUS
                 | WEBUI_V2_ROUTE_OPERATOR_LOGS
                 | WEBUI_V2_ROUTE_OPERATOR_SERVICE_LIFECYCLE
+                | WEBUI_V2_ROUTE_OPERATOR_CREATE_ACCESS_SESSION
         )
 }
 
@@ -578,6 +589,34 @@ fn remove_project_member_descriptor() -> IngressRouteDescriptor {
         WEBUI_V2_PATTERN_PROJECT_MEMBER_DETAIL,
         mutation_policy(
             BodyLimitPolicy::NoBody,
+            mutation_rate_limit(),
+            AuditTraceClass::UserAction,
+            AllowedEffectPath::ProductWorkflow,
+        ),
+    )
+}
+
+fn get_thread_state_descriptor() -> IngressRouteDescriptor {
+    descriptor(
+        WEBUI_V2_ROUTE_GET_THREAD_STATE,
+        NetworkMethod::Get,
+        WEBUI_V2_PATTERN_GET_THREAD_STATE,
+        read_policy(
+            read_rate_limit(),
+            AuditTraceClass::UserAction,
+            AllowedEffectPath::ProjectionOnly,
+            StreamingMode::None,
+        ),
+    )
+}
+
+fn operator_create_access_session_descriptor() -> IngressRouteDescriptor {
+    descriptor(
+        WEBUI_V2_ROUTE_OPERATOR_CREATE_ACCESS_SESSION,
+        NetworkMethod::Post,
+        WEBUI_V2_PATTERN_OPERATOR_CREATE_ACCESS_SESSION,
+        mutation_policy(
+            body_limit_kib(4),
             mutation_rate_limit(),
             AuditTraceClass::UserAction,
             AllowedEffectPath::ProductWorkflow,

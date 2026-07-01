@@ -60,7 +60,7 @@ struct OnlyValidToken;
 impl WebuiAuthenticator for OnlyValidToken {
     async fn authenticate(&self, token: &str) -> Option<WebuiAuthentication> {
         (token == VALID_TOKEN)
-            .then(|| WebuiAuthentication::user(UserId::new(USER).expect("user id")))
+            .then(|| WebuiAuthentication::user(TenantId::new(TENANT).expect("tenant"), UserId::new(USER).expect("user id")))
     }
 }
 

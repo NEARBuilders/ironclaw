@@ -1354,14 +1354,19 @@ async fn build_local_runtime(input: RebornBuildInput) -> Result<RebornServices, 
         extension_lifecycle_service,
         active_extensions,
     ));
-    let nearai_mcp_bootstrap_outcome = crate::nearai_mcp::bootstrap_nearai_mcp(
+    if let Err(error) = crate::nearai_mcp::bootstrap_nearai_mcp(
         nearai_mcp_bootstrap_config,
         &product_auth,
         &extension_management,
         nearai_mcp_owner_scope,
     )
-    .await?;
-    nearai_mcp_bootstrap_outcome.log_completion();
+    .await
+    {
+        tracing::warn!(
+            %error,
+            "NEAR AI MCP bootstrap skipped; continuing without it"
+        );
+    }
     if let Some(local_runtime) = Arc::get_mut(&mut store_graph.local_runtime) {
         local_runtime.extension_management = Some(Arc::clone(&extension_management));
         local_runtime.runtime_http_egress = Some(product_auth_runtime_ports.runtime_http_egress());

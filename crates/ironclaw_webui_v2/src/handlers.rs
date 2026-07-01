@@ -18,7 +18,7 @@ use std::time::Duration;
 use axum::Json;
 use axum::body::Body;
 use axum::extract::{Extension, Path, Query, State};
-use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use futures::SinkExt;
@@ -34,7 +34,8 @@ use ironclaw_product_workflow::{
     RebornExtensionActionResponse, RebornExtensionListResponse, RebornExtensionRegistryResponse,
     RebornFsListRequest, RebornFsListResponse, RebornFsMountsResponse, RebornFsReadRequest,
     RebornFsStatRequest, RebornFsStatResponse, RebornGetProjectRequest,
-    RebornListAutomationsResponse, RebornListMembersRequest, RebornListMembersResponse,
+    RebornGetThreadStateRequest, RebornGetThreadStateResponse, RebornListAutomationsResponse,
+    RebornListMembersRequest, RebornListMembersResponse,
     RebornListProjectsRequest, RebornListProjectsResponse, RebornListThreadsResponse,
     RebornLogQueryRequest, RebornLogQueryResponse, RebornOperatorCommandPlaneResponse,
     RebornOperatorConfigGetResponse, RebornOperatorConfigListResponse,
@@ -54,6 +55,7 @@ use ironclaw_product_workflow::{
     UpsertLlmProviderRequest, WebUiAttachmentCapabilities, WebUiAuthenticatedCaller,
     WebUiCancelRunRequest, WebUiCreateThreadRequest, WebUiInboundValidationCode,
     WebUiInboundValidationError, WebUiListAutomationsRequest, WebUiListThreadsRequest,
+    WebUiMintAccessSessionRequest, WebUiMintAccessSessionResponse,
     WebUiResolveGateRequest, WebUiSendMessageRequest, WebUiSetupExtensionRequest,
     webui_attachment_capabilities,
 };
@@ -665,7 +667,7 @@ pub async fn stream_events(
     Path(thread_id): Path<String>,
     headers: HeaderMap,
     Query(query): Query<StreamEventsQuery>,
-) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, WebUiV2HttpError> {
+) -> Result<Response, WebUiV2HttpError> {
     let slot = state
         .sse_capacity()
         .try_acquire(&caller.tenant_id, &caller.user_id)
@@ -680,7 +682,22 @@ pub async fn stream_events(
         .map(str::to_string)
         .or(query.after_cursor);
     let stream = build_sse_stream(services, caller, thread_id, initial_cursor, slot);
-    Ok(Sse::new(stream).keep_alive(KeepAlive::new().interval(SSE_KEEPALIVE_INTERVAL)))
+    let mut response = Sse::new(stream)
+        .keep_alive(KeepAlive::new().interval(SSE_KEEPALIVE_INTERVAL))
+        .into_response();
+    response.headers_mut().insert(
+        HeaderName::from_static("x-accel-buffering"),
+        HeaderValue::from_static("no"),
+    );
+    response.headers_mut().insert(
+        HeaderName::from_static("cache-control"),
+        HeaderValue::from_static("no-cache, no-transform"),
+    );
+    response.headers_mut().insert(
+        HeaderName::from_static("connection"),
+        HeaderValue::from_static("keep-alive"),
+    );
+    Ok(response)
 }
 
 /// Build the 429 response for SSE openings that exceed the per-caller
@@ -2032,6 +2049,39 @@ async fn ws_send_with_timeout(
             Err(())
         }
     }
+}
+
+/// `GET /api/webchat/v2/threads/{thread_id}/state`
+///
+/// Return authoritative thread snapshot for UI rebuild. Returns all
+/// messages and summary artifacts for the given thread (unlike
+/// `get_timeline` which is paginated).
+pub async fn get_thread_state(
+    State(state): State<WebUiV2State>,
+    Extension(caller): Extension<WebUiAuthenticatedCaller>,
+    Path(thread_id): Path<String>,
+) -> Result<Json<RebornGetThreadStateResponse>, WebUiV2HttpError> {
+    let response = state
+        .services()
+        .get_thread_state(caller, RebornGetThreadStateRequest { thread_id })
+        .await?;
+    Ok(Json(response))
+}
+
+/// `POST /api/webchat/v2/operator/access-sessions`
+///
+/// Mint a tenant-scoped signed session token. Body shape:
+/// [`WebUiMintAccessSessionRequest`].
+pub async fn operator_create_access_session(
+    State(state): State<WebUiV2State>,
+    Extension(caller): Extension<WebUiAuthenticatedCaller>,
+    Json(body): Json<WebUiMintAccessSessionRequest>,
+) -> Result<Json<WebUiMintAccessSessionResponse>, WebUiV2HttpError> {
+    let response = state
+        .services()
+        .mint_access_session(caller, body)
+        .await?;
+    Ok(Json(response))
 }
 
 #[cfg(test)]
