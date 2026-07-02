@@ -93,6 +93,11 @@ from scripts.reborn_webui_v2_live_qa.root_filesystem import (  # noqa: E402
     _root_filesystem_json,
     _root_filesystem_secret_by_handle,
 )
+from scripts.reborn_webui_v2_live_qa.semantic_judge import (  # noqa: E402
+    _compact_json,
+    _judge_assistant_reply_completion,
+    _semantic_judge_passed,
+)
 from scripts.reborn_webui_v2_live_qa.slack_helpers import (  # noqa: E402
     _append_slack_channel_route,
     _append_slack_channel_route_if_configured,
@@ -856,6 +861,7 @@ async def _live_chat_case(
             marker=marker,
             required_text=required_text,
             timeout=timeout,
+            semantic_goal=prompt,
         )
         if forbidden_text:
             text = str(observed["text_excerpt"]).lower()
@@ -967,6 +973,7 @@ async def _live_chat_with_extensions_case(
             marker=marker,
             required_text=required_text,
             timeout=timeout,
+            semantic_goal=prompt,
         )
 
     try:
@@ -996,6 +1003,7 @@ async def _wait_for_assistant_reply(
     marker: str | None,
     required_text: list[str],
     timeout: float,
+    semantic_goal: str | None = None,
 ) -> str:
     deadline = time.monotonic() + timeout
     assistant = page.locator("[data-testid='msg-assistant']").last  # type: ignore[attr-defined]
@@ -1030,10 +1038,22 @@ async def _wait_for_assistant_reply(
         main_text = await page.locator("main").inner_text(timeout=1000)  # type: ignore[attr-defined]
     except Exception:
         pass
+    semantic_judge: dict[str, object] | None = None
+    if last_text and (not marker or marker in last_text):
+        semantic_judge = await _judge_assistant_reply_completion(
+            marker=marker,
+            required_text=required_text,
+            assistant_text=last_text,
+            main_text=main_text,
+            semantic_goal=semantic_goal,
+        )
+        if _semantic_judge_passed(semantic_judge):
+            return last_text[-2000:]
     raise AssertionError(
         "assistant reply did not contain required text before timeout. "
         f"marker={marker!r} required_text={required_text!r} "
-        f"last_assistant={last_text[-500:]!r} main_excerpt={main_text[-1000:]!r}"
+        f"last_assistant={last_text[-500:]!r} main_excerpt={main_text[-1000:]!r} "
+        f"semantic_judge={_compact_json(semantic_judge)}"
     )
 
 
@@ -1653,22 +1673,58 @@ async def _slack_connect_case(ctx: LiveQaContext, *, case_name: str) -> ProbeRes
     from playwright.async_api import expect
 
     started = time.monotonic()
-    prompt = _qa_sheet_prompt(case_name)
-    observed: dict[str, object] = {"chat_connect_prompt": prompt}
+    observed: dict[str, object] = {
+        "qa_sheet_prompt": _qa_sheet_prompt(case_name),
+        "slack_connect_surface": "/v2/extensions/channels",
+    }
 
     async def action(page: object) -> None:
         await page.goto(
-            f"{ctx.base_url}/v2/?token={AUTH_TOKEN}",
+            f"{ctx.base_url}/v2/extensions/channels?token={AUTH_TOKEN}",
             wait_until="domcontentloaded",
         )  # type: ignore[attr-defined]
-        composer = page.locator("[data-testid='chat-composer']")  # type: ignore[attr-defined]
-        await expect(composer).to_be_visible(timeout=15000)
-        await composer.fill(prompt)
-        await composer.press("Enter")
-        body = page.locator("body")  # type: ignore[attr-defined]
-        await expect(body).to_contain_text("Connect Slack", timeout=15000)
-        await expect(body).to_contain_text("Message the Slack app", timeout=15000)
-        observed["slack_connect_card_visible"] = True
+        await expect(page.locator("body")).to_contain_text("Channels", timeout=15000)  # type: ignore[attr-defined]
+        body = await _fetch_webui_json(page, "/api/webchat/v2/channels/connectable")
+        channels = body.get("channels")
+        if not isinstance(channels, list):
+            raise AssertionError(f"connectable channels body did not include a list: {body!r}")
+        slack_channels = [
+            channel
+            for channel in channels
+            if isinstance(channel, dict) and channel.get("channel") == "slack"
+        ]
+        observed["connectable_channel_count"] = len(channels)
+        observed["slack_strategy_count"] = len(slack_channels)
+        observed["slack_strategies"] = [
+            channel.get("strategy")
+            for channel in slack_channels
+            if isinstance(channel, dict)
+        ]
+        personal = next(
+            (
+                channel
+                for channel in slack_channels
+                if isinstance(channel, dict)
+                and channel.get("strategy") == "inbound_proof_code"
+            ),
+            None,
+        )
+        if not isinstance(personal, dict):
+            raise AssertionError(f"Slack inbound_proof_code connect strategy missing: {channels!r}")
+        action_body = personal.get("action")
+        if not isinstance(action_body, dict):
+            raise AssertionError(f"Slack connect action missing: {personal!r}")
+        title = str(action_body.get("title") or "")
+        if not title:
+            raise AssertionError(f"Slack connect action title missing: {personal!r}")
+        instructions = str(action_body.get("instructions") or "")
+        if "Message the Slack app" not in instructions:
+            raise AssertionError(f"unexpected Slack connect instructions: {instructions!r}")
+        await expect(page.locator("body")).to_contain_text(title, timeout=15000)  # type: ignore[attr-defined]
+        await expect(page.locator("body")).to_contain_text("Message the Slack app", timeout=15000)  # type: ignore[attr-defined]
+        observed["slack_display_name"] = personal.get("display_name")
+        observed["slack_connect_title"] = title
+        observed["slack_connect_instructions"] = instructions
 
     try:
         slack = _slack_preflight(ctx)

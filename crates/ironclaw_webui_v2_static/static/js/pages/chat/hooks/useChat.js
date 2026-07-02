@@ -5,14 +5,9 @@ import {
   sendMessage,
   submitManualToken,
 } from "../../../lib/api.js";
-import {
-  listConnectableChannels,
-  looksLikeChannelConnectCommand,
-  resolveChannelConnectCommand,
-} from "../../../lib/channel-connect.js";
-import { queryClient } from "../../../lib/query-client.js";
 import { React } from "../../../lib/html.js";
 import { useChatEvents } from "../lib/useChatEvents.js";
+import { touchThreadInCache, upsertThreadInCache } from "../lib/thread-cache.js";
 import {
   addPending,
   recordAcceptedMessageRef,
@@ -59,14 +54,6 @@ function approvalGatePendingSendError() {
   );
   error.safeErrorCode = APPROVAL_GATE_PENDING_SEND_ERROR;
   return error;
-}
-
-function threadNeedsSidebarRefresh(threadId) {
-  const cached = queryClient.getQueryData?.(["threads"]);
-  const threads = cached?.threads;
-  if (!Array.isArray(threads)) return true;
-  const thread = threads.find((item) => item.thread_id === threadId || item.id === threadId);
-  return !thread?.title;
 }
 
 function busyNoticeKey(threadId, gate) {
@@ -117,21 +104,6 @@ function parseOAuthCallbackStoragePayload(value) {
   }
 }
 
-async function resolveConnectAction(content) {
-  if (!looksLikeChannelConnectCommand(content)) return null;
-  try {
-    const channelsResponse = await queryClient.fetchQuery({
-      queryKey: ["connectable-channels"],
-      queryFn: listConnectableChannels,
-    });
-    const channels = channelsResponse?.channels || [];
-    return resolveChannelConnectCommand(content, channels);
-  } catch (err) {
-    console.error("Failed to resolve connectable channels:", err);
-    return null;
-  }
-}
-
 // v2 chat hook. Differences from the fork's v1 hook:
 // - No image / attachment plumbing — v2 SendMessage carries `content` only.
 // - No /api/chat/approval — approvals fold into gate/resolve in v2.
@@ -160,8 +132,6 @@ export function useChat(threadId) {
   React.useEffect(() => {
     activeRunRef.current = activeRun;
   }, [activeRun]);
-  const [channelConnectAction, setChannelConnectAction] = React.useState(null);
-
   const getPendingMessages = React.useCallback(
     () => pendingMessagesRef.current.get(threadId || "__new__") || [],
     [threadId],
@@ -252,7 +222,6 @@ export function useChat(threadId) {
     setPendingGateState(null);
     setBusyGateNotice(null);
     setActiveRunState(null);
-    setChannelConnectAction(null);
   }
 
   React.useEffect(() => {
@@ -459,23 +428,11 @@ export function useChat(threadId) {
         return null;
       }
 
-      // Channel-connect slash commands ("/connect telegram") never carry
-      // attachments; skip that detection when files are staged so an
-      // upload is never misread as a command and dropped.
-      if (stagedAttachments.length === 0) {
-        const connectable = await resolveConnectAction(content);
-        if (connectable) {
-          setChannelConnectAction(connectable);
-          return { channel_connect_action: connectable };
-        }
-      }
-      setChannelConnectAction(null);
-
       let sendThreadId = targetThreadId || threadId;
 
       if (!sendThreadId) {
         const created = await createThreadRequest();
-        queryClient.invalidateQueries({ queryKey: ["threads"] });
+        upsertThreadInCache(created?.thread);
         sendThreadId = created?.thread?.thread_id;
         if (!sendThreadId) {
           throw new Error("createThread returned no thread_id");
@@ -545,11 +502,12 @@ export function useChat(threadId) {
           content,
           attachments: wireAttachments,
         });
-        // Refresh the sidebar only while the cached entry is missing
-        // or title-less. Once the first-message title has appeared,
-        // repeated sends do not need to refetch the whole thread list.
-        if (threadNeedsSidebarRefresh(sendThreadId)) {
-          queryClient.invalidateQueries({ queryKey: ["threads"] });
+        if (response?.outcome !== "rejected_busy") {
+          touchThreadInCache({
+            threadId: response?.thread_id || sendThreadId,
+            messageContent: renderContent,
+            updatedAt: pendingRecord.timestamp,
+          });
         }
         let runSettledBeforeResponse = false;
         if (response?.run_id && shouldTrackLocalRun) {
@@ -952,7 +910,6 @@ export function useChat(threadId) {
     isProcessing,
     pendingGate,
     busyGateNotice,
-    channelConnectAction,
     activeRun,
     sseStatus,
     historyLoading,
@@ -964,7 +921,6 @@ export function useChat(threadId) {
     submitAuthToken,
     cancelRun,
     loadMore,
-    dismissChannelConnectAction: () => setChannelConnectAction(null),
     // fork-shape compatibility — see comments above
     suggestions: [],
     setSuggestions: noop,
