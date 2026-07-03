@@ -61,9 +61,10 @@ function formatTimestamp(iso: string) {
 
 function LogsPage() {
   const apiClient = useApiClient();
-  const { session } = useIronclawStatus();
+  const { session, status: ironclawStatus } = useIronclawStatus();
   const [levelFilter, setLevelFilter] = useState<string>("all");
 
+  const sessionLoading = ironclawStatus === "checking" && session === null;
   const hasOperatorLogs = session?.capabilities?.operatorWebuiConfig === true;
 
   const {
@@ -136,7 +137,13 @@ function LogsPage() {
       </div>
 
       <div className="flex-1 min-h-0">
-        {!hasOperatorLogs ? (
+        {sessionLoading ? (
+          <div className="p-4 space-y-2">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
+          </div>
+        ) : !hasOperatorLogs ? (
           <div className="flex items-center justify-center h-full p-6">
             <Card className="flex flex-col items-center gap-3 p-6 text-center max-w-sm">
               <Ban className="h-8 w-8 text-muted-foreground" />

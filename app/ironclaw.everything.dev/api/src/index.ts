@@ -776,7 +776,7 @@ export default createPlugin.withPlugins<PluginsClient>()({
           list: builder.ironclaw.logs.list
             .use(requireAuth)
             .use(ic.credentials)
-            .handler(h0(services, (ic) => ic.logs.list)),
+            .handler(h1(services, (ic) => ic.logs.list)),
         },
 
         channels: {
@@ -866,6 +866,13 @@ export default createPlugin.withPlugins<PluginsClient>()({
             .use(requireAuth)
             .use(ic.credentials)
             .handler(h1(services, (ic) => ic.operator.createAccessSession)),
+
+          logs: {
+            list: builder.ironclaw.operator.logs.list
+              .use(requireAuth)
+              .use(ic.credentials)
+              .handler(h1(services, (ic) => ic.operator.logs.list)),
+          },
         },
       },
 

@@ -4,32 +4,9 @@ import { createChatDevtoolsBridge } from "@tanstack/ai-client/devtools";
 import { fetchServerSentEvents } from "@tanstack/ai-react";
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { useApiClient } from "@/app";
+import type { AuthGate, PendingApproval } from "@/hooks/ironclaw-chat-types";
 import type { StagedAttachment } from "@/lib/attachments";
 import { clearThreadStatus, setThreadStatus } from "@/lib/ironclaw-thread-status";
-
-export interface PendingApproval {
-  gateRef: string;
-  headline: string;
-  toolName?: string;
-  description?: string;
-  allowAlways?: boolean;
-  action?: { label?: string; method?: string };
-  scope?: { label?: string; reusable?: boolean };
-  destination?: { label?: string; url?: string; domain?: string };
-  details?: Array<{ label?: string; value?: string }>;
-}
-
-export interface AuthGate {
-  runId: string;
-  gateRef: string;
-  challengeKind: string;
-  provider?: string;
-  accountLabel?: string;
-  authorizationUrl?: string;
-  expiresAt?: string;
-  headline?: string;
-  body?: string;
-}
 
 type GateResolution = "approved" | "denied" | "credential_provided" | "cancelled";
 

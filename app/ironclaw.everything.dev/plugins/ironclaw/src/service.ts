@@ -61,6 +61,21 @@ type DownloadFileResponse = z.infer<typeof DownloadFileResponseSchema>;
 type ToolSetting = z.infer<typeof ToolSettingSchema>;
 type LogEntry = z.infer<typeof LogEntrySchema>;
 
+interface OperatorLogsParams {
+  limit?: number;
+  cursor?: string;
+  level?: string;
+  target?: string;
+  threadId?: string;
+  runId?: string;
+  turnId?: string;
+  toolCallId?: string;
+  toolName?: string;
+  source?: string;
+  tail?: boolean;
+  follow?: boolean;
+}
+
 const BODY_METHODS = new Set(["POST", "PUT", "PATCH"]);
 const REQUEST_TIMEOUT_MS = 30_000;
 
@@ -921,20 +936,9 @@ export class IronclawService {
     });
   }
 
-  listOperatorLogs(params?: {
-    limit?: number;
-    cursor?: string;
-    level?: string;
-    target?: string;
-    threadId?: string;
-    runId?: string;
-    turnId?: string;
-    toolCallId?: string;
-    toolName?: string;
-    source?: string;
-    tail?: boolean;
-    follow?: boolean;
-  }): Effect.Effect<{ data: LogEntry[]; nextCursor: string | null }, Error> {
+  listOperatorLogs(
+    params?: OperatorLogsParams,
+  ): Effect.Effect<{ data: LogEntry[]; nextCursor: string | null }, Error> {
     return Effect.tryPromise({
       try: async () => {
         const qp: Record<string, string | undefined> = {};
