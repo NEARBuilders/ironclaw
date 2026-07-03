@@ -1,8 +1,8 @@
-import { useSyncExternalStore, useCallback, useEffect, useRef } from "react";
 import type { UIMessage } from "@tanstack/ai";
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import { useApiClient } from "@/app";
 import type { StagedAttachment } from "@/lib/attachments";
-import { threadChatManager, type PendingApproval, type AuthGate } from "./use-thread-chat-manager";
+import { type AuthGate, type PendingApproval, threadChatManager } from "./use-thread-chat-manager";
 
 interface UseThreadChatOptions {
   threadId: string;
@@ -55,7 +55,12 @@ export function useThreadChat({ threadId, initialMessages }: UseThreadChatOption
   type GateResolution = "approved" | "denied" | "credential_provided" | "cancelled";
 
   const resolveGate = useCallback(
-    async (runId: string, gateRef: string, resolution: GateResolution, opts?: GateResolutionOpts) => {
+    async (
+      runId: string,
+      gateRef: string,
+      resolution: GateResolution,
+      opts?: GateResolutionOpts,
+    ) => {
       await apiClient.conversation.threadApprove({
         threadId,
         runId,
@@ -69,7 +74,13 @@ export function useThreadChat({ threadId, initialMessages }: UseThreadChatOption
   );
 
   const submitAuthToken = useCallback(
-    async (runId: string, gateRef: string, provider: string, accountLabel: string, token: string) => {
+    async (
+      runId: string,
+      gateRef: string,
+      provider: string,
+      accountLabel: string,
+      token: string,
+    ) => {
       const { credentialRef } = await apiClient.conversation.submitManualToken({
         provider,
         accountLabel,

@@ -1,3 +1,4 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Activity,
@@ -8,7 +9,10 @@ import {
   CheckCircle,
   Clock,
   Loader2,
+  PauseCircle,
+  Play,
   RefreshCw,
+  Trash2,
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -17,6 +21,14 @@ import { useApiClient } from "@/app";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -42,6 +54,9 @@ type OutboundTarget = NonNullable<
 type OutboundPrefs = Awaited<
   ReturnType<ReturnType<typeof useApiClient>["ironclaw"]["outbound"]["getPreferences"]>
 >;
+
+const automationsQueryKey = ["ironclaw", "automations"] as const;
+const outboundQueryKey = ["ironclaw", "outbound"] as const;
 
 function statusBadgeVariant(status: string | undefined): "default" | "secondary" | "destructive" {
   if (status === "active" || status === "success") return "default";
@@ -77,8 +92,21 @@ function formatDateTime(iso?: string) {
   }
 }
 
-function AutomationCard({ automation }: { automation: Automation }) {
+function AutomationCard({
+  automation,
+  onPause,
+  onResume,
+  onDelete,
+  mutating,
+}: {
+  automation: Automation;
+  onPause: () => void;
+  onResume: () => void;
+  onDelete: () => void;
+  mutating: boolean;
+}) {
   const lastRun = automation.recentRuns?.[0];
+  const isPaused = automation.status === "paused";
 
   return (
     <Card className="space-y-3 p-4">
@@ -86,9 +114,9 @@ function AutomationCard({ automation }: { automation: Automation }) {
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center gap-2">
             <h3 className="truncate text-sm font-semibold text-foreground">{automation.name}</h3>
-            <Badge variant={automation.isActive ? "default" : "secondary"}>
-              <StatusIcon status={automation.isActive ? "active" : "inactive"} />
-              {automation.isActive ? "Active" : "Disabled"}
+            <Badge variant={isPaused ? "secondary" : "default"}>
+              <StatusIcon status={isPaused ? "inactive" : "active"} />
+              {isPaused ? "Paused" : "Active"}
             </Badge>
           </div>
           {automation.lastStatus && (
@@ -112,6 +140,12 @@ function AutomationCard({ automation }: { automation: Automation }) {
               <span>{automation.source.timezone}</span>
             </div>
           </>
+        )}
+        {automation.source?.type === "once" && (
+          <div className="flex items-center gap-1.5 text-muted-foreground col-span-2">
+            <Clock className="size-3 shrink-0" />
+            <span>Run at: {formatDateTime(automation.source.at)}</span>
+          </div>
         )}
       </div>
 
@@ -139,6 +173,50 @@ function AutomationCard({ automation }: { automation: Automation }) {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="flex items-center gap-1.5 pt-1 border-t border-border">
+        {isPaused ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={onResume}
+            disabled={mutating}
+          >
+            {mutating ? (
+              <Loader2 size={11} className="mr-1 animate-spin" />
+            ) : (
+              <Play size={11} className="mr-1" />
+            )}
+            Resume
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={onPause}
+            disabled={mutating}
+          >
+            {mutating ? (
+              <Loader2 size={11} className="mr-1 animate-spin" />
+            ) : (
+              <PauseCircle size={11} className="mr-1" />
+            )}
+            Pause
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs text-muted-foreground hover:text-destructive"
+          onClick={onDelete}
+          disabled={mutating}
+        >
+          <Trash2 size={11} className="mr-1" />
+          Delete
+        </Button>
       </div>
     </Card>
   );
@@ -287,57 +365,76 @@ function OutboundPanel({
 
 function AutomationsPage() {
   const apiClient = useApiClient();
+  const queryClient = useQueryClient();
 
-  const [automations, setAutomations] = useState<Automation[]>([]);
-  const [automationsLoading, setAutomationsLoading] = useState(true);
-  const [automationsError, setAutomationsError] = useState<boolean>(false);
-
-  const [prefs, setPrefs] = useState<OutboundPrefs | null>(null);
-  const [targets, setTargets] = useState<OutboundTarget[]>([]);
-  const [outboundLoading, setOutboundLoading] = useState(true);
-
-  const loadAutomations = useCallback(async () => {
-    setAutomationsLoading(true);
-    setAutomationsError(false);
-    try {
+  const {
+    data: automations,
+    isLoading: automationsLoading,
+    isError: automationsError,
+    refetch: refetchAutomations,
+  } = useQuery({
+    queryKey: automationsQueryKey,
+    queryFn: async () => {
       const result = await apiClient.ironclaw.automations.list({ limit: 50, runLimit: 5 });
-      setAutomations(result.data);
-    } catch {
-      setAutomationsError(true);
-    } finally {
-      setAutomationsLoading(false);
-    }
-  }, [apiClient]);
+      return result.data;
+    },
+    staleTime: 15_000,
+  });
 
-  const loadOutbound = useCallback(async () => {
-    setOutboundLoading(true);
-    try {
+  const {
+    data: prefs,
+    isLoading: outboundLoading,
+    refetch: refetchOutbound,
+  } = useQuery({
+    queryKey: outboundQueryKey,
+    queryFn: async () => {
       const [prefsResult, targetsResult] = await Promise.all([
         apiClient.ironclaw.outbound.getPreferences(),
         apiClient.ironclaw.outbound.listTargets(),
       ]);
-      setPrefs(prefsResult);
-      setTargets(targetsResult.data);
-    } catch {
-      toast.error("Failed to load outbound configuration");
-    } finally {
-      setOutboundLoading(false);
-    }
-  }, [apiClient]);
+      return { prefs: prefsResult, targets: targetsResult.data } as const;
+    },
+    staleTime: 30_000,
+  });
 
-  useEffect(() => {
-    loadAutomations();
-    loadOutbound();
-  }, [loadAutomations, loadOutbound]);
+  const pauseMutation = useMutation({
+    mutationFn: (id: string) => apiClient.ironclaw.automations.pause({ id }),
+    onSuccess: () => {
+      toast.success("Automation paused");
+      queryClient.invalidateQueries({ queryKey: automationsQueryKey });
+    },
+    onError: () => toast.error("Failed to pause automation"),
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: (id: string) => apiClient.ironclaw.automations.resume({ id }),
+    onSuccess: () => {
+      toast.success("Automation resumed");
+      queryClient.invalidateQueries({ queryKey: automationsQueryKey });
+    },
+    onError: () => toast.error("Failed to resume automation"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiClient.ironclaw.automations.delete({ id }),
+    onSuccess: () => {
+      toast.success("Automation deleted");
+      queryClient.invalidateQueries({ queryKey: automationsQueryKey });
+    },
+    onError: () => toast.error("Failed to delete automation"),
+  });
+
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const handleSaveTarget = useCallback(
     async (targetId: string) => {
+      const targets = prefs?.targets ?? [];
       const target = targets.find((t) => t.target.targetId === targetId);
       if (!target) return;
       await apiClient.ironclaw.outbound.setPreferences({ finalReplyTarget: target.target });
-      await loadOutbound();
+      await refetchOutbound();
     },
-    [apiClient, loadOutbound, targets],
+    [apiClient, prefs?.targets, refetchOutbound],
   );
 
   return (
@@ -358,8 +455,8 @@ function AutomationsPage() {
             size="icon"
             className="h-8 w-8 shrink-0"
             onClick={() => {
-              loadAutomations();
-              loadOutbound();
+              refetchAutomations();
+              refetchOutbound();
             }}
             disabled={automationsLoading || outboundLoading}
             title="Refresh automations"
@@ -369,8 +466,8 @@ function AutomationsPage() {
         </div>
 
         <OutboundPanel
-          prefs={prefs}
-          targets={targets}
+          prefs={prefs?.prefs ?? null}
+          targets={prefs?.targets ?? []}
           loading={outboundLoading}
           onSave={handleSaveTarget}
         />
@@ -393,12 +490,12 @@ function AutomationsPage() {
                   Something went wrong. Check your connection and try again.
                 </p>
               </div>
-              <Button variant="outline" size="sm" onClick={loadAutomations}>
+              <Button variant="outline" size="sm" onClick={() => refetchAutomations()}>
                 <RefreshCw className="mr-1.5 size-3" />
                 Retry
               </Button>
             </Card>
-          ) : automations.length === 0 ? (
+          ) : !automations || automations.length === 0 ? (
             <Card className="flex flex-col items-center gap-3 p-6 text-center">
               <Clock className="size-8 text-muted-foreground" />
               <div className="space-y-1">
@@ -410,13 +507,58 @@ function AutomationsPage() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {automations.map((a) => (
-                <AutomationCard key={a.id} automation={a} />
-              ))}
+              {automations.map((a) => {
+                const isMutating =
+                  (pauseMutation.isPending && pauseMutation.variables === a.id) ||
+                  (resumeMutation.isPending && resumeMutation.variables === a.id) ||
+                  (deleteMutation.isPending && deleteMutation.variables === a.id);
+                return (
+                  <AutomationCard
+                    key={a.id}
+                    automation={a}
+                    onPause={() => pauseMutation.mutate(a.id)}
+                    onResume={() => resumeMutation.mutate(a.id)}
+                    onDelete={() => setDeleteTarget(a.id)}
+                    mutating={isMutating}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
       </div>
+
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete automation?</DialogTitle>
+            <DialogDescription>
+              This will permanently remove this automation. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deleteTarget) {
+                  deleteMutation.mutate(deleteTarget);
+                  setDeleteTarget(null);
+                }
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

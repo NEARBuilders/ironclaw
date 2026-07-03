@@ -32,7 +32,7 @@ export async function startRebornMock(options: RebornMockOptions = {}): Promise<
   }
 
   function validateAuth(req: http.IncomingMessage): boolean {
-    const auth = req.headers["authorization"];
+    const auth = req.headers.authorization;
     if (auth) {
       const parts = auth.split(" ");
       if (parts.length === 2 && parts[0] === "Bearer" && parts[1] === state.token) return true;

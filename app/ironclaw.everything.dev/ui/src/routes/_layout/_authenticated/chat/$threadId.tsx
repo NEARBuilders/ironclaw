@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { ApprovalCard } from "@/components/approval-card";
 import { AuthGenericCard } from "@/components/auth-generic-card";
 import { AuthOauthCard } from "@/components/auth-oauth-card";
@@ -8,10 +8,10 @@ import { ChatIdentityBar } from "@/components/chat-identity-bar";
 import { ChatInput } from "@/components/chat-input";
 import { ChatMessage } from "@/components/chat-message";
 import { ChatMessageList } from "@/components/chat-message-list";
-import { useThreadChat } from "@/hooks/use-thread-chat";
-import { useThreadMessages, useConversationThreads } from "@/hooks/use-conversation";
-import { useVerboseMode } from "@/hooks/use-verbose-mode";
+import { useConversationThreads, useThreadMessages } from "@/hooks/use-conversation";
+import { useIronclawChat } from "@/hooks/use-ironclaw-chat";
 import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
+import { useVerboseMode } from "@/hooks/use-verbose-mode";
 import type { StagedAttachment } from "@/lib/attachments";
 import { useChatLayout } from "../chat";
 
@@ -53,7 +53,7 @@ function ThreadChatView() {
     };
   }, [threadId, threadsQuery.data]);
 
-  const chat = useThreadChat({ threadId, initialMessages });
+  const chat = useIronclawChat({ threadId, initialMessages });
   const isBusy = chat.isLoading;
   const streamInterrupted = chat.streamInterrupted;
 
@@ -103,49 +103,45 @@ function ThreadChatView() {
         </div>
       )}
       {firstAuthGate ? (
-        firstAuthGate.challengeKind === "oauth_url"
-          ? (
-            <div className="border-b border-border px-4 py-3">
-              <AuthOauthCard
-                gate={firstAuthGate}
-                onCancel={() =>
-                  chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "cancelled")
+        firstAuthGate.challengeKind === "oauth_url" ? (
+          <div className="border-b border-border px-4 py-3">
+            <AuthOauthCard
+              gate={firstAuthGate}
+              onCancel={() =>
+                chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "cancelled")
+              }
+            />
+          </div>
+        ) : firstAuthGate.challengeKind === "manual_token" ? (
+          <div className="border-b border-border px-4 py-3">
+            <AuthTokenCard
+              gate={firstAuthGate}
+              onSubmit={async (token) => {
+                if (chat.runId) {
+                  await chat.submitAuthToken(
+                    chat.runId,
+                    firstAuthGate.gateRef,
+                    firstAuthGate.provider ?? "",
+                    firstAuthGate.accountLabel ?? "",
+                    token,
+                  );
                 }
-              />
-            </div>
-          )
-          : firstAuthGate.challengeKind === "manual_token"
-            ? (
-              <div className="border-b border-border px-4 py-3">
-                <AuthTokenCard
-                  gate={firstAuthGate}
-                  onSubmit={async (token) => {
-                    if (chat.runId) {
-                      await chat.submitAuthToken(
-                        chat.runId,
-                        firstAuthGate.gateRef,
-                        firstAuthGate.provider ?? "",
-                        firstAuthGate.accountLabel ?? "",
-                        token,
-                      );
-                    }
-                  }}
-                  onCancel={() =>
-                    chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "cancelled")
-                  }
-                />
-              </div>
-            )
-            : (
-              <div className="border-b border-border px-4 py-3">
-                <AuthGenericCard
-                  gate={firstAuthGate}
-                  onCancel={() =>
-                    chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "cancelled")
-                  }
-                />
-              </div>
-            )
+              }}
+              onCancel={() =>
+                chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "cancelled")
+              }
+            />
+          </div>
+        ) : (
+          <div className="border-b border-border px-4 py-3">
+            <AuthGenericCard
+              gate={firstAuthGate}
+              onCancel={() =>
+                chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "cancelled")
+              }
+            />
+          </div>
+        )
       ) : firstPendingApproval ? (
         <div className="border-b border-border px-4 py-3">
           <ApprovalCard
@@ -159,8 +155,10 @@ function ThreadChatView() {
             onAlways={
               firstPendingApproval.allowAlways
                 ? () =>
-                  chat.runId &&
-                  chat.resolveGate(chat.runId, firstPendingApproval.gateRef, "approved", { always: true })
+                    chat.runId &&
+                    chat.resolveGate(chat.runId, firstPendingApproval.gateRef, "approved", {
+                      always: true,
+                    })
                 : undefined
             }
           />

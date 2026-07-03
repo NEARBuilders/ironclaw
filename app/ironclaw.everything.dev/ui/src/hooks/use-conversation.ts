@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useApiClient, type ApiClient } from "@/app";
+import { type ApiClient, useApiClient } from "@/app";
 import { messagesToUIMessages } from "@/lib/ironclaw-message-parts";
 
 export interface ConversationMessage {

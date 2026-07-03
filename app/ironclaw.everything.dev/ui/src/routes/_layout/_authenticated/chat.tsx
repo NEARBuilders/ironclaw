@@ -1,4 +1,12 @@
-import { createFileRoute, Link, Outlet, redirect, useLocation, useNavigate, useMatchRoute } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  redirect,
+  useLocation,
+  useMatchRoute,
+  useNavigate,
+} from "@tanstack/react-router";
 import {
   ChevronDown,
   ChevronLeft,
@@ -10,7 +18,15 @@ import {
   Unplug,
   Zap,
 } from "lucide-react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { useApiClient } from "@/app";
 import { SubagentRow } from "@/components/thread-sidebar-row";
@@ -28,7 +44,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { type ConversationThread, useConversationThreads } from "@/hooks/use-conversation";
 import { ironclawStatusQueryKey, useIronclawStatus } from "@/hooks/use-ironclaw-status";
-import { threadChatManager } from "@/hooks/use-thread-chat-manager";
+import {
+  getThreadStatuses,
+  subscribe as subscribeThreadStatus,
+} from "@/lib/ironclaw-thread-status";
 
 export const Route = createFileRoute("/_layout/_authenticated/chat")({
   beforeLoad: async ({ context }) => {
@@ -40,9 +59,7 @@ export const Route = createFileRoute("/_layout/_authenticated/chat")({
   loader: async ({ context }) => {
     try {
       const { threadListQueryOptions } = await import("@/hooks/use-conversation");
-      await context.queryClient.ensureQueryData(
-        threadListQueryOptions(context.apiClient),
-      );
+      await context.queryClient.ensureQueryData(threadListQueryOptions(context.apiClient));
     } catch {
       // IronClaw not available
     }
@@ -76,11 +93,13 @@ function ChatLayout() {
   const location = useLocation();
   const matchRoute = useMatchRoute();
   const threadMatch = matchRoute({ to: "/chat/$threadId" });
-  const activeThreadId = threadMatch && typeof threadMatch === "object" && "params" in threadMatch
-    ? (threadMatch as { params: { threadId: string } }).params.threadId
-    : null;
+  const activeThreadId =
+    threadMatch && typeof threadMatch === "object" && "params" in threadMatch
+      ? (threadMatch as { params: { threadId: string } }).params.threadId
+      : null;
 
-  const isDisconnected = connectionStatus === "disconnected" || connectionStatus === "never-connected";
+  const isDisconnected =
+    connectionStatus === "disconnected" || connectionStatus === "never-connected";
 
   const threadsQuery = useConversationThreads();
 
@@ -107,12 +126,9 @@ function ChatLayout() {
 
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<string | null>(null);
 
-  const deleteThread = useCallback(
-    async (threadId: string) => {
-      setDeleteConfirmTarget(threadId);
-    },
-    [],
-  );
+  const deleteThread = useCallback(async (threadId: string) => {
+    setDeleteConfirmTarget(threadId);
+  }, []);
 
   const confirmDelete = useCallback(async () => {
     const threadId = deleteConfirmTarget;
@@ -133,6 +149,7 @@ function ChatLayout() {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [, tick] = useState(0);
 
   const filteredThreads = useMemo(() => {
     if (!searchQuery.trim()) return threads;
@@ -145,29 +162,27 @@ function ChatLayout() {
 
   const threadState = useMemo(() => {
     const map = new Map<string, "running" | "needs-attention">();
+    const statuses = getThreadStatuses();
     for (const thread of threads) {
-      const session = threadChatManager.get(thread.threadId);
-      if (!session) continue;
-      if (session.pendingApprovals.length > 0) {
+      const status = statuses.get(thread.threadId);
+      if (!status) continue;
+      if (status.hasPendingApprovals) {
         map.set(thread.threadId, "needs-attention");
-      } else if (session.isLoading || session.runId) {
+      } else if (status.isLoading || status.hasActiveRun) {
         map.set(thread.threadId, "running");
       }
     }
     return map;
-  }, [threads]);
+  }, [threads, tick]);
 
   useEffect(() => {
     setSheetOpen(false);
   }, [location.pathname]);
 
-  const [, tick] = useState(0);
   useEffect(() => {
-    const unsubs = threads.map((t) =>
-      threadChatManager.subscribe(t.threadId, () => tick((n) => n + 1)),
-    );
-    return () => unsubs.forEach((fn) => fn());
-  }, [threads]);
+    const unsub = subscribeThreadStatus(() => tick((n) => n + 1));
+    return unsub;
+  }, [subscribeThreadStatus]);
 
   const isResizing = useRef(false);
   const startX = useRef(0);
@@ -224,7 +239,9 @@ function ChatLayout() {
 
   const orphanedSubagents = useMemo(() => {
     const parentIds = new Set(filteredThreads.map((t) => t.threadId));
-    return filteredThreads.filter((t) => t.isSubagent && (!t.parentThreadId || !parentIds.has(t.parentThreadId)));
+    return filteredThreads.filter(
+      (t) => t.isSubagent && (!t.parentThreadId || !parentIds.has(t.parentThreadId)),
+    );
   }, [filteredThreads]);
 
   const toggleParent = useCallback((threadId: string) => {
@@ -246,7 +263,8 @@ function ChatLayout() {
         ? "bg-muted-foreground animate-pulse"
         : "bg-destructive";
 
-  const linkBase = "group flex min-w-0 w-full items-center gap-2 rounded-lg transition-colors cursor-pointer touch-manipulation relative text-muted-foreground hover:bg-muted active:bg-muted";
+  const linkBase =
+    "group flex min-w-0 w-full items-center gap-2 rounded-lg transition-colors cursor-pointer touch-manipulation relative text-muted-foreground hover:bg-muted active:bg-muted";
 
   const threadLinkClass = `${linkBase} px-3 py-2.5 text-left text-sm`;
   const subagentLinkClass = `${linkBase} px-3 py-1.5 text-left text-xs`;
@@ -257,7 +275,10 @@ function ChatLayout() {
       {!isDisconnected && (
         <div className="px-2 pt-1.5 pb-1">
           <div className="relative">
-            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50" />
+            <Search
+              size={12}
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50"
+            />
             <Input
               type="text"
               value={searchQuery}
@@ -269,147 +290,147 @@ function ChatLayout() {
         </div>
       )}
       <ScrollArea className="flex-1 min-h-0">
-      <div className="space-y-0.5 p-2">
-        {isDisconnected ? (
-          <div className="flex flex-col items-center gap-3 px-2 py-6 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-muted">
-              <Unplug size={16} className="text-muted-foreground" />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-foreground">
-                {connectionStatus === "never-connected"
-                  ? "IronClaw not set up"
-                  : "IronClaw disconnected"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {connectionStatus === "never-connected"
-                  ? "Connect the binary to start chatting"
-                  : "Binary unreachable — is it running?"}
-              </p>
-            </div>
-            <Link
-              to="/setup"
-              className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/5 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
-            >
-              <Zap size={10} />
-              {connectionStatus === "never-connected" ? "Set up IronClaw" : "Setup guide"}
-            </Link>
-          </div>
-        ) : threadsQuery.isSuccess && threads.length === 0 ? (
-          <p className="px-2 py-4 text-center text-xs text-muted-foreground">
-            No threads yet. Create one to start chatting.
-          </p>
-        ) : (
-          rootThreads.map((thread) => {
-            const children = subagentMap.get(thread.threadId) ?? [];
-            const isExpanded = expandedParents.has(thread.threadId);
-            const hasChildren = children.length > 0;
-            return (
-              <div key={thread.threadId} className="relative">
-                <Link
-                  to="/chat/$threadId"
-                  params={{ threadId: thread.threadId }}
-                  className={threadLinkClass}
-                  activeProps={{ className: "bg-primary/15 text-foreground" }}
-                >
-                  <span className="absolute left-px top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-full group-data-[status=active]:bg-primary" />
-                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                    {hasChildren && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          toggleParent(thread.threadId);
-                        }}
-                        className="shrink-0 p-0.5 hover:text-foreground transition-colors touch-manipulation"
-                        aria-label={isExpanded ? "Collapse sub-agents" : "Expand sub-agents"}
-                      >
-                        <ChevronDown
-                          size={12}
-                          className={`transition-transform ${isExpanded ? "" : "-rotate-90"}`}
-                        />
-                      </button>
-                    )}
-                    <span className="relative shrink-0">
-                      {threadState.get(thread.threadId) === "running" && (
-                        <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-[color:var(--near-green)]" />
-                      )}
-                      {threadState.get(thread.threadId) === "needs-attention" && (
-                        <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-500" />
-                      )}
-                      <MessageSquare size={14} />
-                    </span>
-                    <span className="truncate text-xs">
-                      {thread.title ?? `Thread ${thread.threadId.slice(0, 8)}`}
-                    </span>
-                    {hasChildren && (
-                      <span className="shrink-0 rounded-full bg-muted-foreground/10 px-1.5 text-[10px] font-medium text-muted-foreground/60">
-                        {children.length}
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      deleteThread(thread.threadId);
-                    }}
-                    className="shrink-0 p-1 -m-1 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity touch-manipulation"
-                    aria-label="Delete thread"
-                  >
-                    <Trash2
-                      size={12}
-                      className="text-muted-foreground/40 hover:text-destructive transition-colors"
-                    />
-                  </button>
-                </Link>
-                {hasChildren && isExpanded && (
-                  <div className="ml-4 border-l border-border/50 pl-1">
-                    {children.map((child) => {
-                      return (
-                        <Link
-                          key={child.threadId}
-                          to="/chat/$threadId"
-                          params={{ threadId: child.threadId }}
-                          className={subagentLinkClass}
-                          activeProps={{ className: "bg-primary/15 text-foreground" }}
-                        >
-                          <span className="absolute left-px top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full group-data-[status=active]:bg-primary" />
-                          <SubagentRow thread={child} onDelete={deleteThread} />
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
+        <div className="space-y-0.5 p-2">
+          {isDisconnected ? (
+            <div className="flex flex-col items-center gap-3 px-2 py-6 text-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-muted">
+                <Unplug size={16} className="text-muted-foreground" />
               </div>
-            );
-          })
-        )}
-        {orphanedSubagents.length > 0 && (
-          <div className="pt-2">
-            <div className="px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
-              Orphaned sub-agents
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-foreground">
+                  {connectionStatus === "never-connected"
+                    ? "IronClaw not set up"
+                    : "IronClaw disconnected"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {connectionStatus === "never-connected"
+                    ? "Connect the binary to start chatting"
+                    : "Binary unreachable — is it running?"}
+                </p>
+              </div>
+              <Link
+                to="/setup"
+                className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/5 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+              >
+                <Zap size={10} />
+                {connectionStatus === "never-connected" ? "Set up IronClaw" : "Setup guide"}
+              </Link>
             </div>
-            {orphanedSubagents.map((child) => {
+          ) : threadsQuery.isSuccess && threads.length === 0 ? (
+            <p className="px-2 py-4 text-center text-xs text-muted-foreground">
+              No threads yet. Create one to start chatting.
+            </p>
+          ) : (
+            rootThreads.map((thread) => {
+              const children = subagentMap.get(thread.threadId) ?? [];
+              const isExpanded = expandedParents.has(thread.threadId);
+              const hasChildren = children.length > 0;
               return (
-                <Link
-                  key={child.threadId}
-                  to="/chat/$threadId"
-                  params={{ threadId: child.threadId }}
-                  className={`${subagentLinkClass} ${indentClass}`}
-                  activeProps={{ className: "bg-primary/15 text-foreground" }}
-                >
-                  <span className="absolute left-px top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full group-data-[status=active]:bg-primary" />
-                  <SubagentRow thread={child} onDelete={deleteThread} />
-                </Link>
+                <div key={thread.threadId} className="relative">
+                  <Link
+                    to="/chat/$threadId"
+                    params={{ threadId: thread.threadId }}
+                    className={threadLinkClass}
+                    activeProps={{ className: "bg-primary/15 text-foreground" }}
+                  >
+                    <span className="absolute left-px top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-full group-data-[status=active]:bg-primary" />
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      {hasChildren && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            toggleParent(thread.threadId);
+                          }}
+                          className="shrink-0 p-0.5 hover:text-foreground transition-colors touch-manipulation"
+                          aria-label={isExpanded ? "Collapse sub-agents" : "Expand sub-agents"}
+                        >
+                          <ChevronDown
+                            size={12}
+                            className={`transition-transform ${isExpanded ? "" : "-rotate-90"}`}
+                          />
+                        </button>
+                      )}
+                      <span className="relative shrink-0">
+                        {threadState.get(thread.threadId) === "running" && (
+                          <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-[color:var(--near-green)]" />
+                        )}
+                        {threadState.get(thread.threadId) === "needs-attention" && (
+                          <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-500" />
+                        )}
+                        <MessageSquare size={14} />
+                      </span>
+                      <span className="truncate text-xs">
+                        {thread.title ?? `Thread ${thread.threadId.slice(0, 8)}`}
+                      </span>
+                      {hasChildren && (
+                        <span className="shrink-0 rounded-full bg-muted-foreground/10 px-1.5 text-[10px] font-medium text-muted-foreground/60">
+                          {children.length}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        deleteThread(thread.threadId);
+                      }}
+                      className="shrink-0 p-1 -m-1 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity touch-manipulation"
+                      aria-label="Delete thread"
+                    >
+                      <Trash2
+                        size={12}
+                        className="text-muted-foreground/40 hover:text-destructive transition-colors"
+                      />
+                    </button>
+                  </Link>
+                  {hasChildren && isExpanded && (
+                    <div className="ml-4 border-l border-border/50 pl-1">
+                      {children.map((child) => {
+                        return (
+                          <Link
+                            key={child.threadId}
+                            to="/chat/$threadId"
+                            params={{ threadId: child.threadId }}
+                            className={subagentLinkClass}
+                            activeProps={{ className: "bg-primary/15 text-foreground" }}
+                          >
+                            <span className="absolute left-px top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full group-data-[status=active]:bg-primary" />
+                            <SubagentRow thread={child} onDelete={deleteThread} />
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
-            })}
-          </div>
-        )}
-      </div>
-    </ScrollArea>
+            })
+          )}
+          {orphanedSubagents.length > 0 && (
+            <div className="pt-2">
+              <div className="px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/50">
+                Orphaned sub-agents
+              </div>
+              {orphanedSubagents.map((child) => {
+                return (
+                  <Link
+                    key={child.threadId}
+                    to="/chat/$threadId"
+                    params={{ threadId: child.threadId }}
+                    className={`${subagentLinkClass} ${indentClass}`}
+                    activeProps={{ className: "bg-primary/15 text-foreground" }}
+                  >
+                    <span className="absolute left-px top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-full group-data-[status=active]:bg-primary" />
+                    <SubagentRow thread={child} onDelete={deleteThread} />
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 
@@ -539,12 +560,18 @@ function ChatLayout() {
         </div>
       </div>
 
-      <Dialog open={deleteConfirmTarget !== null} onOpenChange={(open) => { if (!open) setDeleteConfirmTarget(null); }}>
+      <Dialog
+        open={deleteConfirmTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteConfirmTarget(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete thread?</DialogTitle>
             <DialogDescription>
-              This will permanently delete this thread and all its messages. This action cannot be undone.
+              This will permanently delete this thread and all its messages. This action cannot be
+              undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

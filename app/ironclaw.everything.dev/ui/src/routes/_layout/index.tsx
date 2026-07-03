@@ -23,11 +23,7 @@ function LandingPage() {
         <div className="mx-auto w-full max-w-4xl px-4 py-12 sm:px-6 sm:py-16 pb-20 sm:pb-12">
           <div className="text-center space-y-3">
             <div className="flex justify-center mb-2">
-              <img
-                src={ironclawLogo}
-                alt="IronClaw"
-                className="h-20 w-20 object-contain"
-              />
+              <img src={ironclawLogo} alt="IronClaw" className="h-20 w-20 object-contain" />
             </div>
 
             <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground">
@@ -35,8 +31,8 @@ function LandingPage() {
             </h1>
 
             <p className="text-base sm:text-lg text-muted-foreground font-medium max-w-xl mx-auto leading-relaxed">
-              Connect your agent three ways — deploy and share, tunnel for staging, or run locally in
-              dev. Each flow works with the same core dashboard.
+              Connect your agent three ways — deploy and share, tunnel for staging, or run locally
+              in dev. Each flow works with the same core dashboard.
             </p>
 
             <div className="flex items-center justify-center gap-3 pt-2">

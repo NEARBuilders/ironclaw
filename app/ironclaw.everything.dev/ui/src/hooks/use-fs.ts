@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useApiClient, type ApiClient } from "@/app";
+import { type ApiClient, useApiClient } from "@/app";
 
 export function mountsQueryOptions(apiClient: ApiClient) {
   return {

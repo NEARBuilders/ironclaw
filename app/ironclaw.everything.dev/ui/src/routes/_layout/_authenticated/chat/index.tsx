@@ -10,7 +10,8 @@ export const Route = createFileRoute("/_layout/_authenticated/chat/")({
 function ChatIndex() {
   const { status: connectionStatus } = useIronclawStatus();
   const threadsQuery = useConversationThreads();
-  const isDisconnected = connectionStatus === "disconnected" || connectionStatus === "never-connected";
+  const isDisconnected =
+    connectionStatus === "disconnected" || connectionStatus === "never-connected";
   const threads = threadsQuery.data?.threads ?? [];
 
   if (isDisconnected) {
@@ -22,7 +23,9 @@ function ChatIndex() {
           </div>
           <div className="space-y-1.5">
             <p className="text-sm font-semibold text-foreground">
-              {connectionStatus === "never-connected" ? "IronClaw not connected" : "Connection lost"}
+              {connectionStatus === "never-connected"
+                ? "IronClaw not connected"
+                : "Connection lost"}
             </p>
             <p className="text-xs text-muted-foreground leading-relaxed">
               {connectionStatus === "never-connected"

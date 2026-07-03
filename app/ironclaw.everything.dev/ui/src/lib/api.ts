@@ -23,7 +23,9 @@ function createRpcLink(runtimeConfig: { hostUrl: string; rpcBase: string }) {
           const err = error as Record<string, unknown>;
           const message = err.message ? String(err.message).toLowerCase() : "";
           const status = "status" in err ? Number(err.status) : 0;
-          const isIronclaw404 = (typeof err.f === "string" && err.f.includes("Ironclaw API error")) || message.includes("ironclaw api error");
+          const isIronclaw404 =
+            (typeof err.f === "string" && err.f.includes("Ironclaw API error")) ||
+            message.includes("ironclaw api error");
 
           if (isIronclaw404) {
             return;

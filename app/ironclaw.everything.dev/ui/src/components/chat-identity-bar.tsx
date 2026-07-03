@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Copy, PanelLeft, Settings, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
+
 interface ThreadState {
   thread: {
     threadId: string;

@@ -1,6 +1,8 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   BookOpen,
+  CheckCircle2,
   Code,
   Download,
   Edit3,
@@ -14,12 +16,13 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { useApiClient } from "@/app";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,6 +42,8 @@ type CatalogItem = {
   name: string;
   description: string;
 };
+
+const skillsQueryKey = ["ironclaw", "skills"] as const;
 
 function trustVariant(trust: string): "default" | "secondary" | "destructive" | "outline" {
   if (trust === "high") return "default";
@@ -62,10 +67,44 @@ function SkillSkeleton() {
 
 function SkillsPage() {
   const apiClient = useApiClient();
+  const queryClient = useQueryClient();
 
-  const [installed, setInstalled] = useState<Skill[]>([]);
-  const [installedLoading, setInstalledLoading] = useState(true);
-  const [installedError, setInstalledError] = useState<string | null>(null);
+  const {
+    data: installed,
+    isLoading: installedLoading,
+    isError: installedError,
+    refetch: refetchInstalled,
+  } = useQuery({
+    queryKey: skillsQueryKey,
+    queryFn: async () => {
+      const res = await apiClient.ironclaw.skills.list();
+      return res.data;
+    },
+    staleTime: 10_000,
+  });
+
+  const autoActivateMutation = useMutation({
+    mutationFn: ({ name, enabled }: { name: string; enabled: boolean }) =>
+      apiClient.ironclaw.skills.autoActivate({ name, enabled }),
+    onSuccess: (_data, { name, enabled }) => {
+      toast.success(
+        enabled ? `Auto-activate enabled for ${name}` : `Auto-activate disabled for ${name}`,
+      );
+      queryClient.invalidateQueries({ queryKey: skillsQueryKey });
+    },
+    onError: () => toast.error("Failed to update auto-activate"),
+  });
+
+  const autoActivateLearnedMutation = useMutation({
+    mutationFn: (enabled: boolean) => apiClient.ironclaw.skills.autoActivateLearned({ enabled }),
+    onSuccess: (_data, enabled) => {
+      toast.success(
+        enabled ? "Learned skills auto-activation on" : "Learned skills auto-activation off",
+      );
+      queryClient.invalidateQueries({ queryKey: skillsQueryKey });
+    },
+    onError: () => toast.error("Failed to update learned auto-activation"),
+  });
 
   const [searchQuery, setSearchQuery] = useState("");
   const [catalogResults, setCatalogResults] = useState<CatalogItem[]>([]);
@@ -78,24 +117,6 @@ function SkillsPage() {
   const [editLoading, setEditLoading] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-
-  const fetchInstalled = useCallback(async () => {
-    setInstalledLoading(true);
-    setInstalledError(null);
-    try {
-      const res = await apiClient.ironclaw.skills.list();
-      setInstalled(res.data);
-    } catch {
-      setInstalledError("Failed to load skills");
-      setInstalled([]);
-    } finally {
-      setInstalledLoading(false);
-    }
-  }, [apiClient]);
-
-  useEffect(() => {
-    fetchInstalled();
-  }, [fetchInstalled]);
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
@@ -124,7 +145,7 @@ function SkillsPage() {
         if (res.success) {
           toast.success(res.message);
           setCatalogInstalledNames((prev) => [...prev, name]);
-          fetchInstalled();
+          refetchInstalled();
         } else {
           toast.error(res.message);
         }
@@ -132,7 +153,7 @@ function SkillsPage() {
         toast.error(err.message ?? "Failed to install skill");
       }
     },
-    [apiClient, fetchInstalled],
+    [apiClient, refetchInstalled],
   );
 
   const handleRemove = useCallback(
@@ -141,7 +162,7 @@ function SkillsPage() {
         const res = await apiClient.ironclaw.skills.remove({ name });
         if (res.success) {
           toast.success(res.message);
-          setInstalled((prev) => prev.filter((s) => s.name !== name));
+          queryClient.invalidateQueries({ queryKey: skillsQueryKey });
         } else {
           toast.error(res.message);
         }
@@ -149,7 +170,7 @@ function SkillsPage() {
         toast.error(err.message ?? "Failed to remove skill");
       }
     },
-    [apiClient],
+    [apiClient, queryClient],
   );
 
   const handleViewEdit = useCallback(
@@ -221,7 +242,7 @@ function SkillsPage() {
               Installed
               {!installedLoading && !installedError && (
                 <span className="ml-1 rounded-full bg-muted-foreground/20 px-1.5 py-0 text-[10px] font-medium">
-                  {installed.length}
+                  {installed?.length ?? 0}
                 </span>
               )}
             </TabsTrigger>
@@ -242,12 +263,12 @@ function SkillsPage() {
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center space-y-3">
                 <XCircle className="mx-auto h-6 w-6 text-destructive" />
                 <p className="text-sm text-destructive">Failed to load installed skills.</p>
-                <Button variant="outline" size="sm" onClick={fetchInstalled}>
+                <Button variant="outline" size="sm" onClick={() => refetchInstalled()}>
                   <RefreshCw size={14} className="mr-1.5" />
                   Retry
                 </Button>
               </div>
-            ) : installed.length === 0 ? (
+            ) : !installed || installed.length === 0 ? (
               <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/50 px-4 py-8 text-center">
                 <BookOpen size={24} className="text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">No skills installed.</p>
@@ -256,83 +277,133 @@ function SkillsPage() {
                 </p>
               </div>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {installed.map((skill) => (
-                  <Card key={skill.name} className="flex flex-col p-5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <h3 className="truncate text-sm font-semibold text-foreground">
-                          {skill.name}
-                        </h3>
-                        <p className="line-clamp-2 text-xs text-muted-foreground">
-                          {skill.description}
+              <div className="space-y-4">
+                <Card className="p-4">
+                  <div className="flex items-center gap-3">
+                    <Checkbox
+                      id="auto-activate-learned"
+                      onCheckedChange={(checked) =>
+                        autoActivateLearnedMutation.mutate(checked === true)
+                      }
+                      disabled={autoActivateLearnedMutation.isPending}
+                    />
+                    <Label htmlFor="auto-activate-learned" className="flex-1 cursor-pointer">
+                      <span className="text-sm font-medium text-foreground">
+                        Auto-activate learned skills
+                      </span>
+                      <p className="text-xs text-muted-foreground">
+                        Automatically activate skills the agent learns during conversations
+                      </p>
+                    </Label>
+                    {autoActivateLearnedMutation.isPending && (
+                      <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                </Card>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {installed.map((skill) => (
+                    <Card key={skill.name} className="flex flex-col p-5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <h3 className="truncate text-sm font-semibold text-foreground">
+                            {skill.name}
+                          </h3>
+                          <p className="line-clamp-2 text-xs text-muted-foreground">
+                            {skill.description}
+                          </p>
+                        </div>
+                        <Badge variant={trustVariant(skill.trust)} className="shrink-0 text-[10px]">
+                          {skill.trust}
+                        </Badge>
+                      </div>
+
+                      <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground">
+                        <FileText size={10} />
+                        {skill.version}
+                        <Code size={10} className="ml-1" />
+                        {skill.source}
+                      </div>
+
+                      {skill.keywords.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {skill.keywords.map((kw) => (
+                            <span
+                              key={kw}
+                              className="inline-flex items-center gap-0.5 rounded-full bg-secondary px-2 py-0.5 text-[10px] text-secondary-foreground"
+                            >
+                              <Tag size={8} />
+                              {kw}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {skill.usageHint && (
+                        <p className="mt-2 text-[10px] italic text-muted-foreground">
+                          {skill.usageHint}
                         </p>
-                      </div>
-                      <Badge variant={trustVariant(skill.trust)} className="shrink-0 text-[10px]">
-                        {skill.trust}
-                      </Badge>
-                    </div>
+                      )}
+                      {skill.setupHint && (
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          Setup: {skill.setupHint}
+                        </p>
+                      )}
 
-                    <div className="mt-2 flex items-center gap-2 text-[10px] text-muted-foreground">
-                      <FileText size={10} />
-                      {skill.version}
-                      <Code size={10} className="ml-1" />
-                      {skill.source}
-                    </div>
-
-                    {skill.keywords.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {skill.keywords.map((kw) => (
-                          <span
-                            key={kw}
-                            className="inline-flex items-center gap-0.5 rounded-full bg-secondary px-2 py-0.5 text-[10px] text-secondary-foreground"
-                          >
-                            <Tag size={8} />
-                            {kw}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {skill.usageHint && (
-                      <p className="mt-2 text-[10px] italic text-muted-foreground">
-                        {skill.usageHint}
-                      </p>
-                    )}
-                    {skill.setupHint && (
-                      <p className="mt-1 text-[10px] text-muted-foreground">
-                        Setup: {skill.setupHint}
-                      </p>
-                    )}
-
-                    <div className="mt-auto flex items-center gap-1.5 pt-3">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => handleViewEdit(skill)}
-                      >
-                        {skill.canEdit ? (
-                          <Edit3 size={11} className="mr-1" />
-                        ) : (
-                          <Code size={11} className="mr-1" />
-                        )}
-                        {skill.canEdit ? "View / Edit" : "View"}
-                      </Button>
-                      {skill.canDelete && (
+                      <div className="mt-auto flex items-center gap-1.5 pt-3">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-7 text-xs text-muted-foreground hover:text-destructive"
-                          onClick={() => handleRemove(skill.name)}
+                          className="h-7 text-xs"
+                          onClick={() => handleViewEdit(skill)}
                         >
-                          <Trash2 size={11} className="mr-1" />
-                          Remove
+                          {skill.canEdit ? (
+                            <Edit3 size={11} className="mr-1" />
+                          ) : (
+                            <Code size={11} className="mr-1" />
+                          )}
+                          {skill.canEdit ? "View / Edit" : "View"}
                         </Button>
-                      )}
-                    </div>
-                  </Card>
-                ))}
+                        {skill.canDelete && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                            onClick={() => handleRemove(skill.name)}
+                          >
+                            <Trash2 size={11} className="mr-1" />
+                            Remove
+                          </Button>
+                        )}
+                        <div className="ml-auto">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs gap-1"
+                            onClick={() =>
+                              autoActivateMutation.mutate({
+                                name: skill.name,
+                                enabled: true,
+                              })
+                            }
+                            disabled={
+                              autoActivateMutation.isPending &&
+                              autoActivateMutation.variables?.name === skill.name
+                            }
+                          >
+                            {autoActivateMutation.isPending &&
+                            autoActivateMutation.variables?.name === skill.name ? (
+                              <Loader2 size={10} className="animate-spin" />
+                            ) : (
+                              <CheckCircle2 size={10} />
+                            )}
+                            Auto
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
               </div>
             )}
           </TabsContent>

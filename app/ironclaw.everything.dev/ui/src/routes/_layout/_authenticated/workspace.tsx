@@ -11,8 +11,14 @@ import {
 import { useEffect, useState } from "react";
 import { Card, Skeleton } from "@/components";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { mountsQueryOptions, useFilesystemMounts, useFsContent, useFsList } from "@/hooks/use-fs";
 
 export const Route = createFileRoute("/_layout/_authenticated/workspace")({
@@ -22,7 +28,13 @@ export const Route = createFileRoute("/_layout/_authenticated/workspace")({
   component: WorkspacePage,
 });
 
-function PathBreadcrumb({ path, onNavigate }: { path: string; onNavigate: (path: string) => void }) {
+function PathBreadcrumb({
+  path,
+  onNavigate,
+}: {
+  path: string;
+  onNavigate: (path: string) => void;
+}) {
   const segments = path.split("/").filter(Boolean);
   return (
     <div className="flex items-center gap-1 text-sm text-muted-foreground flex-wrap">
@@ -34,7 +46,7 @@ function PathBreadcrumb({ path, onNavigate }: { path: string; onNavigate: (path:
         /
       </button>
       {segments.map((seg, i) => {
-        const segPath = "/" + segments.slice(0, i + 1).join("/");
+        const segPath = `/${segments.slice(0, i + 1).join("/")}`;
         return (
           <span key={segPath} className="flex items-center gap-1">
             <ChevronRight size={12} className="shrink-0" />

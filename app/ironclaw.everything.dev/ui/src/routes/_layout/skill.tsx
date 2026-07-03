@@ -108,7 +108,8 @@ function SkillPage() {
 
             <div className="relative rounded-[8px] border border-border overflow-hidden">
               <div className="px-3.5 py-3 text-sm text-muted-foreground blur-sm">
-                Best entry points: `/skill.md`, the `/setup` guide, and the chat dashboard at `/chat`.
+                Best entry points: `/skill.md`, the `/setup` guide, and the chat dashboard at
+                `/chat`.
               </div>
               <div className="absolute inset-0 flex items-center justify-center">
                 <UnderConstruction label="Quick links" skipNavigation />

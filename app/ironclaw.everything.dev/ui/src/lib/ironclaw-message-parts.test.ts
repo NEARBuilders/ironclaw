@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { messagesToUIMessages, restMessageToParts } from "./ironclaw-message-parts";
 import type { ConversationMessageType } from "../../../api/src/contract";
+import { messagesToUIMessages, restMessageToParts } from "./ironclaw-message-parts";
 
 function asToolCall(part: unknown): { type: string; id: string } {
   return part as { type: string; id: string };

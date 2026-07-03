@@ -166,7 +166,10 @@ const markdownComponents: Components = {
           className="absolute right-2 top-2 z-10 rounded-md border border-border bg-background p-1.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-muted"
           title={copied ? "Copied!" : "Copy code"}
         >
-          <Copy size={12} className={cn(copied ? "text-[color:var(--near-green)]" : "text-muted-foreground")} />
+          <Copy
+            size={12}
+            className={cn(copied ? "text-[color:var(--near-green)]" : "text-muted-foreground")}
+          />
         </button>
         <pre className="bg-muted border border-border rounded-[10px] p-5 overflow-x-auto leading-relaxed">
           {children}

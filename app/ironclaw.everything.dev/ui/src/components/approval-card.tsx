@@ -1,15 +1,18 @@
 import { Lock } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import type { PendingApproval } from "@/hooks/use-thread-chat-manager";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import type { PendingApproval } from "@/hooks/use-thread-chat-manager";
 
 const WRITE_RE = /(write|edit|delete|remove|patch|create|move|rename|chmod|rm\b)/;
 const EXEC_RE = /(bash|shell|exec|run|command|terminal|spawn|process)/;
 const NETWORK_RE = /(curl|http|fetch|web|network|request|api|gh\b|git|download|upload|browse)/;
 
-function classifyRisk(toolName?: string): { variant: "destructive" | "default" | "secondary" | "outline"; label: string } {
+function classifyRisk(toolName?: string): {
+  variant: "destructive" | "default" | "secondary" | "outline";
+  label: string;
+} {
   const name = String(toolName ?? "").toLowerCase();
   if (WRITE_RE.test(name)) return { variant: "destructive", label: "Write" };
   if (EXEC_RE.test(name)) return { variant: "default", label: "Exec" };
@@ -39,11 +42,13 @@ export function ApprovalCard({ approval, onApprove, onDeny, onAlways }: Approval
   const details = useMemo(() => {
     const items: Array<{ label: string; value: string }> = [];
     if (approval.action?.label) items.push({ label: "Action", value: approval.action.label });
-    if (approval.destination?.label) items.push({ label: "Destination", value: approval.destination.label });
+    if (approval.destination?.label)
+      items.push({ label: "Destination", value: approval.destination.label });
     if (approval.scope?.label) items.push({ label: "Scope", value: approval.scope.label });
     if (approval.details) {
       for (const detail of approval.details) {
-        if (detail?.label && detail.value != null) items.push({ label: detail.label, value: detail.value });
+        if (detail?.label && detail.value != null)
+          items.push({ label: detail.label, value: detail.value });
       }
     }
     return items;
@@ -68,9 +73,7 @@ export function ApprovalCard({ approval, onApprove, onDeny, onAlways }: Approval
       )}
 
       {approval.description && (
-        <div className="mb-3 break-words text-sm text-muted-foreground">
-          {approval.description}
-        </div>
+        <div className="mb-3 break-words text-sm text-muted-foreground">{approval.description}</div>
       )}
 
       {details.length > 0 && (
@@ -89,27 +92,16 @@ export function ApprovalCard({ approval, onApprove, onDeny, onAlways }: Approval
 
       {approval.allowAlways && (
         <label className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
-          <Checkbox
-            checked={always}
-            onCheckedChange={(checked) => setAlways(checked === true)}
-          />
+          <Checkbox checked={always} onCheckedChange={(checked) => setAlways(checked === true)} />
           Always allow {approval.toolName ?? "this tool"}
         </label>
       )}
 
       <div className="flex flex-wrap gap-2">
-        <Button
-          variant="default"
-          size="sm"
-          onClick={handlePrimary}
-        >
+        <Button variant="default" size="sm" onClick={handlePrimary}>
           {always && approval.allowAlways ? "Approve & Always Allow" : "Approve"}
         </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onDeny}
-        >
+        <Button variant="secondary" size="sm" onClick={onDeny}>
           Deny
         </Button>
       </div>

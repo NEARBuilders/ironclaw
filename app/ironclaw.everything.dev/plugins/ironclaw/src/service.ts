@@ -16,6 +16,7 @@ import type {
   FsEntry,
   FsMountInfo,
   FsStatResponse,
+  LogEntrySchema,
   OutboundPreferencesSchema,
   OutboundTargetSchema,
   Project,
@@ -34,7 +35,6 @@ import type {
   TimelineEntrySchema,
   TimelineSchema,
   ToolSettingSchema,
-  LogEntrySchema,
 } from "./contract";
 
 type Session = z.infer<typeof SessionSchema>;
@@ -695,7 +695,8 @@ export class IronclawService {
             headers: { Accept: "text/event-stream" },
           });
 
-          if (!response.ok || !response.body) throw new Error(`SSE connection failed: ${response.status}`);
+          if (!response.ok || !response.body)
+            throw new Error(`SSE connection failed: ${response.status}`);
 
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
@@ -731,8 +732,7 @@ export class IronclawService {
                   if (terminalTypes.has(event.type)) {
                     sessionEnded = true;
                   }
-                } catch {
-                }
+                } catch {}
               }
             }
           } finally {
@@ -740,8 +740,7 @@ export class IronclawService {
               reader.releaseLock();
             } catch {}
           }
-        } catch {
-        }
+        } catch {}
 
         if (sessionEnded) return;
 
@@ -762,9 +761,19 @@ export class IronclawService {
         const automations: Automation[] = (raw.automations ?? []).map((a: any) => ({
           id: a.automation_id,
           name: a.name,
-          source: a.source?.type === "once"
-            ? { type: "once" as const, at: a.source.at ?? "", timezone: a.source.timezone ?? "UTC" }
-            : { type: "schedule" as const, cron: a.source?.cron ?? "", timezone: a.source?.timezone ?? "UTC", at: a.source?.at ?? undefined },
+          source:
+            a.source?.type === "once"
+              ? {
+                  type: "once" as const,
+                  at: a.source.at ?? "",
+                  timezone: a.source.timezone ?? "UTC",
+                }
+              : {
+                  type: "schedule" as const,
+                  cron: a.source?.cron ?? "",
+                  timezone: a.source?.timezone ?? "UTC",
+                  at: a.source?.at ?? undefined,
+                },
           state: a.state,
           status: a.status ?? "active",
           nextRunAt: a.next_run_at ?? undefined,
@@ -869,8 +878,7 @@ export class IronclawService {
 
   setToolAutoApprove(enabled: boolean): Effect.Effect<void, Error> {
     return Effect.tryPromise({
-      try: () =>
-        this.request<void>("POST", "/api/webchat/v2/settings/tools", { enabled }),
+      try: () => this.request<void>("POST", "/api/webchat/v2/settings/tools", { enabled }),
       catch: (error: unknown) =>
         new Error(
           `Failed to set tool auto-approve: ${error instanceof Error ? error.message : String(error)}`,
@@ -907,9 +915,7 @@ export class IronclawService {
         return { data: logs };
       },
       catch: (error: unknown) =>
-        new Error(
-          `Failed to list logs: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+        new Error(`Failed to list logs: ${error instanceof Error ? error.message : String(error)}`),
     });
   }
 
@@ -1307,10 +1313,7 @@ export class IronclawService {
     });
   }
 
-  listProjectFiles(
-    id: string,
-    path?: string,
-  ): Effect.Effect<{ entries: ProjectFsEntry[] }, Error> {
+  listProjectFiles(id: string, path?: string): Effect.Effect<{ entries: ProjectFsEntry[] }, Error> {
     return Effect.tryPromise({
       try: async () => {
         const raw: any = await this.request(
@@ -1397,7 +1400,10 @@ export class IronclawService {
     });
   }
 
-  listFsDir(mount: string, path: string): Effect.Effect<{ mount: string; path: string; entries: FsEntry[] }, Error> {
+  listFsDir(
+    mount: string,
+    path: string,
+  ): Effect.Effect<{ mount: string; path: string; entries: FsEntry[] }, Error> {
     return Effect.tryPromise({
       try: async () => {
         const raw: any = await this.request("GET", "/api/webchat/v2/fs/list", undefined, {
@@ -1558,8 +1564,7 @@ export class IronclawService {
 
   deleteProject(id: string): Effect.Effect<void, Error> {
     return Effect.tryPromise({
-      try: () =>
-        this.request<void>("DELETE", `/api/webchat/v2/projects/${encodeURIComponent(id)}`),
+      try: () => this.request<void>("DELETE", `/api/webchat/v2/projects/${encodeURIComponent(id)}`),
       catch: (error: unknown) =>
         new Error(
           `Failed to delete project: ${error instanceof Error ? error.message : String(error)}`,
@@ -1611,7 +1616,11 @@ export class IronclawService {
     });
   }
 
-  updateProjectMember(id: string, userId: string, role: string): Effect.Effect<ProjectMember, Error> {
+  updateProjectMember(
+    id: string,
+    userId: string,
+    role: string,
+  ): Effect.Effect<ProjectMember, Error> {
     return Effect.tryPromise({
       try: async () => {
         const raw: any = await this.request(
@@ -1683,14 +1692,18 @@ export class IronclawService {
   }): Effect.Effect<{ credentialRef: string }, Error> {
     return Effect.tryPromise({
       try: async () => {
-        const raw: any = await this.request("POST", "/api/reborn/product-auth/manual-token/submit", {
-          provider: params.provider,
-          account_label: params.accountLabel,
-          token: params.token,
-          thread_id: params.threadId,
-          run_id: params.runId,
-          gate_ref: params.gateRef,
-        });
+        const raw: any = await this.request(
+          "POST",
+          "/api/reborn/product-auth/manual-token/submit",
+          {
+            provider: params.provider,
+            account_label: params.accountLabel,
+            token: params.token,
+            thread_id: params.threadId,
+            run_id: params.runId,
+            gate_ref: params.gateRef,
+          },
+        );
         return { credentialRef: raw.credential_ref };
       },
       catch: (error: unknown) =>

@@ -1,9 +1,9 @@
-import { useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import type { z } from "every-plugin/zod";
+import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { useApiClient, useAuthClient } from "@/app";
-import { getConnectionMode, type ConnectionMode } from "@/hooks/use-connection-mode";
+import { type ConnectionMode, getConnectionMode } from "@/hooks/use-connection-mode";
 import type { SessionSchema } from "../../../plugins/ironclaw/src/contract.ts";
 
 type SessionData = z.infer<typeof SessionSchema>;
@@ -67,9 +67,13 @@ export function useIronclawStatus(): {
           attachmentCapabilities: apiSession?.capabilities?.attachments ?? null,
         };
       } catch (err: any) {
-        const isIronclaw404 = (typeof err?.f === "string" && err.f.includes("Ironclaw API error")) || (err?.message && String(err.message).includes("Ironclaw API error"));
+        const isIronclaw404 =
+          (typeof err?.f === "string" && err.f.includes("Ironclaw API error")) ||
+          (err?.message && String(err.message).includes("Ironclaw API error"));
         const isNotConfigured =
-          err?.code === "PRECONDITION_FAILED" || err?.message?.includes("No IronClaw connection configured") || isIronclaw404;
+          err?.code === "PRECONDITION_FAILED" ||
+          err?.message?.includes("No IronClaw connection configured") ||
+          isIronclaw404;
         if (isNotConfigured) {
           clearWasConnected();
           return { connected: false, session: null, attachmentCapabilities: null };
@@ -122,7 +126,7 @@ export function useIronclawStatus(): {
           description: "Set up a connection in Settings to get started.",
           action: {
             label: "Settings",
-            onClick: () => window.location.href = "/settings/ironclaw",
+            onClick: () => (window.location.href = "/settings/ironclaw"),
           },
           duration: 8000,
         });
@@ -133,7 +137,9 @@ export function useIronclawStatus(): {
     if (prevStatus.current === "connected" && status === "disconnected") {
       if (!isToastShown()) {
         markToastShown();
-        toast.error("Lost connection to your IronClaw instance. Check Settings \u2192 IronClaw or set up a new connection.");
+        toast.error(
+          "Lost connection to your IronClaw instance. Check Settings \u2192 IronClaw or set up a new connection.",
+        );
       }
     }
     if (status === "connected") {

@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Cloud, Key, Loader2, RefreshCw, Save, Terminal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -160,7 +160,8 @@ function IronclawSettings() {
                 Using the shared hosted agent. Manage API keys from{" "}
                 <Link to="/settings/api-keys" className="text-primary underline underline-offset-2">
                   Settings → API Keys
-                </Link>.
+                </Link>
+                .
               </p>
             </div>
           </div>
@@ -218,7 +219,11 @@ function IronclawSettings() {
                 required
               />
               <p className="text-xs font-medium text-muted-foreground">
-                The Tunnel URL printed by <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">scripts/bos-dev.sh --tunnel</code> (e.g. https://xxx.ngrok.io).
+                The Tunnel URL printed by{" "}
+                <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
+                  scripts/bos-dev.sh --tunnel
+                </code>{" "}
+                (e.g. https://xxx.ngrok.io).
               </p>
             </div>
 
@@ -296,8 +301,8 @@ function IronclawSettings() {
           From the repo root, run{" "}
           <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
             ./scripts/bos-dev.sh --tunnel
-          </code>
-          {" "}— it prints the Tunnel URL and API Token. Paste them above.
+          </code>{" "}
+          — it prints the Tunnel URL and API Token. Paste them above.
         </p>
       </div>
     </div>

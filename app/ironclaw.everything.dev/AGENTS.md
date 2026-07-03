@@ -6,6 +6,12 @@ Before substantial work:
 - Skill guidance: if one local skill clearly matches the task, run `bunx @tanstack/intent@latest load <package>#<skill>` and follow the returned `SKILL.md`.
 - Monorepos: when working across packages, run the skill check from the workspace root and prefer the local skill for the package being changed.
 - Multiple matches: prefer the most specific local skill for the package or concern you are changing; load additional skills only when the task spans multiple packages or concerns.
+
+skills:
+  - task: "Building chat, tool calling, streaming, middleware, structured output, or AG-UI protocol with TanStack AI"
+    load: "node_modules/@tanstack/ai/skills/ai-core/SKILL.md"
+  - task: "Working with TanStack AI ChatClient, useChat, connection adapters, or chat state management"
+    load: "node_modules/@tanstack/ai/skills/ai-core/SKILL.md"
 <!-- intent-skills:end -->
 
 # Agent Instructions

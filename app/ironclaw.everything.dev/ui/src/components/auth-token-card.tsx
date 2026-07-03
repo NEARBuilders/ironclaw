@@ -1,8 +1,8 @@
 import { KeyRound } from "lucide-react";
-import { useState, useCallback } from "react";
-import type { AuthGate } from "@/hooks/use-thread-chat-manager";
+import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import type { AuthGate } from "@/hooks/use-thread-chat-manager";
 
 interface AuthTokenCardProps {
   gate: AuthGate;
@@ -36,15 +36,11 @@ export function AuthTokenCard({ gate, onSubmit, onCancel }: AuthTokenCardProps) 
           <div className="font-semibold text-foreground truncate">
             {gate.headline || "Authentication Required"}
           </div>
-          {subtitle && (
-            <div className="text-xs text-muted-foreground truncate">{subtitle}</div>
-          )}
+          {subtitle && <div className="text-xs text-muted-foreground truncate">{subtitle}</div>}
         </div>
       </div>
 
-      {gate.body && (
-        <div className="mb-3 text-sm text-muted-foreground">{gate.body}</div>
-      )}
+      {gate.body && <div className="mb-3 text-sm text-muted-foreground">{gate.body}</div>}
 
       <div className="flex flex-col gap-2">
         <Input
@@ -66,12 +62,7 @@ export function AuthTokenCard({ gate, onSubmit, onCancel }: AuthTokenCardProps) 
           >
             {submitting ? "Submitting..." : "Submit"}
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={onCancel}
-            disabled={submitting}
-          >
+          <Button variant="secondary" size="sm" onClick={onCancel} disabled={submitting}>
             Cancel
           </Button>
         </div>

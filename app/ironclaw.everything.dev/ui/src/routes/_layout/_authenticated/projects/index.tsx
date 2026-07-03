@@ -1,13 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  FolderGit2,
-  Loader2,
-  Plus,
-  RefreshCw,
-  Trash2,
-  Users,
-  XCircle,
-} from "lucide-react";
+import { FolderGit2, Loader2, Plus, RefreshCw, Trash2, Users, XCircle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -210,9 +202,7 @@ function ProjectsPage() {
                 </h2>
               </Link>
               {project.description && (
-                <p className="text-sm text-muted-foreground line-clamp-2">
-                  {project.description}
-                </p>
+                <p className="text-sm text-muted-foreground line-clamp-2">{project.description}</p>
               )}
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 {project.memberCount !== undefined && (
@@ -229,10 +219,7 @@ function ProjectsPage() {
               )}
               <div className="flex gap-2 pt-1">
                 <Button size="sm" asChild variant="secondary">
-                  <Link
-                    to="/projects/$projectId"
-                    params={{ projectId: project.projectId }}
-                  >
+                  <Link to="/projects/$projectId" params={{ projectId: project.projectId }}>
                     View
                   </Link>
                 </Button>

@@ -138,7 +138,9 @@ function getProjectionGate(item: Record<string, unknown>): Record<string, unknow
 function getProjectionSkillActivation(
   item: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
-  return projVal(item, "skillActivation", "skill_activation") as Record<string, unknown> | undefined;
+  return projVal(item, "skillActivation", "skill_activation") as
+    | Record<string, unknown>
+    | undefined;
 }
 
 function findAssistantTextForRun(entries: any[], runId: string): string | undefined {
@@ -203,7 +205,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
     const activeToolCalls = new Set<string>();
     let runStarted = false;
     let terminalTextEmitted = false;
-    let seenTextIds = new Set<string>();
+    const seenTextIds = new Set<string>();
 
     const emitRunStarted = (runId: string | undefined) => {
       if (runStarted) return;
@@ -273,19 +275,34 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
             try {
               const c = JSON.parse(e.content ?? "");
               return (c.invocation_id ?? c.invocationId) === invocationId;
-            } catch { return false; }
+            } catch {
+              return false;
+            }
           });
           if (resultEntry) {
             const c = JSON.parse(resultEntry.content);
             const title = c.title ?? preview?.title ?? "tool";
             const envelope = serializeToolResultEnvelope({
-              output: c.output ?? c.output_preview ?? c.output_summary ?? preview?.outputSummary ?? preview?.outputPreview ?? "",
+              output:
+                c.output ??
+                c.output_preview ??
+                c.output_summary ??
+                preview?.outputSummary ??
+                preview?.outputPreview ??
+                "",
               outputKind: c.output_kind ?? c.outputKind ?? preview?.outputKind ?? null,
               truncated: Boolean(c.truncated ?? preview?.truncated),
               inputSummary: c.input_summary ?? c.inputSummary ?? preview?.inputSummary ?? null,
               title,
             });
-            yield emitToolEnd(invocationId, title, "complete", envelope, c.input_summary ?? preview?.inputSummary ?? "", runId);
+            yield emitToolEnd(
+              invocationId,
+              title,
+              "complete",
+              envelope,
+              c.input_summary ?? preview?.inputSummary ?? "",
+              runId,
+            );
           } else if (preview) {
             const title = preview.title ?? "tool";
             const envelope = serializeToolResultEnvelope({
@@ -295,7 +312,14 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
               inputSummary: preview.inputSummary ?? null,
               title,
             });
-            yield emitToolEnd(invocationId, title, "complete", envelope, preview.inputSummary ?? "", runId);
+            yield emitToolEnd(
+              invocationId,
+              title,
+              "complete",
+              envelope,
+              preview.inputSummary ?? "",
+              runId,
+            );
           } else {
             yield emitToolEnd(invocationId, "tool", "complete", "", "", runId);
           }
@@ -312,7 +336,14 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
               inputSummary: preview.inputSummary ?? null,
               title,
             });
-            yield emitToolEnd(invocationId, title, "complete", envelope, preview.inputSummary ?? "", runId);
+            yield emitToolEnd(
+              invocationId,
+              title,
+              "complete",
+              envelope,
+              preview.inputSummary ?? "",
+              runId,
+            );
           } else {
             yield emitToolEnd(invocationId, title, "complete", "", "", runId);
           }
@@ -375,9 +406,13 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
           const activity = raw.activity;
           const activityRecord = activity as unknown as Record<string, unknown>;
           const invocationId = resolveToolCallId(undefined, activity);
-          const capabilityId = (activityRecord.capabilityId ?? activityRecord.capability_id) as string | undefined;
+          const capabilityId = (activityRecord.capabilityId ?? activityRecord.capability_id) as
+            | string
+            | undefined;
           const status = activity?.status;
-          const errorKind = (activityRecord.errorKind ?? activityRecord.error_kind) as string | undefined;
+          const errorKind = (activityRecord.errorKind ?? activityRecord.error_kind) as
+            | string
+            | undefined;
 
           if (!invocationId || !capabilityId) continue;
 
@@ -527,7 +562,9 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
               messageId: msgId,
             });
           }
-          for await (const chunk of closeActiveToolCalls(eventRunId)) { yield chunk; }
+          for await (const chunk of closeActiveToolCalls(eventRunId)) {
+            yield chunk;
+          }
           yield createChunk({
             type: "RUN_FINISHED",
             threadId,
@@ -544,7 +581,11 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
           const details = normalizeDetails(runState);
           const chunk = emitRunStarted(eventRunId);
           if (chunk) yield chunk;
-          yield emitCustom("ironclaw.failed", { runId: eventRunId, message, details, runState }, eventRunId);
+          yield emitCustom(
+            "ironclaw.failed",
+            { runId: eventRunId, message, details, runState },
+            eventRunId,
+          );
           yield createChunk({ type: "RUN_ERROR", threadId, runId: eventRunId, message, details });
           return;
         }
@@ -554,7 +595,9 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
           const chunk = emitRunStarted(eventRunId);
           if (chunk) yield chunk;
           yield emitCustom("ironclaw.cancelled", { runId: eventRunId, ...response }, eventRunId);
-          for await (const chunk of closeActiveToolCalls(eventRunId)) { yield chunk; }
+          for await (const chunk of closeActiveToolCalls(eventRunId)) {
+            yield chunk;
+          }
           yield createChunk({
             type: "RUN_FINISHED",
             threadId,
@@ -618,7 +661,6 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
               const sa = getProjectionSkillActivation(item);
               if (sa) {
                 skillActivationItems.push(sa);
-                continue;
               }
             }
 
@@ -782,7 +824,9 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
                 }
                 if (st === "cancelled") {
                   yield emitCustom("ironclaw.cancelled", { runId }, runId);
-                  for await (const chunk of closeActiveToolCalls(runId)) { yield chunk; }
+                  for await (const chunk of closeActiveToolCalls(runId)) {
+                    yield chunk;
+                  }
                   yield createChunk({ type: "RUN_FINISHED", threadId, runId, finishReason: null });
                   return;
                 }
@@ -820,7 +864,9 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
                   }
                 }
                 yield emitCustom("ironclaw.finished", { runId, status: st }, runId);
-                for await (const chunk of closeActiveToolCalls(runId)) { yield chunk; }
+                for await (const chunk of closeActiveToolCalls(runId)) {
+                  yield chunk;
+                }
                 yield createChunk({ type: "RUN_FINISHED", threadId, runId, finishReason: "stop" });
                 return;
               }
@@ -867,7 +913,9 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
             // reconcile failed, proceed
           }
         }
-        for await (const chunk of closeActiveToolCalls(ackRunId)) { yield chunk; }
+        for await (const chunk of closeActiveToolCalls(ackRunId)) {
+          yield chunk;
+        }
         yield createChunk({
           type: "RUN_FINISHED",
           threadId,

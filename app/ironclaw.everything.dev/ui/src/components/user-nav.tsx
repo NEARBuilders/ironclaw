@@ -4,7 +4,6 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import type { Organization } from "@/app";
 
 import { sessionQueryOptions, useAuthClient } from "@/app";
-import { sessionQueryKey } from "@/lib/auth";
 import { OrgSwitcher } from "@/components";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -15,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { sessionQueryKey } from "@/lib/auth";
 
 export function UserNav() {
   const auth = useAuthClient();

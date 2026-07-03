@@ -1,5 +1,4 @@
-import type { UIMessage } from "@tanstack/ai";
-import type { StreamChunk } from "@tanstack/ai";
+import type { StreamChunk, UIMessage } from "@tanstack/ai";
 
 export interface ApprovalAction {
   label?: string;
@@ -381,9 +380,7 @@ function handleChunk(threadId: string, chunk: any) {
     const val = (chunk.value as any) ?? {};
     const body = String(val.body ?? "");
     if (body) {
-      const lastAssistant = [...session.messages]
-        .reverse()
-        .find((m) => m.role === "assistant");
+      const lastAssistant = [...session.messages].reverse().find((m) => m.role === "assistant");
       if (lastAssistant) {
         lastAssistant.parts.push({ type: "thinking", content: body });
         session.version++;
@@ -487,7 +484,7 @@ export const threadChatManager = {
 
   stop(threadId: string) {
     const session = sessions.get(threadId);
-    if (session && session.abortController) {
+    if (session?.abortController) {
       session.abortController.abort();
       session.isLoading = false;
       session.abortController = null;

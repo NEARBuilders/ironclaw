@@ -55,11 +55,10 @@ function parseSubagentMetadata(raw: any): {
   const metaStr = raw.metadataJson ?? raw.metadata_json ?? raw.metadata ?? null;
   if (!metaStr) return { parentThreadId: null, isSubagent: false, displayTitle: null };
   try {
-    const meta: Record<string, unknown> = typeof metaStr === "string" ? JSON.parse(metaStr) : metaStr;
+    const meta: Record<string, unknown> =
+      typeof metaStr === "string" ? JSON.parse(metaStr) : metaStr;
     if (meta.kind === "subagent") {
-      const displayTitle = typeof meta.flavor === "string"
-        ? meta.flavor.replace(/-/g, " ")
-        : null;
+      const displayTitle = typeof meta.flavor === "string" ? meta.flavor.replace(/-/g, " ") : null;
       return {
         parentThreadId: (meta.parentThreadId ?? meta.parent_thread_id ?? null) as string | null,
         isSubagent: true,
@@ -73,9 +72,8 @@ function parseSubagentMetadata(raw: any): {
 export function normalizeThread(raw: any): ConversationThread {
   const scope = raw.scope ?? {};
   const subagent = parseSubagentMetadata(raw);
-  const title = raw.title === "Subagent" && subagent.displayTitle
-    ? subagent.displayTitle
-    : (raw.title ?? null);
+  const title =
+    raw.title === "Subagent" && subagent.displayTitle ? subagent.displayTitle : (raw.title ?? null);
   return {
     threadId: raw.threadId ?? raw.thread_id ?? "",
     title,

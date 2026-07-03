@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { type AttachmentLimits, type StagedAttachment, stageFiles } from "@/lib/attachments";
-import { loadDraft, saveDraft, clearDraft } from "@/lib/draft-store";
+import { clearDraft, loadDraft, saveDraft } from "@/lib/draft-store";
 
 interface ChatInputProps {
   onSend: (content: string, attachments?: StagedAttachment[]) => void;
@@ -65,39 +65,45 @@ export function ChatInput({
     if (threadId) clearDraft(threadId);
   }, [value, disabled, isSending, onSend, staged, threadId]);
 
-  const handleStaging = useCallback(async (files: File[]) => {
-    if (files.length === 0) return;
-    const limits = attachmentCapabilities ?? {
-      accept: ["*/*"],
-      maxCount: 10,
-      maxFileBytes: 10_485_760,
-      maxTotalBytes: 52_428_800,
-    };
-    const { staged: newStaged, errors } = await stageFiles(files, limits, staged);
-    if (newStaged.length > 0) {
-      setStaged((prev) => [...prev, ...newStaged]);
-    }
-    for (const err of errors) {
-      toast.error(err);
-    }
-  }, [attachmentCapabilities, staged]);
-
-  const handlePaste = useCallback(async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    const files: File[] = [];
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.kind === "file") {
-        const file = item.getAsFile();
-        if (file) files.push(file);
+  const handleStaging = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      const limits = attachmentCapabilities ?? {
+        accept: ["*/*"],
+        maxCount: 10,
+        maxFileBytes: 10_485_760,
+        maxTotalBytes: 52_428_800,
+      };
+      const { staged: newStaged, errors } = await stageFiles(files, limits, staged);
+      if (newStaged.length > 0) {
+        setStaged((prev) => [...prev, ...newStaged]);
       }
-    }
-    if (files.length > 0) {
-      e.preventDefault();
-      await handleStaging(files);
-    }
-  }, [handleStaging]);
+      for (const err of errors) {
+        toast.error(err);
+      }
+    },
+    [attachmentCapabilities, staged],
+  );
+
+  const handlePaste = useCallback(
+    async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const files: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === "file") {
+          const file = item.getAsFile();
+          if (file) files.push(file);
+        }
+      }
+      if (files.length > 0) {
+        e.preventDefault();
+        await handleStaging(files);
+      }
+    },
+    [handleStaging],
+  );
 
   const handleFilePick = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -180,7 +186,13 @@ export function ChatInput({
             rows={1}
           />
           {isSending && onStop ? (
-            <Button size="icon" variant="secondary" onClick={onStop} title="Stop generating" className="h-10 w-10 sm:h-9 sm:w-9">
+            <Button
+              size="icon"
+              variant="secondary"
+              onClick={onStop}
+              title="Stop generating"
+              className="h-10 w-10 sm:h-9 sm:w-9"
+            >
               <Square size={14} className="fill-current" />
             </Button>
           ) : (

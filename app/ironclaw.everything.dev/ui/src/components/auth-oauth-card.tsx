@@ -1,7 +1,7 @@
 import { ExternalLink } from "lucide-react";
 import { useCallback, useMemo } from "react";
-import type { AuthGate } from "@/hooks/use-thread-chat-manager";
 import { Button } from "@/components/ui/button";
+import type { AuthGate } from "@/hooks/use-thread-chat-manager";
 
 interface AuthOauthCardProps {
   gate: AuthGate;
@@ -35,15 +35,11 @@ export function AuthOauthCard({ gate, onCancel }: AuthOauthCardProps) {
           <div className="font-semibold text-foreground truncate">
             {gate.headline || "Authorize via OAuth"}
           </div>
-          {subtitle && (
-            <div className="text-xs text-muted-foreground truncate">{subtitle}</div>
-          )}
+          {subtitle && <div className="text-xs text-muted-foreground truncate">{subtitle}</div>}
         </div>
       </div>
 
-      {gate.body && (
-        <div className="mb-3 text-sm text-muted-foreground">{gate.body}</div>
-      )}
+      {gate.body && <div className="mb-3 text-sm text-muted-foreground">{gate.body}</div>}
 
       <div className="mb-3 text-xs text-muted-foreground">
         Authorization page will open in a new tab.
@@ -56,19 +52,10 @@ export function AuthOauthCard({ gate, onCancel }: AuthOauthCardProps) {
       )}
 
       <div className="flex flex-wrap gap-2">
-        <Button
-          variant="default"
-          size="sm"
-          disabled={!hasHttpsUrl}
-          onClick={handleOpen}
-        >
+        <Button variant="default" size="sm" disabled={!hasHttpsUrl} onClick={handleOpen}>
           Open Authorization Page
         </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onCancel}
-        >
+        <Button variant="secondary" size="sm" onClick={onCancel}>
           Cancel
         </Button>
       </div>

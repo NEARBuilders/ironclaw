@@ -120,11 +120,7 @@ function NewOrganization() {
               >
                 cancel
               </Link>
-              <Button
-                type="submit"
-                disabled={createMutation.isPending || !name || !slug}
-                size="sm"
-              >
+              <Button type="submit" disabled={createMutation.isPending || !name || !slug} size="sm">
                 {createMutation.isPending ? "creating..." : "create"}
               </Button>
             </div>
@@ -140,8 +136,12 @@ function NewOrganization() {
                   <Building2 className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <div className="space-y-1 pt-0.5">
-                  <p className="text-sm font-medium text-foreground">Organization created immediately</p>
-                  <p className="text-sm text-muted-foreground">You'll be the owner with full permissions.</p>
+                  <p className="text-sm font-medium text-foreground">
+                    Organization created immediately
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    You'll be the owner with full permissions.
+                  </p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
@@ -150,7 +150,9 @@ function NewOrganization() {
                 </div>
                 <div className="space-y-1 pt-0.5">
                   <p className="text-sm font-medium text-foreground">Invite team members</p>
-                  <p className="text-sm text-muted-foreground">From the organization settings page.</p>
+                  <p className="text-sm text-muted-foreground">
+                    From the organization settings page.
+                  </p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
@@ -159,7 +161,9 @@ function NewOrganization() {
                 </div>
                 <div className="space-y-1 pt-0.5">
                   <p className="text-sm font-medium text-foreground">Switch anytime</p>
-                  <p className="text-sm text-muted-foreground">Use the org switcher in the header to flip between workspaces.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Use the org switcher in the header to flip between workspaces.
+                  </p>
                 </div>
               </div>
             </div>
@@ -181,7 +185,10 @@ function Field({
 }) {
   return (
     <div className="space-y-2">
-      <label htmlFor={htmlFor} className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+      <label
+        htmlFor={htmlFor}
+        className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground"
+      >
         {label}
       </label>
       {children}

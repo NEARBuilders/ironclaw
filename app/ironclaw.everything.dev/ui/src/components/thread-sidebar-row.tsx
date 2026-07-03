@@ -10,9 +10,7 @@ export function SubagentRow({ thread, onDelete }: SubagentRowProps) {
   return (
     <>
       <Bot size={12} className="shrink-0" />
-      <span className="flex-1 truncate text-xs">
-        {thread.title ?? "Sub-agent"}
-      </span>
+      <span className="flex-1 truncate text-xs">{thread.title ?? "Sub-agent"}</span>
       <button
         type="button"
         onClick={(e) => {

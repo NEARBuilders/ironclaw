@@ -17,9 +17,9 @@ import {
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { getRepository } from "@/app";
 import { Button } from "@/components/ui/button";
 import { CommandCopy } from "@/components/ui/command-copy";
-import { getRepository } from "@/app";
 import { useConnectionMode } from "@/hooks/use-connection-mode";
 import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
 
@@ -152,10 +152,7 @@ Setup guide: https://docs.near.ai/cloud/quickstart#setup`,
           <p className="text-sm text-muted-foreground">
             Copy the <strong>Tunnel URL</strong> and <strong>API Token</strong> printed by the
             script, then paste them into{" "}
-            <Link
-              to="/settings/ironclaw"
-              className="text-primary underline underline-offset-4"
-            >
+            <Link to="/settings/ironclaw" className="text-primary underline underline-offset-4">
               Settings → IronClaw
             </Link>
             .
@@ -202,7 +199,11 @@ Setup guide: https://docs.near.ai/cloud/quickstart#setup`,
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Button variant="outline" size="sm" asChild>
             <a
-              href={getRepository() ? `${getRepository()}/blob/main/docs/reborn-binary.md` : "https://github.com/nearai/ironclaw/blob/main/docs/reborn-binary.md"}
+              href={
+                getRepository()
+                  ? `${getRepository()}/blob/main/docs/reborn-binary.md`
+                  : "https://github.com/nearai/ironclaw/blob/main/docs/reborn-binary.md"
+              }
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -846,8 +847,8 @@ function IronclawPage() {
                 </div>
               </div>
               <p className="text-sm text-muted-foreground mb-4">
-                Run Reborn locally and expose it via ngrok. The script prints a Tunnel URL and
-                API Token to paste into Settings.
+                Run Reborn locally and expose it via ngrok. The script prints a Tunnel URL and API
+                Token to paste into Settings.
               </p>
               <Button
                 type="button"

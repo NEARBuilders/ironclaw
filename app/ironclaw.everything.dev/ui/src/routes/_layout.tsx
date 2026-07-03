@@ -1,5 +1,14 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { BookOpen, Bot, FolderGit2, FolderTree, MessageSquare, Puzzle, Wrench } from "lucide-react";
+import {
+  BookOpen,
+  Bot,
+  FolderGit2,
+  FolderTree,
+  MessageSquare,
+  Puzzle,
+  ScrollText,
+  Wrench,
+} from "lucide-react";
 import { getAccount, getActiveRuntime, getAppName, sessionQueryOptions } from "@/app";
 import builtOn from "@/assets/built_on.png";
 import builtOnRev from "@/assets/built_on_rev.png";
@@ -49,7 +58,9 @@ function Layout() {
   const account = getAccount(runtimeConfig);
   const isAuthenticated = !!session?.user;
   const userRole = getUserRole(isAuthenticated, session?.user?.role === "admin");
-  const { status: connectionStatus } = isAuthenticated ? useIronclawStatus() : { status: "never-connected" as const };
+  const { status: connectionStatus } = isAuthenticated
+    ? useIronclawStatus()
+    : { status: "never-connected" as const };
 
   const ironclawSidebarItems: SidebarItem[] = [
     ...(connectionStatus === "connected"
@@ -64,8 +75,19 @@ function Layout() {
       roleRequired: "anon" as const,
     },
     { icon: BookOpen, label: "skills", to: "/skills" as const, roleRequired: "anon" as const },
-    { icon: FolderTree, label: "workspace", to: "/workspace" as const, roleRequired: "anon" as const },
-    { icon: FolderGit2, label: "projects", to: "/projects" as const, roleRequired: "anon" as const },
+    {
+      icon: FolderTree,
+      label: "workspace",
+      to: "/workspace" as const,
+      roleRequired: "anon" as const,
+    },
+    { icon: ScrollText, label: "logs", to: "/logs" as const, roleRequired: "anon" as const },
+    {
+      icon: FolderGit2,
+      label: "projects",
+      to: "/projects" as const,
+      roleRequired: "anon" as const,
+    },
   ];
   const visibleItems = filterSidebarByRole(
     [...pluginSidebarItems, ...ironclawSidebarItems],

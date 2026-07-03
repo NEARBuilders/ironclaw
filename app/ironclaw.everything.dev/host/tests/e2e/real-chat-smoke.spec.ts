@@ -82,7 +82,7 @@ test.describe("Real stack chat smoke", () => {
           return;
         }
         await route.continue();
-      } catch (e) {
+      } catch (_e) {
         await route.continue();
       }
     });

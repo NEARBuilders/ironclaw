@@ -22,6 +22,7 @@ const tabs = [
   { value: "auth-methods", to: "/settings/auth-methods", label: "Auth Methods" },
   { value: "api-keys", to: "/settings/api-keys", label: "API Keys" },
   { value: "ironclaw", to: "/settings/ironclaw", label: "IronClaw" },
+  { value: "tools", to: "/settings/tools", label: "Tools" },
   { value: "security", to: "/settings/security", label: "Security" },
 ] as const;
 

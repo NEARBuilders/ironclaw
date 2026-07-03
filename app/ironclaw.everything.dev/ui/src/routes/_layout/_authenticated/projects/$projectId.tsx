@@ -1,14 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  Loader2,
-  Plus,
-  RefreshCw,
-  Shield,
-  Trash2,
-  User,
-  XCircle,
-} from "lucide-react";
+import { ArrowLeft, Loader2, Plus, RefreshCw, Shield, Trash2, User, XCircle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -47,8 +38,12 @@ export const Route = createFileRoute("/_layout/_authenticated/projects/$projectI
 function ProjectDetailPage() {
   const { projectId } = Route.useParams();
   const { data: project, isLoading: projectLoading, isError: projectError } = useProject(projectId);
-  const { data: members, isLoading: membersLoading, isError: membersError, refetch: refetchMembers } =
-    useProjectMembers(projectId);
+  const {
+    data: members,
+    isLoading: membersLoading,
+    isError: membersError,
+    refetch: refetchMembers,
+  } = useProjectMembers(projectId);
   const addMember = useAddProjectMember(projectId);
   const updateMember = useUpdateProjectMember(projectId);
   const removeMember = useRemoveProjectMember(projectId);
@@ -198,17 +193,9 @@ function ProjectDetailPage() {
                   onClick={handleAddMember}
                   disabled={!newUserId.trim() || addMember.isPending}
                 >
-                  {addMember.isPending ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    "Add"
-                  )}
+                  {addMember.isPending ? <Loader2 size={14} className="animate-spin" /> : "Add"}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowAddForm(false)}
-                >
+                <Button size="sm" variant="outline" onClick={() => setShowAddForm(false)}>
                   Cancel
                 </Button>
               </div>

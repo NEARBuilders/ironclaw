@@ -25,7 +25,12 @@ function generateId(): string {
   return `hc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
-async function lookupCredentialsByScope(db: any, tenantId: string, scopeType: string, encryptionKey?: string) {
+async function lookupCredentialsByScope(
+  db: any,
+  tenantId: string,
+  scopeType: string,
+  encryptionKey?: string,
+) {
   const bindings = await db
     .select()
     .from(ironclawScopeBindings)
@@ -73,9 +78,7 @@ async function mintAccessSession(baseUrl: string, operatorToken: string, tenantI
   }
   const data = (await resp.json()) as { token?: string };
   if (!data.token) {
-    throw new Error(
-      `Access session response missing token for tenant ${tenantId}`,
-    );
+    throw new Error(`Access session response missing token for tenant ${tenantId}`);
   }
   return data.token;
 }
@@ -113,14 +116,10 @@ const hStream = (
 ) =>
   async function* ({ input, signal, context }: any) {
     const ic = services.ironclaw(context);
-    try {
-      const events = await select(ic)(input);
-      for await (const event of events) {
-        if (signal?.aborted) break;
-        yield event;
-      }
-    } catch (error) {
-      throw error;
+    const events = await select(ic)(input);
+    for await (const event of events) {
+      if (signal?.aborted) break;
+      yield event;
     }
   };
 
@@ -128,14 +127,14 @@ function snakeToCamel(str: string): string {
   return str.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 }
 
-function transformKeys(obj: unknown): unknown {
+function _transformKeys(obj: unknown): unknown {
   if (obj === null || obj === undefined) return obj;
-  if (Array.isArray(obj)) return obj.map(transformKeys);
+  if (Array.isArray(obj)) return obj.map(_transformKeys);
   if (typeof obj !== "object") return obj;
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
     const camelKey = snakeToCamel(key);
-    result[camelKey] = transformKeys(value);
+    result[camelKey] = _transformKeys(value);
   }
   return result;
 }
@@ -245,7 +244,12 @@ export default createPlugin.withPlugins<PluginsClient>()({
 
           // Priority 1: org-level credentials (when org context is active)
           if (organizationId) {
-            const orgCreds = await lookupCredentialsByScope(s.db, organizationId, "organization", encryptionKey);
+            const orgCreds = await lookupCredentialsByScope(
+              s.db,
+              organizationId,
+              "organization",
+              encryptionKey,
+            );
             if (orgCreds) {
               return next({
                 context: { ...context, baseUrl: orgCreds.baseUrl, apiToken: orgCreds.apiToken },
@@ -256,7 +260,12 @@ export default createPlugin.withPlugins<PluginsClient>()({
           // Priority 2: personal credentials (checked regardless of org context)
           const effectiveUserId = userId ?? apiKey?.userId;
           if (effectiveUserId) {
-            const personalCreds = await lookupCredentialsByScope(s.db, effectiveUserId, "personal", encryptionKey);
+            const personalCreds = await lookupCredentialsByScope(
+              s.db,
+              effectiveUserId,
+              "personal",
+              encryptionKey,
+            );
             if (personalCreds) {
               return next({
                 context: {
@@ -668,6 +677,18 @@ export default createPlugin.withPlugins<PluginsClient>()({
             .use(requireAuth)
             .use(ic.credentials)
             .handler(h1(services, (ic) => ic.automations.list)),
+          pause: builder.ironclaw.automations.pause
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.automations.pause)),
+          resume: builder.ironclaw.automations.resume
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.automations.resume)),
+          delete: builder.ironclaw.automations.delete
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.automations.delete)),
         },
 
         outbound: {
@@ -741,6 +762,21 @@ export default createPlugin.withPlugins<PluginsClient>()({
             .use(requireAuth)
             .use(ic.credentials)
             .handler(h1(services, (ic) => ic.skills.remove)),
+          autoActivate: builder.ironclaw.skills.autoActivate
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.skills.autoActivate)),
+          autoActivateLearned: builder.ironclaw.skills.autoActivateLearned
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.skills.autoActivateLearned)),
+        },
+
+        logs: {
+          list: builder.ironclaw.logs.list
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h0(services, (ic) => ic.logs.list)),
         },
 
         channels: {

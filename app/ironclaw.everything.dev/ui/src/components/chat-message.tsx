@@ -145,10 +145,7 @@ export function ChatMessage({ message, isOptimistic, status, verbose }: ChatMess
         <AlertCircle size={14} className="shrink-0 text-destructive mt-0.5" />
         <div className="min-w-0">
           <p className="text-xs font-semibold text-destructive">Error</p>
-          <Markdown
-            content={textContent}
-            className="text-sm text-destructive/80 [&_p]:mb-0"
-          />
+          <Markdown content={textContent} className="text-sm text-destructive/80 [&_p]:mb-0" />
           {errorData && (
             <div className="mt-2">
               <button
@@ -157,10 +154,7 @@ export function ChatMessage({ message, isOptimistic, status, verbose }: ChatMess
                 aria-expanded={detailsExpanded}
                 className="flex items-center gap-1 text-xs text-destructive/60 hover:text-destructive transition-colors"
               >
-                <ChevronDown
-                  size={12}
-                  className={detailsExpanded ? "rotate-0" : "-rotate-90"}
-                />
+                <ChevronDown size={12} className={detailsExpanded ? "rotate-0" : "-rotate-90"} />
                 {detailsExpanded ? "Hide details" : "Error details"}
               </button>
               {detailsExpanded && (
@@ -267,7 +261,6 @@ export function ChatMessage({ message, isOptimistic, status, verbose }: ChatMess
             {p.content}
           </div>,
         );
-        continue;
       }
     }
 
@@ -306,9 +299,7 @@ export function ChatMessage({ message, isOptimistic, status, verbose }: ChatMess
         )}
         {isUser ? (
           <>
-            {textContent && (
-              <p className="whitespace-pre-wrap break-words">{textContent}</p>
-            )}
+            {textContent && <p className="whitespace-pre-wrap break-words">{textContent}</p>}
             {attachmentImages.map(({ key, ...img }) => (
               <InlineAttachmentImage key={key} {...img} />
             ))}

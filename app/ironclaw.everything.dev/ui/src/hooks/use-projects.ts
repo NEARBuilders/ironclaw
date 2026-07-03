@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useApiClient, type ApiClient } from "@/app";
+import { type ApiClient, useApiClient } from "@/app";
 
 export function projectsQueryOptions(apiClient: ApiClient) {
   return {

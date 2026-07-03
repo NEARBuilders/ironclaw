@@ -71,7 +71,7 @@ export function isAcceptedFile(file: File, acceptList: string[]): boolean {
   if (!acceptList || acceptList.length === 0) return true;
   for (const pattern of acceptList) {
     if (pattern.startsWith(".")) {
-      const fileExt = "." + file.name.split(".").pop()?.toLowerCase();
+      const fileExt = `.${file.name.split(".").pop()?.toLowerCase()}`;
       if (extMatch(fileExt, pattern)) return true;
     }
     if (wildcardMatch(pattern, file.type)) return true;

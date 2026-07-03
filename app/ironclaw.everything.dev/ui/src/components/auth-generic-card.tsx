@@ -1,6 +1,6 @@
 import { ShieldAlert } from "lucide-react";
-import type { AuthGate } from "@/hooks/use-thread-chat-manager";
 import { Button } from "@/components/ui/button";
+import type { AuthGate } from "@/hooks/use-thread-chat-manager";
 
 interface AuthGenericCardProps {
   gate: AuthGate;
@@ -24,9 +24,7 @@ export function AuthGenericCard({ gate, onCancel }: AuthGenericCardProps) {
         </div>
       </div>
 
-      {gate.body && (
-        <div className="mb-3 text-sm text-muted-foreground">{gate.body}</div>
-      )}
+      {gate.body && <div className="mb-3 text-sm text-muted-foreground">{gate.body}</div>}
 
       <div className="mb-3 text-xs text-muted-foreground">
         Open settings to complete this authentication step.

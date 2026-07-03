@@ -183,7 +183,14 @@ export default createPlugin({
         resolveGate: builder.threads.resolveGate.use(requireAuth).handler(
           ri(async (svc, input) => {
             await Effect.runPromise(
-              svc.resolveGate(input.id, input.runId, input.gateRef, input.resolution, input.always, input.credentialRef),
+              svc.resolveGate(
+                input.id,
+                input.runId,
+                input.gateRef,
+                input.resolution,
+                input.always,
+                input.credentialRef,
+              ),
             );
             return { success: true };
           }),
@@ -200,34 +207,26 @@ export default createPlugin({
         listFiles: builder.threads.listFiles
           .use(requireAuth)
           .handler(
-            ri((svc, input) =>
-              Effect.runPromise(svc.listProjectFiles(input.id, input.path)),
-            ),
+            ri((svc, input) => Effect.runPromise(svc.listProjectFiles(input.id, input.path))),
           ),
 
         statFile: builder.threads.statFile
           .use(requireAuth)
           .handler(
-            ri((svc, input) =>
-              Effect.runPromise(svc.statProjectFile(input.id, input.path)),
-            ),
+            ri((svc, input) => Effect.runPromise(svc.statProjectFile(input.id, input.path))),
           ),
 
         downloadFile: builder.threads.downloadFile
           .use(requireAuth)
           .handler(
-            ri((svc, input) =>
-              Effect.runPromise(svc.fetchFileContent(input.id, input.path)),
-            ),
+            ri((svc, input) => Effect.runPromise(svc.fetchFileContent(input.id, input.path))),
           ),
 
         getAttachment: builder.threads.getAttachment
           .use(requireAuth)
           .handler(
             ri((svc, input) =>
-              Effect.runPromise(
-                svc.getAttachment(input.id, input.messageId, input.attachmentId),
-              ),
+              Effect.runPromise(svc.getAttachment(input.id, input.messageId, input.attachmentId)),
             ),
           ),
       },
@@ -407,46 +406,52 @@ export default createPlugin({
         ),
 
         submitManualToken: builder.auth.submitManualToken.handler(
-          ri((svc, input) =>
-            Effect.runPromise(svc.submitManualToken(input)),
-          ),
+          ri((svc, input) => Effect.runPromise(svc.submitManualToken(input))),
         ),
       },
 
       fs: {
-        mounts: builder.fs.mounts.use(requireAuth).handler(
-          r((svc) => Effect.runPromise(svc.listFsMounts())),
-        ),
+        mounts: builder.fs.mounts
+          .use(requireAuth)
+          .handler(r((svc) => Effect.runPromise(svc.listFsMounts()))),
 
-        list: builder.fs.list.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.listFsDir(input.mount, input.path))),
-        ),
+        list: builder.fs.list
+          .use(requireAuth)
+          .handler(ri((svc, input) => Effect.runPromise(svc.listFsDir(input.mount, input.path)))),
 
-        stat: builder.fs.stat.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.statFsPath(input.mount, input.path))),
-        ),
+        stat: builder.fs.stat
+          .use(requireAuth)
+          .handler(ri((svc, input) => Effect.runPromise(svc.statFsPath(input.mount, input.path)))),
 
-        content: builder.fs.content.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.getFsContent(input.mount, input.path))),
-        ),
+        content: builder.fs.content
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) => Effect.runPromise(svc.getFsContent(input.mount, input.path))),
+          ),
       },
 
       projects: {
-        list: builder.projects.list.use(requireAuth).handler(
-          r((svc) => Effect.runPromise(svc.listProjects())),
-        ),
+        list: builder.projects.list
+          .use(requireAuth)
+          .handler(r((svc) => Effect.runPromise(svc.listProjects()))),
 
-        create: builder.projects.create.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.createProject(input.name, input.description))),
-        ),
+        create: builder.projects.create
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) => Effect.runPromise(svc.createProject(input.name, input.description))),
+          ),
 
-        get: builder.projects.get.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.getProject(input.id))),
-        ),
+        get: builder.projects.get
+          .use(requireAuth)
+          .handler(ri((svc, input) => Effect.runPromise(svc.getProject(input.id)))),
 
-        update: builder.projects.update.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.updateProject(input.id, input.name, input.description))),
-        ),
+        update: builder.projects.update
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) =>
+              Effect.runPromise(svc.updateProject(input.id, input.name, input.description)),
+            ),
+          ),
 
         delete: builder.projects.delete.use(requireAuth).handler(
           ri(async (svc, input) => {
@@ -455,17 +460,25 @@ export default createPlugin({
           }),
         ),
 
-        listMembers: builder.projects.listMembers.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.listProjectMembers(input.id))),
-        ),
+        listMembers: builder.projects.listMembers
+          .use(requireAuth)
+          .handler(ri((svc, input) => Effect.runPromise(svc.listProjectMembers(input.id)))),
 
-        addMember: builder.projects.addMember.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.addProjectMember(input.id, input.userId, input.role))),
-        ),
+        addMember: builder.projects.addMember
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) =>
+              Effect.runPromise(svc.addProjectMember(input.id, input.userId, input.role)),
+            ),
+          ),
 
-        updateMember: builder.projects.updateMember.use(requireAuth).handler(
-          ri((svc, input) => Effect.runPromise(svc.updateProjectMember(input.id, input.userId, input.role))),
-        ),
+        updateMember: builder.projects.updateMember
+          .use(requireAuth)
+          .handler(
+            ri((svc, input) =>
+              Effect.runPromise(svc.updateProjectMember(input.id, input.userId, input.role)),
+            ),
+          ),
 
         removeMember: builder.projects.removeMember.use(requireAuth).handler(
           ri(async (svc, input) => {
