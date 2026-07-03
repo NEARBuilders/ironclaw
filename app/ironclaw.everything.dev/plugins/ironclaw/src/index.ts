@@ -35,10 +35,7 @@ export default createPlugin({
 
   contract,
 
-  initialize: (config) =>
-    Effect.gen(function* () {
-      return { config };
-    }),
+  initialize: (config) => Effect.succeed({ config }),
 
   shutdown: () => Effect.void,
 

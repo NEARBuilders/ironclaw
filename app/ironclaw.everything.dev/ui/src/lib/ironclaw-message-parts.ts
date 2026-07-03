@@ -170,8 +170,6 @@ export function restMessageToParts(
   } catch {
     return [{ type: "text" as const, content: trimmed }];
   }
-
-  return [{ type: "text" as const, content: trimmed }];
 }
 
 export function messagesToUIMessages(rawMessages: ConversationMessageType[]): UIMessage[] {

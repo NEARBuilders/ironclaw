@@ -831,7 +831,8 @@ function IronclawPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div
+            <button
+              type="button"
               onClick={scrollToLocalSetup}
               className={`rounded-xl border-2 bg-card p-6 hover:border-primary/40 transition-colors text-left cursor-pointer ${
                 isConnected ? "border-[color:var(--near-green)]/30" : "border-primary/20"
@@ -859,7 +860,7 @@ function IronclawPage() {
               >
                 {isConnected ? "Reconfigure" : "Set up tunnel"}
               </Button>
-            </div>
+            </button>
 
             <div
               className={`rounded-xl border-2 bg-card p-6 text-left opacity-60 blur-[1px] pointer-events-none select-none ${

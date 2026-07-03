@@ -15,9 +15,10 @@ interface RouteRecord {
 function parseRouteRecords(content: string): RouteRecord[] {
   const records: RouteRecord[] = [];
   const regex = /\{\s*id:\s*'([^']+)'[\s\S]*?fullPath:\s*'([^']+)'/g;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(content)) !== null) {
+  let match: RegExpExecArray | null = regex.exec(content);
+  while (match !== null) {
     records.push({ id: match[1], path: "", fullPath: match[2] });
+    match = regex.exec(content);
   }
   return records;
 }

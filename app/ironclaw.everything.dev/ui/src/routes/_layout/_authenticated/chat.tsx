@@ -503,13 +503,15 @@ function ChatLayout() {
           {sidebarOpen ? (
             <>
               {threadListContent}
-              <div
+              <button
+                type="button"
+                aria-label="Resize sidebar"
                 onMouseDown={handleResizeStart}
-                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10 group"
+                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10 group p-0 border-none bg-transparent"
                 title="Drag to resize"
               >
                 <div className="absolute right-0 top-0 bottom-0 w-3 -translate-x-1" />
-              </div>
+              </button>
             </>
           ) : (
             <div className="flex flex-col items-center gap-1 py-2">

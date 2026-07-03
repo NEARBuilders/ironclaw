@@ -112,7 +112,9 @@ function RichResult({ text }: { text: string }) {
   ) {
     const columns = Array.from(
       parsed.reduce((set: Set<string>, row) => {
-        Object.keys(row).forEach((k) => set.add(k));
+        for (const k of Object.keys(row)) {
+          set.add(k);
+        }
         return set;
       }, new Set<string>()),
     );

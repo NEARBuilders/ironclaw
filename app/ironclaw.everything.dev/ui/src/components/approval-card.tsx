@@ -91,8 +91,15 @@ export function ApprovalCard({ approval, onApprove, onDeny, onAlways }: Approval
       )}
 
       {approval.allowAlways && (
-        <label className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
-          <Checkbox checked={always} onCheckedChange={(checked) => setAlways(checked === true)} />
+        <label
+          htmlFor="always-allow"
+          className="mb-3 flex items-center gap-2 text-xs text-muted-foreground"
+        >
+          <Checkbox
+            id="always-allow"
+            checked={always}
+            onCheckedChange={(checked) => setAlways(checked === true)}
+          />
           Always allow {approval.toolName ?? "this tool"}
         </label>
       )}

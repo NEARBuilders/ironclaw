@@ -112,16 +112,22 @@ function OutboundTab({ apiClient }: { apiClient: ReturnType<typeof useApiClient>
       </div>
       <div className="space-y-4">
         <div className="space-y-2">
-          <label className="text-xs font-medium text-muted-foreground">Target ID</label>
+          <label htmlFor="target-id" className="text-xs font-medium text-muted-foreground">
+            Target ID
+          </label>
           <Input
+            id="target-id"
             value={targetId}
             onChange={(e) => setTargetId(e.target.value)}
             placeholder="Channel target ID"
           />
         </div>
         <div className="space-y-2">
-          <label className="text-xs font-medium text-muted-foreground">Channel</label>
+          <label htmlFor="channel" className="text-xs font-medium text-muted-foreground">
+            Channel
+          </label>
           <Input
+            id="channel"
             value={channel}
             onChange={(e) => setChannel(e.target.value)}
             placeholder="slack, telegram, etc."
@@ -222,16 +228,22 @@ function ExtensionsTab({ apiClient }: { apiClient: ReturnType<typeof useApiClien
       </div>
       <div className="space-y-4">
         <div className="space-y-2">
-          <label className="text-xs font-medium text-muted-foreground">Extension Name</label>
+          <label htmlFor="ext-name" className="text-xs font-medium text-muted-foreground">
+            Extension Name
+          </label>
           <Input
+            id="ext-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. my-channel"
           />
         </div>
         <div className="space-y-2">
-          <label className="text-xs font-medium text-muted-foreground">Action</label>
+          <label htmlFor="ext-action" className="text-xs font-medium text-muted-foreground">
+            Action
+          </label>
           <select
+            id="ext-action"
             value={action}
             onChange={(e) => setAction(e.target.value)}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
@@ -242,10 +254,11 @@ function ExtensionsTab({ apiClient }: { apiClient: ReturnType<typeof useApiClien
           </select>
         </div>
         <div className="space-y-2">
-          <label className="text-xs font-medium text-muted-foreground">
+          <label htmlFor="ext-payload" className="text-xs font-medium text-muted-foreground">
             Payload <span className="text-muted-foreground/60">(JSON, optional)</span>
           </label>
           <textarea
+            id="ext-payload"
             value={payload}
             onChange={(e) => setPayload(e.target.value)}
             placeholder='{"key": "value"}'
