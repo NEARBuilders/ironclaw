@@ -113,6 +113,7 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
       store.runId = null;
       store.pendingApprovals = [];
       store.authGates = [];
+      setThreadStatus(threadId, { hasActiveRun: false });
     }
 
     clientRef.current = new ChatClient({
@@ -182,7 +183,7 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
       },
 
       onLoadingChange(loading) {
-        if (!loading && store.isLoading) return;
+        if (loading === store.isLoading) return;
         store.isLoading = loading;
         if (!loading && !runCompletedNormally && !runErrored && !store.intentionalStop) {
           store.streamInterrupted = true;
@@ -403,6 +404,7 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
     if (runId) {
       apiClient.conversation.cancelRun({ threadId, runId }).catch(() => {});
     }
+    setThreadStatus(threadId, { hasActiveRun: false });
     client.stop();
   }, [client, apiClient, threadId]);
 

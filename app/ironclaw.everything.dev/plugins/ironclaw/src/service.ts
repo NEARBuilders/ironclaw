@@ -901,21 +901,76 @@ export class IronclawService {
     });
   }
 
-  listLogs(): Effect.Effect<{ data: LogEntry[] }, Error> {
+  listLogs(threadId: string): Effect.Effect<{ data: LogEntry[] }, Error> {
     return Effect.tryPromise({
       try: async () => {
-        const raw: any = await this.request("GET", "/api/webchat/v2/logs");
-        const logs: LogEntry[] = (raw.logs ?? []).map((l: any) => ({
+        const raw: any = await this.request("GET", "/api/webchat/v2/logs", undefined, {
+          thread_id: threadId,
+        });
+        const logs: LogEntry[] = (raw.entries ?? []).map((l: any) => ({
           id: l.id,
           level: l.level,
           message: l.message,
-          createdAt: l.created_at,
+          createdAt: l.timestamp,
           source: l.source ?? undefined,
         }));
         return { data: logs };
       },
       catch: (error: unknown) =>
         new Error(`Failed to list logs: ${error instanceof Error ? error.message : String(error)}`),
+    });
+  }
+
+  listOperatorLogs(params?: {
+    limit?: number;
+    cursor?: string;
+    level?: string;
+    target?: string;
+    threadId?: string;
+    runId?: string;
+    turnId?: string;
+    toolCallId?: string;
+    toolName?: string;
+    source?: string;
+    tail?: boolean;
+    follow?: boolean;
+  }): Effect.Effect<{ data: LogEntry[]; nextCursor: string | null }, Error> {
+    return Effect.tryPromise({
+      try: async () => {
+        const qp: Record<string, string | undefined> = {};
+        if (params?.limit !== undefined) qp.limit = String(params.limit);
+        if (params?.cursor) qp.cursor = params.cursor;
+        if (params?.level) qp.level = params.level;
+        if (params?.target) qp.target = params.target;
+        if (params?.threadId) qp.thread_id = params.threadId;
+        if (params?.runId) qp.run_id = params.runId;
+        if (params?.turnId) qp.turn_id = params.turnId;
+        if (params?.toolCallId) qp.tool_call_id = params.toolCallId;
+        if (params?.toolName) qp.tool_name = params.toolName;
+        if (params?.source) qp.source = params.source;
+        if (params?.tail) qp.tail = "true";
+        if (params?.follow) qp.follow = "true";
+
+        const raw: any = await this.request(
+          "GET",
+          "/api/webchat/v2/operator/logs",
+          undefined,
+          qp,
+        );
+        const logsData = raw.logs ?? { entries: [] };
+        const logs: LogEntry[] = (logsData.entries ?? []).map((l: any) => ({
+          id: l.id,
+          level: l.level,
+          message: l.message,
+          createdAt: l.timestamp,
+          source: l.source ?? undefined,
+        }));
+        return { data: logs, nextCursor: logsData.next_cursor ?? null };
+      },
+      catch: (error: unknown) =>
+        new Error(
+          `Failed to list operator logs: ${error instanceof Error ? error.message : String(error)}`,
+        ),
     });
   }
 

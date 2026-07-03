@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Copy, PanelLeft, Settings, SlidersHorizontal } from "lucide-react";
+import { Copy, PanelLeft, ScrollText, Settings, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
 
@@ -114,6 +114,17 @@ export function ChatIdentityBar({
           >
             <SlidersHorizontal size={12} />
           </Button>
+        )}
+        {threadState?.thread.threadId && (
+          <Link
+            to="/chat/$threadId/logs"
+            params={{ threadId: threadState.thread.threadId }}
+            className="flex items-center"
+          >
+            <Button variant="ghost" size="icon" className="h-7 w-7" title="Thread logs">
+              <ScrollText size={12} />
+            </Button>
+          </Link>
         )}
         <Link to="/setup" className="flex items-center">
           <Button variant="ghost" size="icon" className="h-7 w-7" title="IronClaw settings">

@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   AlertCircle,
-  Ban,
+  ArrowLeft,
   Info,
   RefreshCw,
   ScrollText,
@@ -22,13 +22,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
 
-export const Route = createFileRoute("/_layout/_authenticated/logs")({
-  component: LogsPage,
+export const Route = createFileRoute("/_layout/_authenticated/chat/$threadId/logs")({
+  component: ThreadLogsPage,
 });
 
-const logsQueryKey = ["ironclaw", "logs", "operator"] as const;
+const logsQueryKey = (threadId: string) => ["ironclaw", "logs", threadId] as const;
 
 const LEVEL_ICONS: Record<string, typeof AlertCircle> = {
   error: XCircle,
@@ -59,12 +58,10 @@ function formatTimestamp(iso: string) {
   }
 }
 
-function LogsPage() {
+function ThreadLogsPage() {
+  const { threadId } = Route.useParams();
   const apiClient = useApiClient();
-  const { session } = useIronclawStatus();
   const [levelFilter, setLevelFilter] = useState<string>("all");
-
-  const hasOperatorLogs = session?.capabilities?.operatorWebuiConfig === true;
 
   const {
     data: logs,
@@ -74,12 +71,11 @@ function LogsPage() {
     isRefetching,
     dataUpdatedAt,
   } = useQuery({
-    queryKey: logsQueryKey,
+    queryKey: logsQueryKey(threadId),
     queryFn: async () => {
-      const result = await apiClient.ironclaw.operator.logs.list({});
+      const result = await apiClient.ironclaw.logs.list({ threadId });
       return result.data;
     },
-    enabled: hasOperatorLogs,
     refetchInterval: 15_000,
     staleTime: 5_000,
   });
@@ -99,10 +95,19 @@ function LogsPage() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-6 py-3 border-b border-border shrink-0">
+        <Link
+          to="/chat/$threadId"
+          params={{ threadId }}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
+        >
+          <ArrowLeft size={14} />
+          Back
+        </Link>
+        <div className="w-px h-5 bg-border" />
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
           <ScrollText className="h-4 w-4 text-primary" />
         </div>
-        <h1 className="text-sm font-semibold text-foreground">Logs</h1>
+        <h1 className="text-sm font-semibold text-foreground">Thread Logs</h1>
         <div className="w-px h-5 bg-border mx-1" />
         <Select value={levelFilter} onValueChange={setLevelFilter}>
           <SelectTrigger className="h-8 w-[130px] text-xs">
@@ -136,20 +141,7 @@ function LogsPage() {
       </div>
 
       <div className="flex-1 min-h-0">
-        {!hasOperatorLogs ? (
-          <div className="flex items-center justify-center h-full p-6">
-            <Card className="flex flex-col items-center gap-3 p-6 text-center max-w-sm">
-              <Ban className="h-8 w-8 text-muted-foreground" />
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-foreground">Operator logs unavailable</p>
-                <p className="text-xs text-muted-foreground">
-                  Your IronClaw session does not have operator-level log access. View logs per
-                  thread from the thread view instead.
-                </p>
-              </div>
-            </Card>
-          </div>
-        ) : isLoading ? (
+        {isLoading ? (
           <div className="p-4 space-y-2">
             {Array.from({ length: 12 }).map((_, i) => (
               <Skeleton key={i} className="h-8 w-full" />
@@ -175,7 +167,7 @@ function LogsPage() {
           <div className="flex items-center justify-center h-full p-6">
             <div className="text-center space-y-2">
               <ScrollText className="mx-auto h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">No logs available</p>
+              <p className="text-sm text-muted-foreground">No logs available for this thread</p>
             </div>
           </div>
         ) : filteredLogs.length === 0 ? (

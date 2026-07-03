@@ -1037,6 +1037,38 @@ export const contract = oc.router({
         }),
       )
       .errors(Errors),
+
+    logs: {
+      list: oc
+        .route({
+          method: "GET",
+          path: "/operator/logs",
+          summary: "List operator-scoped logs",
+        })
+        .input(
+          z.object({
+            limit: z.number().min(1).max(500).optional(),
+            cursor: z.string().optional(),
+            level: z.string().optional(),
+            target: z.string().optional(),
+            threadId: z.string().optional(),
+            runId: z.string().optional(),
+            turnId: z.string().optional(),
+            toolCallId: z.string().optional(),
+            toolName: z.string().optional(),
+            source: z.string().optional(),
+            tail: z.boolean().optional(),
+            follow: z.boolean().optional(),
+          }),
+        )
+        .output(
+          z.object({
+            data: z.array(LogEntrySchema),
+            nextCursor: z.string().nullable(),
+          }),
+        )
+        .errors(Errors),
+    },
   },
 
   settings: {
@@ -1080,6 +1112,7 @@ export const contract = oc.router({
   logs: {
     list: oc
       .route({ method: "GET", path: "/logs", summary: "List caller-scoped logs" })
+      .input(z.object({ threadId: z.string() }))
       .output(z.object({ data: z.array(LogEntrySchema) }))
       .errors(Errors),
   },

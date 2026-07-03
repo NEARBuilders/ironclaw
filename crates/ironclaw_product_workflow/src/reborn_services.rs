@@ -12,7 +12,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use chrono::{Duration, Utc};
+use chrono::{Duration as ChronoDuration, Utc};
 use futures::future::try_join_all;
 use ironclaw_attachments::InboundAttachment;
 use ironclaw_auth::{
@@ -4469,7 +4469,7 @@ impl RebornServicesApi for RebornServices {
         let token = service
             .create_session(tenant_id, user_id, agent_id, project_id)
             .await?;
-        let expires_at = Utc::now() + Duration::hours(1);
+        let expires_at = Utc::now() + ChronoDuration::hours(1);
         Ok(WebUiMintAccessSessionResponse { token, expires_at })
     }
 }

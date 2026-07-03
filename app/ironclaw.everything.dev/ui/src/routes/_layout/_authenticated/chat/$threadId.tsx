@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { ApprovalCard } from "@/components/approval-card";
 import { AuthGenericCard } from "@/components/auth-generic-card";
@@ -54,6 +55,7 @@ function ThreadChatView() {
   }, [threadId, threadsQuery.data]);
 
   const chat = useIronclawChat({ threadId, initialMessages });
+  const queryClient = useQueryClient();
   const isBusy = chat.isLoading;
   const streamInterrupted = chat.streamInterrupted;
 
@@ -61,8 +63,9 @@ function ThreadChatView() {
     (content: string, attachments?: StagedAttachment[]) => {
       if (!content.trim() || isBusy) return;
       chat.sendMessage(content, attachments);
+      queryClient.invalidateQueries({ queryKey: ["conversation", "threads"] });
     },
-    [chat.sendMessage, isBusy],
+    [chat.sendMessage, isBusy, queryClient],
   );
 
   const firstPendingApproval = chat.pendingApprovals[0];

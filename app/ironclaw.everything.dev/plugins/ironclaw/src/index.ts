@@ -377,7 +377,9 @@ export default createPlugin({
       logs: {
         list: builder.logs.list
           .use(requireAuth)
-          .handler(r((svc) => Effect.runPromise(svc.listLogs()))),
+          .handler(
+            ri((svc, input) => Effect.runPromise(svc.listLogs(input.threadId))),
+          ),
       },
 
       channels: {
@@ -493,6 +495,14 @@ export default createPlugin({
             );
           }),
         ),
+
+        logs: {
+          list: builder.operator.logs.list
+            .use(requireAuth)
+            .handler(
+              ri((svc, input) => Effect.runPromise(svc.listOperatorLogs(input))),
+            ),
+        },
       },
     };
   },

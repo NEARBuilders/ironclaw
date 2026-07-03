@@ -112,7 +112,7 @@ export const ConversationChatMessagePartSchema = z.object({
 
 export const ConversationChatMessageSchema = z.object({
   id: z.string(),
-  role: z.enum(["user", "assistant"]),
+  role: z.enum(["user", "assistant", "system"]),
   content: z.string().optional(),
   parts: z.array(ConversationChatMessagePartSchema).optional(),
   createdAt: z.string().optional(),
