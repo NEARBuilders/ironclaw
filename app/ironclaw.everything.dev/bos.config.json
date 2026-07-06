@@ -23,15 +23,15 @@
         "ALLOW_UNTRUSTED_SSR",
         "CSP_STRICT"
       ],
-      "production": "https://elliot-braem-5044-host-ironclaw-nearbuilders-748dd5c0b-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-5187-host-ironclaw-nearbuilders-b3fa74938-ze.zephyrcloud.app",
       "integrity": "sha384-uzbBU2DfN9ozBwVXUPjGyv+w29xMfBYmNTYnKuQLsxvzNTufAO6PWH6QrpPa51bB"
     },
     "ui": {
       "development": "local:ui",
-      "ssr": "https://elliot-braem-5041-ui-ironclaw-nearbuilders-4a9d8d6a0-ze.zephyrcloud.app",
-      "ssrIntegrity": "sha384-dnnjUwjviW6we0SdQHY/jtSp/NxZTfZMuKfzdXPSsP2/SDJbNgSZt6uHxcEc4qrg",
-      "production": "https://elliot-braem-5040-ui-ironclaw-nearbuilders-7a4396e5d-ze.zephyrcloud.app",
-      "integrity": "sha384-CfKojAeifHsc5vjHJIzaFYHbt9JKUWFgS7yEDra8xQaAJB0TwPEiaA22zet0kMa6"
+      "ssr": "https://elliot-braem-5184-ui-ironclaw-nearbuilders-899ba6c2e-ze.zephyrcloud.app",
+      "ssrIntegrity": "sha384-DIvOO0T15bfvKSfRKFOgWG1l/ByXcBfRudrM/hQ8E77y1UkApfOpxOeA2f5ep6k3",
+      "production": "https://elliot-braem-5183-ui-ironclaw-nearbuilders-1df9b5658-ze.zephyrcloud.app",
+      "integrity": "sha384-ckPzu4MEQvWI5FbF1JCwmIQSxNKvD6TgvxBD7EIrG/VnyKwwSlCoqV8kgudHWo3H"
     },
     "api": {
       "development": "local:api",
@@ -40,8 +40,8 @@
         "IRONCLAW_BASE_URL",
         "BETTER_AUTH_SECRET"
       ],
-      "production": "https://elliot-braem-5042-api-ironclaw-nearbuilders-31bdd5c4c-ze.zephyrcloud.app",
-      "integrity": "sha384-kJU4LTN0U/uXrYaGpG9gPVFZV+JOeYt0Ug2y2aOsFcpVAJC+hTNqei9IbZkf1Sju"
+      "production": "https://elliot-braem-5185-api-ironclaw-nearbuilders-f10214c96-ze.zephyrcloud.app",
+      "integrity": "sha384-DPT54Ky/d2jzWH1g48qKT7NXAjl42DuduDwnge7VKjN2RmjslXHCSsNZxTSdfqqz"
     }
   },
   "plugins": {
@@ -54,8 +54,8 @@
         "IRONCLAW_BASE_URL",
         "IRONCLAW_API_TOKEN"
       ],
-      "production": "https://elliot-braem-5043-every-plugin-ironclaw-ironclaw--4663fb58b-ze.zephyrcloud.app",
-      "integrity": "sha384-C16nqFILTg4xcYT3+kONmbT2jYpD+89JGmTxBvUhCXt9iED4NnuSbwaOCelAedg3"
+      "production": "https://elliot-braem-5186-every-plugin-ironclaw-ironclaw--d428ade89-ze.zephyrcloud.app",
+      "integrity": "sha384-Qlmz7fXLWbm2QZCwYJPxQTZA2vzEAcfr85+rvm/9ltxcitbMMGiuptu36u7KWV01"
     }
   }
 }

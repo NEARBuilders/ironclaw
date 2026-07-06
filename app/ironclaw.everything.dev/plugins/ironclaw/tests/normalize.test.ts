@@ -273,4 +273,32 @@ describe("createThreadChatBridge", () => {
     expect(events.some((e) => e.type === "TEXT_MESSAGE_CONTENT")).toBe(true);
     expect(events.some((e) => e.type === "RUN_FINISHED")).toBe(true);
   });
+
+  it("does not treat completed projection snapshots as active loading runs", async () => {
+    const svc = mockSvc([
+      event("projection_snapshot", {
+        state: {
+          items: [
+            {
+              capability_activity: {
+                invocation_id: "inv-2",
+                turn_run_id: "run-2",
+                capability_id: "search-web",
+                status: "completed",
+                output_summary: "all good",
+                output_kind: "text",
+              },
+            },
+            { runStatus: { runId: "run-2", status: "completed" } },
+          ],
+        },
+      }),
+    ]);
+
+    const handler = createThreadChatBridge(svc);
+    const events = await collectEvents(handler, { threadId: "thread-1", messages: [] });
+
+    expect(events.some((e) => e.type === "RUN_STARTED")).toBe(false);
+    expect(events.some((e) => e.type === "TOOL_CALL_END")).toBe(true);
+  });
 });

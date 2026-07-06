@@ -201,6 +201,16 @@ function getProjectionSkillActivation(
     | undefined;
 }
 
+function isTerminalRunStatus(status: string | undefined): boolean {
+  return ["completed", "succeeded", "failed", "cancelled", "recovery_required", "killed"].includes(
+    status ?? "",
+  );
+}
+
+function isActiveRunStatus(status: string | undefined): boolean {
+  return !!status && !isTerminalRunStatus(status);
+}
+
 function findAssistantTextForRun(entries: any[], runId: string): string | undefined {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i];
@@ -420,7 +430,7 @@ export function createThreadChatBridge(svc: BridgeService) {
         const entries: any[] = raw.data ?? [];
         for (const invocationId of activeToolCalls) {
           const preview = pendingPreviews.get(invocationId);
-          const resultEntry = entries.find((e: any) => {
+          const resultEntry = [...entries].reverse().find((e: any) => {
             try {
               const c = JSON.parse(e.content ?? "");
               return (c.invocation_id ?? c.invocationId) === invocationId;
@@ -522,10 +532,15 @@ export function createThreadChatBridge(svc: BridgeService) {
           const invocationId = resolveToolCallId(preview, undefined);
           const capabilityId = preview?.capabilityId;
           const title = preview?.title ?? capabilityId ?? "unknown";
+          const previewStatus = (preview?.status as string | undefined) ?? undefined;
+          const previewIsActive = isActiveRunStatus(previewStatus);
+          const previewIsTerminal = isTerminalRunStatus(previewStatus);
 
           if (invocationId && preview) {
             pendingPreviews.set(invocationId, preview);
-            yield* emitRunStarted(eventRunId);
+            if (previewIsActive) {
+              yield* emitRunStarted(eventRunId);
+            }
             if (!activeToolCalls.has(invocationId)) {
               activeToolCalls.add(invocationId);
               yield emitToolStart(invocationId, title, eventRunId);
@@ -535,11 +550,32 @@ export function createThreadChatBridge(svc: BridgeService) {
                 eventRunId,
               );
             }
-            yield emitCustom(
-              "capability-display-preview",
-              { ...preview, toolCallId: invocationId, toolName: title },
-              eventRunId,
-            );
+            if (previewIsTerminal) {
+              const envelope = buildToolResultEnvelope(preview, {
+                output: preview.outputSummary ?? preview.outputPreview ?? null,
+                outputKind: preview.outputKind ?? null,
+                truncated: Boolean(preview.truncated),
+                inputSummary: preview.inputSummary ?? null,
+                title,
+              });
+              yield emitToolEnd(
+                invocationId,
+                title,
+                previewStatus === "failed" || previewStatus === "killed"
+                  ? "output-error"
+                  : "output-available",
+                envelope,
+                preview.inputSummary ?? "",
+                eventRunId,
+              );
+              activeToolCalls.delete(invocationId);
+            } else {
+              yield emitCustom(
+                "capability-display-preview",
+                { ...preview, toolCallId: invocationId, toolName: title },
+                eventRunId,
+              );
+            }
           }
           continue;
         }
@@ -555,14 +591,16 @@ export function createThreadChatBridge(svc: BridgeService) {
           const errorKind = (activityRec?.errorKind ?? activityRec?.error_kind) as
             | string
             | undefined;
+          const isActive = status === "started" || status === "running";
+          const isTerminal = status === "completed" || status === "failed" || status === "killed";
 
           if (!invocationId || !capabilityId) continue;
 
           const preview = pendingPreviews.get(invocationId);
           const title = preview?.title ?? capabilityId;
-          yield* emitRunStarted(eventRunId);
 
-          if (status === "started" || status === "running") {
+          if (isActive) {
+            yield* emitRunStarted(eventRunId);
             if (!activeToolCalls.has(invocationId)) {
               activeToolCalls.add(invocationId);
               yield emitToolStart(invocationId, title, eventRunId);
@@ -580,7 +618,7 @@ export function createThreadChatBridge(svc: BridgeService) {
             continue;
           }
 
-          if (status === "completed" || status === "failed" || status === "killed") {
+          if (isTerminal) {
             if (!activeToolCalls.has(invocationId)) {
               activeToolCalls.add(invocationId);
               yield emitToolStart(invocationId, title, eventRunId);
@@ -801,12 +839,15 @@ export function createThreadChatBridge(svc: BridgeService) {
               }
             }
 
-            const projRunId = ackRunId ?? crypto.randomUUID();
+            const activeRunStatus = runStatuses.find((rs) => isActiveRunStatus(rs.status));
+            const projectionRunId = activeRunStatus?.runId ?? ackRunId ?? undefined;
 
-            yield* emitRunStarted(projRunId);
+            if (projectionRunId) {
+              yield* emitRunStarted(projectionRunId);
+            }
 
             for (const th of thinkingItems) {
-              const stepRunId = (th.runId ?? th.run_id ?? projRunId) as string;
+              const stepRunId = (th.runId ?? th.run_id ?? projectionRunId ?? crypto.randomUUID()) as string;
               yield {
                 type: "STEP_STARTED",
                 stepName: "thinking",
@@ -833,15 +874,15 @@ export function createThreadChatBridge(svc: BridgeService) {
                 if (capStatus === "started" || capStatus === "running") {
                   if (!activeToolCalls.has(invocationId)) {
                     activeToolCalls.add(invocationId);
-                    yield emitToolStart(invocationId, title, projRunId);
-                    yield emitToolArgs(invocationId, JSON.stringify({ input: "" }), projRunId);
+                    yield emitToolStart(invocationId, title, projectionRunId);
+                    yield emitToolArgs(invocationId, JSON.stringify({ input: "" }), projectionRunId);
                   }
-                yield emitCustom("capability-activity", { toolCallId: invocationId, toolName: title, ...ca }, projRunId);
+                yield emitCustom("capability-activity", { toolCallId: invocationId, toolName: title, ...ca }, projectionRunId);
                 } else {
                   if (!activeToolCalls.has(invocationId)) {
                     activeToolCalls.add(invocationId);
-                    yield emitToolStart(invocationId, title, projRunId);
-                    yield emitToolArgs(invocationId, JSON.stringify({ input: "" }), projRunId);
+                    yield emitToolStart(invocationId, title, projectionRunId);
+                    yield emitToolArgs(invocationId, JSON.stringify({ input: "" }), projectionRunId);
                   }
                   const errorKind = (ca.errorKind ?? ca.error_kind) as string | undefined;
                   const envelope = buildToolResultEnvelope(ca, {
@@ -855,8 +896,8 @@ export function createThreadChatBridge(svc: BridgeService) {
                     capStatus === "failed" || capStatus === "killed"
                       ? "output-error"
                       : "output-available";
-                  yield emitToolEnd(invocationId, title, toolState, envelope, "", projRunId);
-                  yield emitCustom("capability-activity", { toolCallId: invocationId, toolName: title, ...ca }, projRunId);
+                  yield emitToolEnd(invocationId, title, toolState, envelope, "", projectionRunId);
+                  yield emitCustom("capability-activity", { toolCallId: invocationId, toolName: title, ...ca }, projectionRunId);
                   activeToolCalls.delete(invocationId);
                 }
               }
@@ -867,9 +908,9 @@ export function createThreadChatBridge(svc: BridgeService) {
               const headline = (g.headline as string) || "Approval required";
               if (gateRef) {
                 const gateToolCallId = `gate-${gateRef}`;
-                yield emitToolStart(gateToolCallId, "approval", projRunId);
-                yield emitToolArgs(gateToolCallId, JSON.stringify({ input: headline }), projRunId);
-                yield emitToolEnd(gateToolCallId, "approval", "output-available", "", headline, projRunId);
+                yield emitToolStart(gateToolCallId, "approval", projectionRunId);
+                yield emitToolArgs(gateToolCallId, JSON.stringify({ input: headline }), projectionRunId);
+                yield emitToolEnd(gateToolCallId, "approval", "output-available", "", headline, projectionRunId);
                 yield emitCustom(
                   "approval-requested",
                   {
@@ -883,10 +924,10 @@ export function createThreadChatBridge(svc: BridgeService) {
                       toolName: "approval",
                       description: headline,
                     },
-                  },
-                  projRunId,
+                    },
+                    projectionRunId,
                 );
-                  yield emitCustom("gate", { gateRef, headline, toolCallId: gateToolCallId, toolName: "approval" }, projRunId);
+                  yield emitCustom("gate", { gateRef, headline, toolCallId: gateToolCallId, toolName: "approval" }, projectionRunId);
               }
             }
 
@@ -918,14 +959,14 @@ export function createThreadChatBridge(svc: BridgeService) {
               if (skillNames && skillNames.length > 0) {
                 yield emitCustom(
                   "skill-activation",
-                  { id, skillNames, feedback, runId: projRunId },
-                  projRunId,
+                  { id, skillNames, feedback, runId: projectionRunId },
+                  projectionRunId,
                 );
               }
             }
 
             for (const rs of runStatuses) {
-              if (rs.runId !== ackRunId) continue;
+              if (projectionRunId && rs.runId !== projectionRunId) continue;
               const { runId, status: st } = rs;
               const isTerminal = [
                 "completed",

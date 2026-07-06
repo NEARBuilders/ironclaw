@@ -108,6 +108,8 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
         setRunId(null);
         setPendingApprovals([]);
         setAuthGates([]);
+        void queryClient.invalidateQueries({ queryKey: threadMessagesQueryKey(threadId) });
+        void queryClient.invalidateQueries({ queryKey: ["conversation", "threads"] });
 
         const errorData = pendingErrorDataRef.current;
         pendingErrorDataRef.current = null;
@@ -132,6 +134,8 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
         setRunId(null);
         setPendingApprovals([]);
         setAuthGates([]);
+        void queryClient.invalidateQueries({ queryKey: threadMessagesQueryKey(threadId) });
+        void queryClient.invalidateQueries({ queryKey: ["conversation", "threads"] });
         return;
       }
 
@@ -223,11 +227,6 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
       chat.setMessages(initialMessages);
     }
   }, [chat.messages, chat.setMessages, initialMessages]);
-
-  useEffect(() => {
-    if (chat.messages.length === 0) return;
-    queryClient.setQueryData(threadMessagesQueryKey(threadId), chat.messages);
-  }, [chat.messages, queryClient, threadId]);
 
   const messages = useMemo(() => [...chat.messages, ...systemMessages], [chat.messages, systemMessages]);
 

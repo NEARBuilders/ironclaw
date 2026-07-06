@@ -18,12 +18,11 @@ import type { StagedAttachment } from "@/lib/attachments";
 import { useChatLayout } from "../chat";
 
 export const Route = createFileRoute("/_layout/_authenticated/chat/$threadId")({
+  remountDeps: ({ params }) => ({ threadId: params.threadId }),
   loader: async ({ context, params }) => {
     try {
       const { threadMessagesQueryOptions } = await import("@/hooks/use-conversation");
-      await context.queryClient.ensureQueryData(
-        threadMessagesQueryOptions(context.apiClient, params.threadId),
-      );
+      await context.queryClient.fetchQuery(threadMessagesQueryOptions(context.apiClient, params.threadId));
     } catch (err) {
       console.error("[chat] Failed to pre-fetch thread messages:", err);
     }
