@@ -16,8 +16,6 @@ import {
   userPreferences,
 } from "./db/schema";
 import { createAuthMiddleware } from "./lib/auth";
-import { normalizeThread, normalizeTimelinePage } from "./lib/conversation";
-import { createThreadChatBridge } from "./lib/conversation-live";
 import { decryptApiToken, encryptApiToken } from "./lib/encryption";
 import type { PluginsClient } from "./lib/plugins-types.gen";
 
@@ -183,11 +181,13 @@ export default createPlugin.withPlugins<PluginsClient>()({
       console.log("[API] Migrations applied");
 
       const { auth, ironclaw, ...restPlugins } = plugins;
+      const pluginClients = { ironclaw, auth, ...restPlugins };
       console.log("[API] Services Initialized");
 
       return {
         ironclaw,
         auth,
+        pluginClients,
         plugins: restPlugins,
         db: driver.db,
         driver,
@@ -206,7 +206,7 @@ export default createPlugin.withPlugins<PluginsClient>()({
     const { requireAuth } = createAuthMiddleware(builder);
     const encryptionKey = s.secrets?.BETTER_AUTH_SECRET;
 
-    const resolveCredentials = builder.middleware(async ({ context, next }) => {
+    const resolveIronclawContext = async (context: any) => {
       const { userId, organizationId, apiKey } = context;
 
       if (s.db) {
@@ -227,18 +227,16 @@ export default createPlugin.withPlugins<PluginsClient>()({
                       tenantId,
                     )
                   : s.secrets.IRONCLAW_API_TOKEN;
-                return next({
-                  context: {
-                    ...context,
-                    baseUrl: s.secrets.IRONCLAW_BASE_URL,
-                    apiToken: sessionToken,
-                  },
-                });
+                return {
+                  ...context,
+                  baseUrl: s.secrets.IRONCLAW_BASE_URL,
+                  apiToken: sessionToken,
+                };
               }
               if (s.secrets?.IRONCLAW_BASE_URL) {
-                return next({ context });
+                return context;
               }
-              return next({ context });
+              return context;
             }
           }
 
@@ -251,9 +249,7 @@ export default createPlugin.withPlugins<PluginsClient>()({
               encryptionKey,
             );
             if (orgCreds) {
-              return next({
-                context: { ...context, baseUrl: orgCreds.baseUrl, apiToken: orgCreds.apiToken },
-              });
+              return { ...context, baseUrl: orgCreds.baseUrl, apiToken: orgCreds.apiToken };
             }
           }
 
@@ -267,13 +263,11 @@ export default createPlugin.withPlugins<PluginsClient>()({
               encryptionKey,
             );
             if (personalCreds) {
-              return next({
-                context: {
-                  ...context,
-                  baseUrl: personalCreds.baseUrl,
-                  apiToken: personalCreds.apiToken,
-                },
-              });
+              return {
+                ...context,
+                baseUrl: personalCreds.baseUrl,
+                apiToken: personalCreds.apiToken,
+              };
             }
           }
 
@@ -285,13 +279,7 @@ export default createPlugin.withPlugins<PluginsClient>()({
             encryptionKey,
           );
           if (platformCreds) {
-            return next({
-              context: {
-                ...context,
-                baseUrl: platformCreds.baseUrl,
-                apiToken: platformCreds.apiToken,
-              },
-            });
+            return { ...context, baseUrl: platformCreds.baseUrl, apiToken: platformCreds.apiToken };
           }
         } catch (e) {
           console.error("[auth] DB credential lookup error:", e);
@@ -308,14 +296,12 @@ export default createPlugin.withPlugins<PluginsClient>()({
               tenantId,
             )
           : s.secrets.IRONCLAW_API_TOKEN;
-        return next({
-          context: { ...context, baseUrl: s.secrets.IRONCLAW_BASE_URL, apiToken: sessionToken },
-        });
+        return { ...context, baseUrl: s.secrets.IRONCLAW_BASE_URL, apiToken: sessionToken };
       }
 
       // Priority 5: host secrets with base URL only (plugin resolves token itself)
       if (s.secrets?.IRONCLAW_BASE_URL) {
-        return next({ context });
+        return context;
       }
 
       // No credentials resolved from any source
@@ -327,8 +313,28 @@ export default createPlugin.withPlugins<PluginsClient>()({
         });
       }
 
-      return next({ context });
+      return context;
+    };
+
+    const resolveCredentials = builder.middleware(async ({ context, next }) => {
+      return next({ context: await resolveIronclawContext(context) });
     });
+
+    const resolveConversationContext = async (pluginId: string | undefined, context: any) => {
+      if (!pluginId || pluginId === "ironclaw") {
+        return resolveIronclawContext(context);
+      }
+      return context;
+    };
+
+    const resolveConversationPlugin = (pluginId: string | undefined, context: any): Ic => {
+      const id = pluginId ?? "ironclaw";
+      const factory = s.pluginClients[id];
+      if (!factory) {
+        throw new ORPCError("BAD_REQUEST", { message: `Unknown conversation plugin: ${id}` });
+      }
+      return factory(context);
+    };
 
     const ic = {
       credentials: resolveCredentials,
@@ -874,98 +880,147 @@ export default createPlugin.withPlugins<PluginsClient>()({
               .handler(h1(services, (ic) => ic.operator.logs.list)),
           },
         },
+
+        bridge: {
+          threadChat: builder.ironclaw.bridge.threadChat
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(hStream(services, (ic) => ic.bridge.threadChat)),
+
+          normalizedThreads: builder.ironclaw.bridge.normalizedThreads
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.bridge.normalizedThreads)),
+
+          normalizedTimeline: builder.ironclaw.bridge.normalizedTimeline
+            .use(requireAuth)
+            .use(ic.credentials)
+            .handler(h1(services, (ic) => ic.bridge.normalizedTimeline)),
+        },
       },
 
       conversation: {
         listThreads: builder.conversation.listThreads
           .use(requireAuth)
-          .use(ic.credentials)
-          .handler(async ({ context }: any) => {
-            const ic = s.ironclaw(context);
-            const raw = await ic.threads.list({ limit: 50 });
-            return { data: (raw.data ?? []).map(normalizeThread) };
+          .handler(async ({ input, context }: any) => {
+            const resolvedContext = await resolveConversationContext(input?.pluginId, context);
+            const client = resolveConversationPlugin(input?.pluginId, resolvedContext);
+            return await client.bridge.normalizedThreads({ limit: 50 });
+          }),
+
+        createThread: builder.conversation.createThread
+          .use(requireAuth)
+          .handler(async ({ input, context }: any) => {
+            const resolvedContext = await resolveConversationContext(input.pluginId, context);
+            const client = resolveConversationPlugin(input.pluginId, resolvedContext);
+            return await client.threads.create({ clientActionId: input.clientActionId });
+          }),
+
+        deleteThread: builder.conversation.deleteThread
+          .use(requireAuth)
+          .handler(async ({ input, context }: any) => {
+            const resolvedContext = await resolveConversationContext(input.pluginId, context);
+            const client = resolveConversationPlugin(input.pluginId, resolvedContext);
+            await client.threads.delete({ id: input.threadId });
+            return { success: true };
           }),
 
         getMessages: builder.conversation.getMessages
           .use(requireAuth)
-          .use(ic.credentials)
           .handler(async ({ input, context }: any) => {
-            const ic = s.ironclaw(context);
-            const raw = await ic.threads.getTimeline({
+            const resolvedContext = await resolveConversationContext(input.pluginId, context);
+            const client = resolveConversationPlugin(input.pluginId, resolvedContext);
+            return await client.bridge.normalizedTimeline({
               id: input.threadId,
               limit: input.limit ?? 100,
               cursor: input.cursor,
             });
-            return normalizeTimelinePage(raw, input.threadId);
           }),
 
         sendMessage: builder.conversation.sendMessage
           .use(requireAuth)
-          .use(ic.credentials)
           .handler(async ({ input, context }: any) => {
-            const ic = s.ironclaw(context);
-            const raw = await ic.threads.sendMessage({
+            const resolvedContext = await resolveConversationContext(input.pluginId, context);
+            const client = resolveConversationPlugin(input.pluginId, resolvedContext);
+            const raw = await client.threads.sendMessage({
               id: input.threadId,
               content: input.content,
               clientActionId: input.clientActionId,
               attachments: input.attachments,
             });
+            const rawRunId = "runId" in raw ? raw.runId : undefined;
+            const rawActiveRunId = "activeRunId" in raw ? raw.activeRunId : undefined;
+            const rawStatus = "status" in raw ? raw.status : undefined;
+            const rawEventCursor = "eventCursor" in raw ? raw.eventCursor : undefined;
             return {
               threadId: input.threadId,
-              runId: raw.runId ?? raw.activeRunId ?? undefined,
+              runId: rawRunId ?? rawActiveRunId ?? undefined,
               outcome: raw.outcome,
-              status: raw.status,
-              activeRunId: raw.activeRunId,
+              status: rawStatus ?? undefined,
+              activeRunId: rawActiveRunId ?? undefined,
               acceptedMessageRef: raw.acceptedMessageRef ?? "",
               pendingMessageId: `pending-${crypto.randomUUID()}`,
               submittedAt: new Date().toISOString(),
-              eventCursor: raw.eventCursor ?? undefined,
+              eventCursor: rawEventCursor ?? undefined,
             };
           }),
 
-        live: builder.conversation.live.use(requireAuth).handler(async () => {
-          throw new ORPCError("BAD_REQUEST", {
-            message: "The live endpoint is deprecated. Use conversation.threadChat instead.",
-          });
-        }),
-
         threadChat: builder.conversation.threadChat
           .use(requireAuth)
-          .use(ic.credentials)
-          .handler(createThreadChatBridge(s)),
+          .handler(async function* ({ input, signal, context }: any) {
+            const { pluginId, ...bridgeInput } = input;
+            const resolvedContext = await resolveConversationContext(pluginId, context);
+            const client = resolveConversationPlugin(pluginId, resolvedContext);
+            const gen = await client.bridge.threadChat(bridgeInput);
+            for await (const event of gen) {
+              if (signal?.aborted) break;
+              yield event;
+            }
+          }),
 
         threadApprove: builder.conversation.threadApprove
           .use(requireAuth)
-          .use(ic.credentials)
           .handler(async ({ input, context }: any) => {
-            const ic = s.ironclaw(context);
-            const args: any = {
+            const resolvedContext = await resolveConversationContext(input.pluginId, context);
+            const client = resolveConversationPlugin(input.pluginId, resolvedContext);
+            await client.threads.resolveGate({
               id: input.threadId,
               runId: input.runId,
               gateRef: input.gateRef,
               resolution: input.resolution,
-            };
-            if (input.always !== undefined) args.always = input.always;
-            if (input.credentialRef) args.credentialRef = input.credentialRef;
-            await ic.threads.resolveGate(args);
+              always: input.always,
+              credentialRef: input.credentialRef,
+            });
             return { success: true };
           }),
 
         cancelRun: builder.conversation.cancelRun
           .use(requireAuth)
-          .use(ic.credentials)
           .handler(async ({ input, context }: any) => {
-            const ic = s.ironclaw(context);
-            await ic.threads.cancelRun({ id: input.threadId, runId: input.runId });
+            const resolvedContext = await resolveConversationContext(input.pluginId, context);
+            const client = resolveConversationPlugin(input.pluginId, resolvedContext);
+            await client.threads.cancelRun({ id: input.threadId, runId: input.runId });
             return { success: true };
           }),
 
         submitManualToken: builder.conversation.submitManualToken
           .use(requireAuth)
-          .use(ic.credentials)
           .handler(async ({ input, context }: any) => {
-            const ic = s.ironclaw(context);
-            return await ic.auth.submitManualToken(input);
+            const resolvedContext = await resolveConversationContext(input.pluginId, context);
+            const client = resolveConversationPlugin(input.pluginId, resolvedContext);
+            return await client.auth.submitManualToken(input);
+          }),
+
+        getAttachment: builder.conversation.getAttachment
+          .use(requireAuth)
+          .handler(async ({ input, context }: any) => {
+            const resolvedContext = await resolveConversationContext(input.pluginId, context);
+            const client = resolveConversationPlugin(input.pluginId, resolvedContext);
+            return await client.threads.getAttachment({
+              id: input.threadId,
+              messageId: input.messageId,
+              attachmentId: input.attachmentId,
+            });
           }),
       },
     };

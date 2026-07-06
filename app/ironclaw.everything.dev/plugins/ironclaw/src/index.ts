@@ -5,6 +5,8 @@ import { z } from "every-plugin/zod";
 
 import { contract } from "./contract";
 import { IronclawService, IronclawUpstreamError } from "./service";
+import { createThreadChatBridge, createIronclawBridgeServiceFromService } from "./chat-bridge";
+import { normalizeThread, normalizeTimelinePage } from "./normalize";
 
 const PLACEHOLDER_RE = /^\{\{[A-Z0-9_]+\}\}$/;
 
@@ -503,6 +505,43 @@ export default createPlugin({
               ri((svc, input) => Effect.runPromise(svc.listOperatorLogs(input))),
             ),
         },
+      },
+
+      bridge: {
+        threadChat: builder.bridge.threadChat
+          .use(requireAuth)
+          .handler(async function* ({ input, signal, context: ctx }: any) {
+            try {
+              const svc = resolveService(ctx);
+              const bridgeSvc = createIronclawBridgeServiceFromService(svc);
+              const bridge = createThreadChatBridge(bridgeSvc);
+              for await (const chunk of bridge({ input, signal })) {
+                yield chunk;
+              }
+            } catch (error) {
+              toOrpcError(error);
+            }
+          }),
+
+        normalizedThreads: builder.bridge.normalizedThreads
+          .use(requireAuth)
+          .handler(
+            ri(async (svc, input, _ctx) => {
+              const raw = await Effect.runPromise(svc.listThreads(input?.limit ?? 50, undefined));
+              return { data: (raw.data ?? []).map(normalizeThread) };
+            }),
+          ),
+
+        normalizedTimeline: builder.bridge.normalizedTimeline
+          .use(requireAuth)
+          .handler(
+            ri(async (svc, input, _ctx) => {
+              const raw = await Effect.runPromise(
+                svc.getTimeline(input.id, input.limit ?? 100, input.cursor),
+              );
+              return normalizeTimelinePage(raw, input.id);
+            }),
+          ),
       },
     };
   },

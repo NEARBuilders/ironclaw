@@ -1,8 +1,21 @@
-import type { z } from "zod";
-import type { AcceptedResponse, ChatEvent } from "../../../plugins/ironclaw/src/contract";
-import { ConversationLiveChunkSchema } from "../contract";
+import { Effect } from "every-plugin/effect";
+import type { z } from "every-plugin/zod";
+import type { ChatEvent, AcceptedResponse } from "./contract";
+import type { ConversationLiveChunkSchema } from "./contract";
+import { IronclawService } from "./service";
 
 type LiveChunk = z.infer<typeof ConversationLiveChunkSchema>;
+
+export interface BridgeService {
+  sendMessage(input: {
+    id: string;
+    content: string;
+    clientActionId?: string;
+    attachments?: Array<{ mimeType: string; filename?: string; dataBase64: string }>;
+  }): Promise<AcceptedResponse>;
+  streamEvents(input: { id: string; afterCursor?: string; signal?: AbortSignal }): AsyncGenerator<ChatEvent>;
+  getTimeline(input: { id: string; limit?: number }): Promise<{ data: any[] }>;
+}
 
 function normalizeMessage(value: unknown): string {
   if (value instanceof Error) return value.message;
@@ -39,13 +52,12 @@ function resolveToolCallId(
   preview: ChatEvent["preview"],
   activity: ChatEvent["activity"],
 ): string | undefined {
-  const activityRecord = activity as unknown as Record<string, string | undefined>;
   return (
-    (preview?.invocationId ||
-      preview?.timelineMessageId ||
-      activity?.invocationId ||
-      activityRecord.timelineMessageId ||
-      activityRecord.invocation_id) ??
+    preview?.invocationId ??
+    preview?.timelineMessageId ??
+    activity?.invocationId ??
+    (activity as Record<string, string | undefined> | undefined)?.timelineMessageId ??
+    (activity as Record<string, string | undefined> | undefined)?.invocation_id ??
     undefined
   );
 }
@@ -126,14 +138,6 @@ function findAssistantTextForRun(entries: any[], runId: string): string | undefi
   return undefined;
 }
 
-function createChunk(chunk: LiveChunk): LiveChunk {
-  const result = ConversationLiveChunkSchema.safeParse(chunk);
-  if (!result.success) {
-    console.error("[live] schema mismatch:", result.error.format(), JSON.stringify(chunk));
-  }
-  return chunk;
-}
-
 function extractUserInput(
   lastUserMsg: Record<string, unknown> | undefined,
   forwardedAttachments: unknown[] | undefined,
@@ -141,10 +145,9 @@ function extractUserInput(
   if (!lastUserMsg) return { text: "", attachments: undefined };
 
   const attachments: unknown[] = [];
-  const parts = (lastUserMsg.parts ?? []) as any[];
+  const parts = (lastUserMsg.parts ?? []) as Array<Record<string, unknown>>;
   const content = lastUserMsg.content;
 
-  // Extract from UIMessage parts[] (post-multimodal-format)
   for (const part of parts) {
     if (part.type === "image" || part.type === "file" || part.type === "document") {
       const src = part.source;
@@ -158,7 +161,6 @@ function extractUserInput(
     }
   }
 
-  // Extract from ContentPart[] content (wire-format -- useChat MultimodalContent)
   if (attachments.length === 0 && Array.isArray(content)) {
     for (const part of content) {
       if (part.type === "image" || part.type === "file" || part.type === "document") {
@@ -174,70 +176,77 @@ function extractUserInput(
     }
   }
 
-  // Fallback: forwardedProps.attachments (backward compat)
   if (attachments.length === 0 && forwardedAttachments?.length) {
     attachments.push(...forwardedAttachments);
   }
 
-  // Extract text
   let text = "";
   if (typeof content === "string") {
     text = content;
   } else if (Array.isArray(content)) {
-    text = content
-      .filter((p: any) => p.type === "text")
-      .map((p: any) => p.content ?? p.text ?? "")
+    text = (content as Array<Record<string, unknown>>)
+      .filter((p) => p.type === "text")
+      .map((p) => String(p.content ?? p.text ?? ""))
       .join("");
   }
   if (!text) {
     text = parts
-      .filter((p: any) => p.type === "text")
-      .map((p: any) => p.content ?? "")
+      .filter((p) => p.type === "text")
+      .map((p) => String(p.content ?? ""))
       .join("");
   }
 
   return { text, attachments: attachments.length > 0 ? attachments : undefined };
 }
 
-export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }) {
-  return async function* ({ input, signal, context }: any) {
-    const ic = services.ironclaw(context);
-    const threadId = input.threadId as string;
-    const messages = (input.messages ?? []) as any[];
-    const clientActionId =
-      (input.clientActionId as string | undefined) ?? `bridge-${crypto.randomUUID()}`;
-    const forwardedProps = input.forwardedProps as Record<string, unknown> | undefined;
+interface ThreadChatInput {
+  threadId: string;
+  messages?: Array<Record<string, unknown>>;
+  forwardedProps?: Record<string, unknown>;
+  clientActionId?: string;
+}
 
-    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
+export function createThreadChatBridge(svc: BridgeService) {
+  return async function* (
+    { input, signal }: { input: ThreadChatInput; signal?: AbortSignal },
+  ) {
+    const threadId = input.threadId;
+    const messages = input.messages ?? [];
+    const clientActionId =
+      input.clientActionId ?? `bridge-${crypto.randomUUID()}`;
+    const forwardedProps = input.forwardedProps;
+
+    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
     const { text, attachments } = extractUserInput(
       lastUserMsg,
       forwardedProps?.attachments as unknown[] | undefined,
     );
 
-    const ack: AcceptedResponse = await ic.threads.sendMessage({
+    const ack: AcceptedResponse = await svc.sendMessage({
       id: threadId,
       content: text,
       clientActionId,
-      attachments,
+      attachments: attachments as
+        | Array<{ mimeType: string; filename?: string; dataBase64: string }>
+        | undefined,
     });
 
     if (ack.outcome === "rejected_busy") {
-      yield createChunk({
-        type: "RUN_ERROR",
+      yield {
+        type: "RUN_ERROR" as const,
         threadId,
         message: ack.notice ?? "Message rejected, thread is busy",
         details: `Rejected outcome: ${ack.outcome}, activeRunId: ${ack.activeRunId ?? "unknown"}`,
-      });
+      } as LiveChunk;
       return;
     }
 
     const ackRunId = ack.runId;
     const afterCursor = forwardedProps?.afterCursor as string | undefined;
-    console.log("[bridge]", threadId.slice(0, 8),
-      afterCursor ? `resume from cursor ${afterCursor.slice(0, 30)}` : "NO cursor — starting from origin");
-    const upstream = await ic.threads.streamEvents({
+    const upstream = svc.streamEvents({
       id: threadId,
       afterCursor,
+      signal,
     });
     const pendingPreviews = new Map<string, ChatEvent["preview"]>();
     const activeToolCalls = new Set<string>();
@@ -251,15 +260,20 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
       if (runStarted) return [];
       runStarted = true;
       const rid = runId ?? ackRunId ?? crypto.randomUUID();
-      messageOpened = true;
       return [
-        createChunk({ type: "RUN_STARTED", threadId, runId: rid }),
-        createChunk({ type: "TEXT_MESSAGE_START", threadId, runId: rid, messageId: assistantMessageId(rid), role: "assistant" }),
+        { type: "RUN_STARTED", threadId, runId: rid } as LiveChunk,
+        {
+          type: "TEXT_MESSAGE_START",
+          threadId,
+          runId: rid,
+          messageId: assistantMessageId(rid),
+          role: "assistant",
+        } as LiveChunk,
       ];
     };
 
     const emitCustom = (name: string, value: unknown, runId?: string): LiveChunk =>
-      createChunk({ type: "CUSTOM", threadId, runId, name, value });
+      ({ type: "CUSTOM", threadId, runId, name, value }) as LiveChunk;
 
     const assistantMessageId = (runId: string): string => `assistant:${runId}`;
 
@@ -267,16 +281,16 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
       if (!messageOpened) return undefined;
       messageOpened = false;
       const rid = runId ?? ackRunId ?? crypto.randomUUID();
-      return createChunk({
+      return {
         type: "TEXT_MESSAGE_END",
         threadId,
         runId: rid,
         messageId: assistantMessageId(rid),
-      });
+      } as LiveChunk;
     };
 
     const emitToolStart = (toolCallId: string, toolName: string, runId?: string): LiveChunk =>
-      createChunk({
+      ({
         type: "TOOL_CALL_START",
         threadId,
         runId,
@@ -285,27 +299,27 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
         toolCallName: toolName,
         toolName,
         index: 0,
-      });
+      }) as LiveChunk;
 
     const emitToolArgs = (toolCallId: string, input: string, runId?: string): LiveChunk =>
-      createChunk({
+      ({
         type: "TOOL_CALL_ARGS",
         threadId,
         runId,
         toolCallId,
         delta: input,
         args: input,
-      });
+      }) as LiveChunk;
 
     const emitToolEnd = (
       toolCallId: string,
       toolName: string,
-      state: "complete" | "error",
+      state: "output-available" | "output-error",
       result: string,
       input?: unknown,
       runId?: string,
     ): LiveChunk =>
-      createChunk({
+      ({
         type: "TOOL_CALL_END",
         threadId,
         runId,
@@ -315,12 +329,12 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
         state,
         input,
         result,
-      });
+      }) as LiveChunk;
 
     const closeActiveToolCalls = async function* (runId?: string): AsyncGenerator<LiveChunk> {
       if (activeToolCalls.size === 0) return;
       try {
-        const raw = await ic.threads.getTimeline({ id: threadId, limit: 30 });
+        const raw = await svc.getTimeline({ id: threadId, limit: 30 });
         const entries: any[] = raw.data ?? [];
         for (const invocationId of activeToolCalls) {
           const preview = pendingPreviews.get(invocationId);
@@ -351,7 +365,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
             yield emitToolEnd(
               invocationId,
               title,
-              "complete",
+              "output-available",
               envelope,
               c.input_summary ?? preview?.inputSummary ?? "",
               runId,
@@ -368,13 +382,13 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
             yield emitToolEnd(
               invocationId,
               title,
-              "complete",
+              "output-available",
               envelope,
               preview.inputSummary ?? "",
               runId,
             );
           } else {
-            yield emitToolEnd(invocationId, "tool", "complete", "", "", runId);
+            yield emitToolEnd(invocationId, "tool", "output-available", "", "", runId);
           }
         }
       } catch {
@@ -392,13 +406,13 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
             yield emitToolEnd(
               invocationId,
               title,
-              "complete",
+              "output-available",
               envelope,
               preview.inputSummary ?? "",
               runId,
             );
           } else {
-            yield emitToolEnd(invocationId, title, "complete", "", "", runId);
+            yield emitToolEnd(invocationId, title, "output-available", "", "", runId);
           }
         }
       }
@@ -415,19 +429,15 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
         const type = raw.type;
         const eventRunId = extractEventRunId(raw) ?? ackRunId ?? crypto.randomUUID();
 
-        if (type?.startsWith("projection") || type === "final_reply") {
-          console.log("[bridge]", type, "cursor:", raw.cursor ? raw.cursor.slice(0, 30) : "MISSING");
-        }
-
         if (type === "accepted" || type === "running") {
           yield* emitRunStarted(eventRunId);
-          yield emitCustom(`ironclaw.${type}`, { runId: eventRunId, ...raw }, eventRunId);
+          yield emitCustom(type, { runId: eventRunId, ...raw }, eventRunId);
           continue;
         }
 
         if (type === "capability_progress") {
           yield* emitRunStarted(eventRunId);
-          yield emitCustom("ironclaw.capability-progress", raw.progress ?? raw, eventRunId);
+          yield emitCustom("capability-progress", raw.progress ?? raw, eventRunId);
           continue;
         }
 
@@ -450,7 +460,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
               );
             }
             yield emitCustom(
-              "ironclaw.capability-display-preview",
+              "capability-display-preview",
               { ...preview, toolCallId: invocationId, toolName: title },
               eventRunId,
             );
@@ -460,13 +470,13 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
 
         if (type === "capability_activity") {
           const activity = raw.activity;
-          const activityRecord = activity as unknown as Record<string, unknown>;
+          const activityRec = activity as Record<string, unknown> | undefined;
           const invocationId = resolveToolCallId(undefined, activity);
-          const capabilityId = (activityRecord.capabilityId ?? activityRecord.capability_id) as
+          const capabilityId = (activityRec?.capabilityId ?? activityRec?.capability_id) as
             | string
             | undefined;
           const status = activity?.status;
-          const errorKind = (activityRecord.errorKind ?? activityRecord.error_kind) as
+          const errorKind = (activityRec?.errorKind ?? activityRec?.error_kind) as
             | string
             | undefined;
 
@@ -487,7 +497,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
               );
             }
             yield emitCustom(
-              "ironclaw.capability-activity",
+              "capability-activity",
               { ...activity, toolCallId: invocationId, toolName: title },
               eventRunId,
             );
@@ -515,7 +525,8 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
               inputSummary: preview?.inputSummary ?? null,
               title,
             });
-            const toolState = status === "failed" || status === "killed" ? "error" : "complete";
+            const toolState =
+              status === "failed" || status === "killed" ? "output-error" : "output-available";
             yield emitToolEnd(
               invocationId,
               title,
@@ -525,7 +536,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
               eventRunId,
             );
             yield emitCustom(
-              "ironclaw.capability-activity",
+              "capability-activity",
               { ...activity, toolCallId: invocationId, toolName: title },
               eventRunId,
             );
@@ -549,7 +560,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
             JSON.stringify({ input: approvalContext }),
             eventRunId,
           );
-          yield emitToolEnd(gateToolCallId, toolName, "complete", "", approvalContext, eventRunId);
+          yield emitToolEnd(gateToolCallId, toolName, "output-available", "", approvalContext, eventRunId);
           yield emitCustom(
             "approval-requested",
             {
@@ -570,18 +581,18 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
             },
             eventRunId,
           );
-          yield emitCustom(
-            "ironclaw.gate",
-            { ...prompt, toolCallId: gateToolCallId, toolName, input: approvalContext },
-            eventRunId,
-          );
+            yield emitCustom(
+              "gate",
+              { ...prompt, toolCallId: gateToolCallId, toolName, input: approvalContext },
+              eventRunId,
+            );
           continue;
         }
 
         if (type === "auth_required") {
           const authPrompt = raw.authPrompt;
           yield* emitRunStarted(eventRunId);
-          yield emitCustom("ironclaw.auth-required", authPrompt, eventRunId);
+          yield emitCustom("auth-required", authPrompt, eventRunId);
           continue;
         }
 
@@ -589,17 +600,17 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
           const reply = raw.reply;
           const text = reply?.text ?? "";
           yield* emitRunStarted(eventRunId);
-          yield emitCustom("ironclaw.final-reply", reply, eventRunId);
+          yield emitCustom("final-reply", reply, eventRunId);
           if (text) {
             terminalTextEmitted = true;
             const msgId = eventRunId ? assistantMessageId(eventRunId) : `reply-${eventRunId}`;
-            yield createChunk({
+            yield {
               type: "TEXT_MESSAGE_CONTENT",
               threadId,
               runId: eventRunId,
               messageId: msgId,
               delta: text,
-            });
+            } as LiveChunk;
           }
           {
             const endChunk = closeMessage(eventRunId);
@@ -608,12 +619,12 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
           for await (const chunk of closeActiveToolCalls(eventRunId)) {
             yield chunk;
           }
-          yield createChunk({
+          yield {
             type: "RUN_FINISHED",
             threadId,
             runId: eventRunId,
             finishReason: "stop",
-          });
+          } as LiveChunk;
           return;
         }
 
@@ -624,7 +635,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
           const details = normalizeDetails(runState);
           yield* emitRunStarted(eventRunId);
           yield emitCustom(
-            "ironclaw.failed",
+            "failed",
             { runId: eventRunId, message, details, runState },
             eventRunId,
           );
@@ -632,14 +643,14 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
             const endChunk = closeMessage(eventRunId);
             if (endChunk) yield endChunk;
           }
-          yield createChunk({ type: "RUN_ERROR", threadId, runId: eventRunId, message, details });
+          yield { type: "RUN_ERROR", threadId, runId: eventRunId, message, details } as LiveChunk;
           return;
         }
 
         if (type === "cancelled") {
           const response = raw.response;
           yield* emitRunStarted(eventRunId);
-          yield emitCustom("ironclaw.cancelled", { runId: eventRunId, ...response }, eventRunId);
+          yield emitCustom("cancelled", { runId: eventRunId, ...response }, eventRunId);
           {
             const endChunk = closeMessage(eventRunId);
             if (endChunk) yield endChunk;
@@ -647,12 +658,12 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
           for await (const chunk of closeActiveToolCalls(eventRunId)) {
             yield chunk;
           }
-          yield createChunk({
+          yield {
             type: "RUN_FINISHED",
             threadId,
             runId: eventRunId,
             finishReason: null,
-          });
+          } as LiveChunk;
           return;
         }
 
@@ -720,21 +731,21 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
 
             for (const th of thinkingItems) {
               const stepRunId = (th.runId ?? th.run_id ?? projRunId) as string;
-              yield createChunk({
+              yield {
                 type: "STEP_STARTED",
                 stepName: "thinking",
                 stepType: "thinking",
                 threadId,
                 runId: stepRunId,
-              });
-              yield createChunk({
+              } as LiveChunk;
+              yield {
                 type: "STEP_FINISHED",
                 stepName: "thinking",
                 stepType: "thinking",
                 content: th.body as string,
                 threadId,
                 runId: stepRunId,
-              });
+              } as LiveChunk;
             }
 
             for (const ca of capActivities) {
@@ -749,11 +760,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
                     yield emitToolStart(invocationId, title, projRunId);
                     yield emitToolArgs(invocationId, JSON.stringify({ input: "" }), projRunId);
                   }
-                  yield emitCustom(
-                    "ironclaw.capability-activity",
-                    { toolCallId: invocationId, toolName: title, ...ca },
-                    projRunId,
-                  );
+                yield emitCustom("capability-activity", { toolCallId: invocationId, toolName: title, ...ca }, projRunId);
                 } else {
                   if (!activeToolCalls.has(invocationId)) {
                     activeToolCalls.add(invocationId);
@@ -769,13 +776,11 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
                     title,
                   });
                   const toolState =
-                    capStatus === "failed" || capStatus === "killed" ? "error" : "complete";
+                    capStatus === "failed" || capStatus === "killed"
+                      ? "output-error"
+                      : "output-available";
                   yield emitToolEnd(invocationId, title, toolState, envelope, "", projRunId);
-                  yield emitCustom(
-                    "ironclaw.capability-activity",
-                    { toolCallId: invocationId, toolName: title, ...ca },
-                    projRunId,
-                  );
+                  yield emitCustom("capability-activity", { toolCallId: invocationId, toolName: title, ...ca }, projRunId);
                   activeToolCalls.delete(invocationId);
                 }
               }
@@ -788,7 +793,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
                 const gateToolCallId = `gate-${gateRef}`;
                 yield emitToolStart(gateToolCallId, "approval", projRunId);
                 yield emitToolArgs(gateToolCallId, JSON.stringify({ input: headline }), projRunId);
-                yield emitToolEnd(gateToolCallId, "approval", "complete", "", headline, projRunId);
+                yield emitToolEnd(gateToolCallId, "approval", "output-available", "", headline, projRunId);
                 yield emitCustom(
                   "approval-requested",
                   {
@@ -805,11 +810,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
                   },
                   projRunId,
                 );
-                yield emitCustom(
-                  "ironclaw.gate",
-                  { gateRef, headline, toolCallId: gateToolCallId, toolName: "approval" },
-                  projRunId,
-                );
+                  yield emitCustom("gate", { gateRef, headline, toolCallId: gateToolCallId, toolName: "approval" }, projRunId);
               }
             }
 
@@ -819,26 +820,19 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
               seenTextIds.add(dedupeKey);
               terminalTextEmitted = true;
               const msgId = assistantMessageId(tx.runId);
-              yield createChunk({
-                type: "TEXT_MESSAGE_START",
-                threadId,
-                runId: tx.runId,
-                messageId: msgId,
-                role: "assistant",
-              });
-              yield createChunk({
+              yield {
                 type: "TEXT_MESSAGE_CONTENT",
                 threadId,
                 runId: tx.runId,
                 messageId: msgId,
                 delta: tx.body,
-              });
-              yield createChunk({
+              } as LiveChunk;
+              yield {
                 type: "TEXT_MESSAGE_END",
                 threadId,
                 runId: tx.runId,
                 messageId: msgId,
-              });
+              } as LiveChunk;
             }
 
             for (const sa of skillActivationItems) {
@@ -847,7 +841,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
               const id = (sa.id as string) ?? crypto.randomUUID();
               if (skillNames && skillNames.length > 0) {
                 yield emitCustom(
-                  "ironclaw.skill-activation",
+                  "skill-activation",
                   { id, skillNames, feedback, runId: projRunId },
                   projRunId,
                 );
@@ -871,7 +865,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
                     ((rs.raw.failureSummary ?? rs.raw.failure_summary) as string) ?? `Run ${st}`;
                   const details = normalizeDetails(rs.raw);
                   yield emitCustom(
-                    "ironclaw.failed",
+                    "failed",
                     { runId, message: msg, details, runState: rs.raw },
                     runId,
                   );
@@ -879,11 +873,11 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
                     const endChunk = closeMessage(runId);
                     if (endChunk) yield endChunk;
                   }
-                  yield createChunk({ type: "RUN_ERROR", threadId, runId, message: msg, details });
+                  yield { type: "RUN_ERROR", threadId, runId, message: msg, details } as LiveChunk;
                   return;
                 }
                 if (st === "cancelled") {
-                  yield emitCustom("ironclaw.cancelled", { runId }, runId);
+                  yield emitCustom("cancelled", { runId }, runId);
                   {
                     const endChunk = closeMessage(runId);
                     if (endChunk) yield endChunk;
@@ -891,31 +885,24 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
                   for await (const chunk of closeActiveToolCalls(runId)) {
                     yield chunk;
                   }
-                  yield createChunk({ type: "RUN_FINISHED", threadId, runId, finishReason: null });
+                  yield { type: "RUN_FINISHED", threadId, runId, finishReason: null } as LiveChunk;
                   return;
                 }
                 if (!terminalTextEmitted) {
                   try {
-                    const raw = await ic.threads.getTimeline({ id: threadId, limit: 10 });
+                    const raw = await svc.getTimeline({ id: threadId, limit: 10 });
                     const entries: any[] = raw.data ?? [];
-                    const assistantText = findAssistantTextForRun(entries, runId);
-                    if (assistantText) {
-                      terminalTextEmitted = true;
-                      const msgId = assistantMessageId(runId);
-                      yield createChunk({
-                        type: "TEXT_MESSAGE_START",
-                        threadId,
-                        runId,
-                        messageId: msgId,
-                        role: "assistant",
-                      });
-                      yield createChunk({
-                        type: "TEXT_MESSAGE_CONTENT",
-                        threadId,
+                const assistantText = findAssistantTextForRun(entries, runId);
+                if (assistantText) {
+                  terminalTextEmitted = true;
+                  const msgId = assistantMessageId(runId);
+                  yield {
+                    type: "TEXT_MESSAGE_CONTENT",
+                    threadId,
                         runId,
                         messageId: msgId,
                         delta: assistantText,
-                      });
+                      } as LiveChunk;
                     }
                     {
                       const endChunk = closeMessage(runId);
@@ -925,7 +912,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
                     // reconcile failed, proceed
                   }
                 }
-                yield emitCustom("ironclaw.finished", { runId, status: st }, runId);
+                yield emitCustom("finished", { runId, status: st }, runId);
                 {
                   const endChunk = closeMessage(runId);
                   if (endChunk) yield endChunk;
@@ -933,7 +920,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
                 for await (const chunk of closeActiveToolCalls(runId)) {
                   yield chunk;
                 }
-                yield createChunk({ type: "RUN_FINISHED", threadId, runId, finishReason: "stop" });
+                yield { type: "RUN_FINISHED", threadId, runId, finishReason: "stop" } as LiveChunk;
                 return;
               }
             }
@@ -947,27 +934,20 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
       if (runStarted) {
         if (!terminalTextEmitted) {
           try {
-            const raw = await ic.threads.getTimeline({ id: threadId, limit: 10 });
+            const raw = await svc.getTimeline({ id: threadId, limit: 10 });
             const entries: any[] = raw.data ?? [];
             const targetRunId = ackRunId ?? crypto.randomUUID();
             const assistantText = findAssistantTextForRun(entries, targetRunId);
             if (assistantText) {
               terminalTextEmitted = true;
               const msgId = assistantMessageId(targetRunId);
-              yield createChunk({
-                type: "TEXT_MESSAGE_START",
-                threadId,
-                runId: targetRunId,
-                messageId: msgId,
-                role: "assistant",
-              });
-              yield createChunk({
+              yield {
                 type: "TEXT_MESSAGE_CONTENT",
                 threadId,
                 runId: targetRunId,
                 messageId: msgId,
                 delta: assistantText,
-              });
+              } as LiveChunk;
             }
           } catch {
             // reconcile failed, proceed
@@ -980,12 +960,12 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
         for await (const chunk of closeActiveToolCalls(ackRunId)) {
           yield chunk;
         }
-        yield createChunk({
+        yield {
           type: "RUN_FINISHED",
           threadId,
           runId: ackRunId ?? crypto.randomUUID(),
           finishReason: "stop",
-        });
+        } as LiveChunk;
       }
     } catch (error) {
       if (signal?.aborted) return;
@@ -993,13 +973,13 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
         const endChunk = closeMessage(ackRunId);
         if (endChunk) yield endChunk;
       }
-      yield createChunk({
+      yield {
         type: "RUN_ERROR",
         threadId,
         runId: ackRunId ?? crypto.randomUUID(),
         message: normalizeMessage(error),
         details: normalizeDetails(error),
-      });
+      } as LiveChunk;
     } finally {
       if (typeof upstream.return === "function") {
         try {
@@ -1009,11 +989,29 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
         }
       }
       if (latestCursor) {
-        console.log("[bridge] yielding cursor:", latestCursor.slice(0, 30));
-        yield emitCustom("ironclaw.cursor", { cursor: latestCursor });
-      } else {
-        console.log("[bridge] WARNING: no cursor to yield");
+        yield emitCustom("cursor", { cursor: latestCursor });
       }
     }
+  };
+}
+
+export function createIronclawBridgeService(baseUrl: string, apiToken: string): BridgeService {
+  const svc = new IronclawService(baseUrl, apiToken);
+  return {
+    sendMessage: ({ id, content, clientActionId, attachments }) =>
+      Effect.runPromise(svc.sendMessage(id, content, clientActionId, attachments)),
+    streamEvents: ({ id, afterCursor, signal }) => svc.streamEvents(id, afterCursor, signal),
+    getTimeline: ({ id, limit }) =>
+      Effect.runPromise(svc.getTimeline(id, limit)).then((r) => ({ data: r.data })),
+  };
+}
+
+export function createIronclawBridgeServiceFromService(svc: IronclawService): BridgeService {
+  return {
+    sendMessage: ({ id, content, clientActionId, attachments }) =>
+      Effect.runPromise(svc.sendMessage(id, content, clientActionId, attachments)),
+    streamEvents: ({ id, afterCursor, signal }) => svc.streamEvents(id, afterCursor, signal),
+    getTimeline: ({ id, limit }) =>
+      Effect.runPromise(svc.getTimeline(id, limit)).then((r) => ({ data: r.data })),
   };
 }

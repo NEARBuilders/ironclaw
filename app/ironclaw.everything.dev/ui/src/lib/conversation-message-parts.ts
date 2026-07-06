@@ -1,7 +1,7 @@
 import type { MessagePart, UIMessage } from "@tanstack/ai";
 import type { ConversationMessageType } from "../../../api/src/contract";
 
-export interface IronclawToolResultEnvelope {
+export interface ToolResultEnvelope {
   title: string;
   inputSummary: string | null;
   output: string;
@@ -27,22 +27,27 @@ function asOptionalText(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
 
-export function serializeIronclawToolResultEnvelope(envelope: IronclawToolResultEnvelope): string {
+function readTextField(obj: Record<string, unknown>, snake: string, camel: string): string | null {
+  const value = obj[snake] ?? obj[camel];
+  return asOptionalText(value);
+}
+
+export function serializeToolResultEnvelope(envelope: ToolResultEnvelope): string {
   return JSON.stringify(envelope);
 }
 
-export function parseIronclawToolResultEnvelope(
+export function parseToolResultEnvelope(
   content: unknown,
-): IronclawToolResultEnvelope | null {
+): ToolResultEnvelope | null {
   if (content == null) return null;
 
   if (isRecord(content)) {
     if (typeof content.output === "string" || typeof content.title === "string") {
       return {
         title: typeof content.title === "string" ? content.title : "unknown",
-        inputSummary: asOptionalText(content.input_summary),
-        output: asText(content.output ?? content.text ?? content.result ?? ""),
-        outputKind: asOptionalText(content.output_kind),
+        inputSummary: readTextField(content, "input_summary", "inputSummary"),
+        output: asText(content.output ?? content.text ?? content.result ?? content.outputPreview ?? ""),
+        outputKind: readTextField(content, "output_kind", "outputKind"),
         truncated: Boolean(content.truncated),
       };
     }
@@ -58,14 +63,15 @@ export function parseIronclawToolResultEnvelope(
 
     if (
       parsed.version === 1 &&
-      typeof parsed.capability_id === "string" &&
-      typeof parsed.invocation_id === "string"
+      typeof (parsed.capability_id ?? parsed.capabilityId) === "string" &&
+      typeof (parsed.invocation_id ?? parsed.invocationId) === "string"
     ) {
+      const capabilityId = String(parsed.capability_id ?? parsed.capabilityId);
       return {
-        title: typeof parsed.title === "string" ? parsed.title : parsed.capability_id,
-        inputSummary: asOptionalText(parsed.input_summary),
-        output: asText(parsed.output_preview ?? parsed.output_summary ?? ""),
-        outputKind: asOptionalText(parsed.output_kind),
+        title: typeof parsed.title === "string" ? parsed.title : capabilityId,
+        inputSummary: readTextField(parsed, "input_summary", "inputSummary"),
+        output: asText(parsed.output_preview ?? parsed.outputPreview ?? parsed.output_summary ?? parsed.outputSummary ?? ""),
+        outputKind: readTextField(parsed, "output_kind", "outputKind"),
         truncated: Boolean(parsed.truncated),
       };
     }
@@ -73,9 +79,9 @@ export function parseIronclawToolResultEnvelope(
     if (typeof parsed.output === "string" || typeof parsed.title === "string") {
       return {
         title: typeof parsed.title === "string" ? parsed.title : "unknown",
-        inputSummary: asOptionalText(parsed.input_summary),
-        output: asText(parsed.output ?? parsed.text ?? parsed.result ?? ""),
-        outputKind: asOptionalText(parsed.output_kind),
+        inputSummary: readTextField(parsed, "input_summary", "inputSummary"),
+        output: asText(parsed.output ?? parsed.text ?? parsed.result ?? parsed.outputPreview ?? ""),
+        outputKind: readTextField(parsed, "output_kind", "outputKind"),
         truncated: Boolean(parsed.truncated),
       };
     }
@@ -104,44 +110,44 @@ export function restMessageToParts(
 
     const isVersionedTool =
       parsed.version === 1 &&
-      typeof parsed.capability_id === "string" &&
-      typeof parsed.invocation_id === "string";
+      typeof (parsed.capability_id ?? parsed.capabilityId) === "string" &&
+      typeof (parsed.invocation_id ?? parsed.invocationId) === "string";
 
     const looksLikeEnvelope =
       isVersionedTool || typeof parsed.output === "string" || typeof parsed.title === "string";
 
     if (!looksLikeEnvelope) {
-      if (parsed.result_ref) {
+      if (parsed.result_ref || parsed.resultRef || parsed.tool_result_ref || parsed.toolResultRef) {
         return [];
       }
       return [{ type: "text" as const, content: trimmed }];
     }
 
     const toolCallId =
-      typeof parsed.invocation_id === "string"
-        ? parsed.invocation_id
+      typeof (parsed.invocation_id ?? parsed.invocationId) === "string"
+        ? String(parsed.invocation_id ?? parsed.invocationId)
         : (options.toolCallIdFallback ??
-          (typeof parsed.capability_id === "string"
-            ? parsed.capability_id
+          (typeof (parsed.capability_id ?? parsed.capabilityId) === "string"
+            ? String(parsed.capability_id ?? parsed.capabilityId)
             : typeof parsed.title === "string"
               ? parsed.title
               : "tool-call"));
     const displayName =
       typeof parsed.title === "string"
         ? parsed.title
-        : typeof parsed.capability_id === "string"
-          ? parsed.capability_id
+        : typeof (parsed.capability_id ?? parsed.capabilityId) === "string"
+          ? String(parsed.capability_id ?? parsed.capabilityId)
           : "unknown";
     const outputText = asText(
-      parsed.output_preview ?? parsed.output_summary ?? parsed.output ?? "",
+      parsed.output_preview ?? parsed.outputPreview ?? parsed.output_summary ?? parsed.outputSummary ?? parsed.output ?? "",
     );
     const status = typeof parsed.status === "string" ? parsed.status : undefined;
     const isError = status === "failed" || status === "error" || status === "killed";
     const toolOutput = {
       output: outputText,
-      output_kind: asOptionalText(parsed.output_kind),
+      outputKind: asOptionalText(parsed.output_kind ?? parsed.outputKind),
       truncated: Boolean(parsed.truncated),
-      input_summary: asOptionalText(parsed.input_summary),
+      inputSummary: asOptionalText(parsed.input_summary ?? parsed.inputSummary),
       title: displayName,
     };
 
@@ -150,18 +156,20 @@ export function restMessageToParts(
         type: "tool-call" as const,
         id: toolCallId,
         name: displayName,
-        arguments: parsed.input_summary ? JSON.stringify({ input: parsed.input_summary }) : "{}",
+        arguments: readTextField(parsed, "input_summary", "inputSummary")
+          ? JSON.stringify({ input: readTextField(parsed, "input_summary", "inputSummary") })
+          : "{}",
         output: toolOutput,
         state: "input-complete" as const,
       },
       {
         type: "tool-result" as const,
         toolCallId,
-        content: serializeIronclawToolResultEnvelope({
+        content: serializeToolResultEnvelope({
           output: outputText,
-          outputKind: asOptionalText(parsed.output_kind),
+          outputKind: asOptionalText(parsed.output_kind ?? parsed.outputKind),
           truncated: Boolean(parsed.truncated),
-          inputSummary: asOptionalText(parsed.input_summary),
+          inputSummary: asOptionalText(parsed.input_summary ?? parsed.inputSummary),
           title: displayName,
         }),
         state: isError ? ("error" as const) : ("complete" as const),

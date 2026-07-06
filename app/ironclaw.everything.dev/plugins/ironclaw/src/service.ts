@@ -563,7 +563,7 @@ export class IronclawService {
     });
   }
 
-  streamEvents(id: string, afterCursor?: string): AsyncGenerator<ChatEvent> {
+  streamEvents(id: string, afterCursor?: string, signal?: AbortSignal): AsyncGenerator<ChatEvent> {
     const baseUrl = this.baseUrl;
     const token = this.token;
     const generator: AsyncGenerator<ChatEvent> = (async function* () {
@@ -701,13 +701,31 @@ export class IronclawService {
 
       let retryDelayMs = 1_000;
 
+      const sleep = async (ms: number) => {
+        if (signal?.aborted) return;
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(() => {
+            signal?.removeEventListener("abort", onAbort);
+            resolve();
+          }, ms);
+          const onAbort = () => {
+            clearTimeout(timer);
+            signal?.removeEventListener("abort", onAbort);
+            resolve();
+          };
+          signal?.addEventListener("abort", onAbort, { once: true });
+        });
+      };
+
       while (true) {
+        if (signal?.aborted) return;
         const url = `${baseUrl}/api/webchat/v2/threads/${encodeURIComponent(id)}/events?token=${encodeURIComponent(token)}${cursor ? `&after_cursor=${encodeURIComponent(cursor)}` : ""}`;
         let sessionEnded = false;
 
         try {
           const response = await fetch(url, {
             headers: { Accept: "text/event-stream" },
+            signal,
           });
 
           if (!response.ok || !response.body)
@@ -755,11 +773,14 @@ export class IronclawService {
               reader.releaseLock();
             } catch {}
           }
-        } catch {}
+        } catch {
+          if (signal?.aborted) return;
+        }
 
         if (sessionEnded) return;
 
-        await new Promise((res) => setTimeout(res, retryDelayMs));
+        await sleep(retryDelayMs);
+        if (signal?.aborted) return;
         retryDelayMs = Math.min(retryDelayMs * 2, 30_000);
       }
     })();

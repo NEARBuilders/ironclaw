@@ -11,7 +11,7 @@ import { ChatInput } from "@/components/chat-input";
 import { ChatMessage } from "@/components/chat-message";
 import { ChatMessageList } from "@/components/chat-message-list";
 import { useConversationThreads, useThreadMessages } from "@/hooks/use-conversation";
-import { useIronclawChat } from "@/hooks/use-ironclaw-chat";
+import { useConversationChat } from "@/hooks/use-conversation-chat";
 import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
 import { useVerboseMode } from "@/hooks/use-verbose-mode";
 import type { StagedAttachment } from "@/lib/attachments";
@@ -41,7 +41,7 @@ function ThreadLayout() {
   const queryClient = useQueryClient();
   const matchRoute = useMatchRoute();
 
-  const chat = useIronclawChat({ threadId, initialMessages });
+  const chat = useConversationChat({ threadId, initialMessages });
   const isBusy = chat.isLoading;
   const isLogsRoute = !!matchRoute({ to: "/chat/$threadId/logs" });
 

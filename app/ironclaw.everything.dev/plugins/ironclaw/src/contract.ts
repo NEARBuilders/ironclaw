@@ -5,9 +5,50 @@ const Errors = {
   UNAUTHORIZED: { status: 401, message: "Not authenticated" },
   NOT_FOUND: { status: 404, message: "Resource not found" },
   BAD_REQUEST: { status: 400, message: "Bad request" },
+  PRECONDITION_FAILED: { status: 412, message: "Precondition failed" },
   CONFLICT: { status: 409, message: "Resource conflict" },
   GATEWAY_ERROR: { status: 502, message: "Ironclaw gateway error" },
 };
+
+const ConversationAttachmentRefSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["audio", "image", "document"]),
+  mimeType: z.string(),
+  filename: z.string().optional(),
+  sizeBytes: z.number().optional(),
+});
+
+const ConversationThreadSchema = z.object({
+  threadId: z.string(),
+  title: z.string().nullable(),
+  tenantId: z.string(),
+  agentId: z.string(),
+  projectId: z.string().nullable(),
+  createdByActorId: z.string(),
+  createdAt: z.string().nullable().optional(),
+  updatedAt: z.string().nullable().optional(),
+  parentThreadId: z.string().nullable(),
+  isSubagent: z.boolean(),
+});
+
+const ConversationMessageSchema = z.object({
+  id: z.string(),
+  threadId: z.string(),
+  role: z.enum(["user", "assistant"]),
+  text: z.string(),
+  createdAt: z.string().nullable(),
+  status: z.enum(["submitted", "finalized", "failed"]),
+  sequence: z.number(),
+  runId: z.string().nullable(),
+  attachments: z.array(ConversationAttachmentRefSchema).optional(),
+});
+
+const ConversationMessagePageSchema = z.object({
+  messages: z.array(ConversationMessageSchema),
+  nextCursor: z.string().nullable(),
+  hasMore: z.boolean(),
+  total: z.number(),
+});
 
 export const ProjectFsEntrySchema = z.object({
   name: z.string(),
@@ -619,6 +660,84 @@ export const ProjectMemberSchema = z.object({
   role: z.string(),
   displayName: z.string().optional(),
   email: z.string().optional(),
+});
+
+export type ConversationLiveChunkType = z.infer<typeof ConversationLiveChunkSchema>;
+
+export const ConversationLiveChunkSchema = z.object({
+  type: z.enum([
+    "RUN_STARTED",
+    "RUN_FINISHED",
+    "RUN_ERROR",
+    "TOOL_CALL_START",
+    "TOOL_CALL_ARGS",
+    "TOOL_CALL_END",
+    "TEXT_MESSAGE_START",
+    "TEXT_MESSAGE_CONTENT",
+    "TEXT_MESSAGE_END",
+    "STEP_STARTED",
+    "STEP_FINISHED",
+    "CUSTOM",
+  ]),
+  threadId: z.string(),
+  runId: z.string().optional(),
+  messageId: z.string().optional(),
+  parentMessageId: z.string().optional(),
+  role: z.enum(["assistant", "tool"]).optional(),
+  toolCallId: z.string().optional(),
+  toolCallName: z.string().optional(),
+  toolName: z.string().optional(),
+  index: z.number().optional(),
+  delta: z.string().optional(),
+  args: z.string().optional(),
+  input: z.unknown().optional(),
+  result: z.string().optional(),
+  state: z.string().optional(),
+  finishReason: z.string().nullable().optional(),
+  message: z.string().optional(),
+  details: z.string().optional(),
+  name: z.string().optional(),
+  value: z.unknown().optional(),
+  stepName: z.string().optional(),
+  stepType: z.string().optional(),
+  stepId: z.string().optional(),
+  content: z.string().optional(),
+  model: z.string().optional(),
+  signature: z.string().optional(),
+});
+
+export const ConversationChatMessagePartSchema = z.object({
+  type: z.enum(["text", "tool-call", "tool-result", "thinking", "image", "file", "document"]),
+  content: z.string().optional(),
+  toolCallId: z.string().optional(),
+  toolName: z.string().optional(),
+  args: z.string().optional(),
+  state: z.string().optional(),
+  output: z.unknown().optional(),
+  source: z
+    .object({
+      type: z.enum(["data", "url"]),
+      value: z.string(),
+      mimeType: z.string().optional(),
+      filename: z.string().optional(),
+    })
+    .optional(),
+  image: z.string().optional(),
+});
+
+export const ConversationChatMessageSchema = z.object({
+  id: z.string(),
+  role: z.enum(["user", "assistant", "system", "reasoning", "tool"]),
+  content: z.union([z.string(), z.array(z.any())]).optional(),
+  parts: z.array(ConversationChatMessagePartSchema).optional(),
+  createdAt: z.string().optional(),
+});
+
+export const ThreadChatInputSchema = z.object({
+  threadId: z.string(),
+  messages: z.array(ConversationChatMessageSchema),
+  forwardedProps: z.record(z.string(), z.unknown()).optional(),
+  clientActionId: z.string().optional(),
 });
 
 export const contract = oc.router({
@@ -1306,6 +1425,44 @@ export const contract = oc.router({
         }),
       )
       .output(z.object({ credentialRef: z.string() }))
+      .errors(Errors),
+  },
+
+  bridge: {
+    threadChat: oc
+      .route({
+        method: "POST",
+        path: "/bridge/chat",
+        summary: "Send a message and stream TanStack AI-compatible events (ironclaw bridge)",
+      })
+      .input(ThreadChatInputSchema)
+      .output(eventIterator(ConversationLiveChunkSchema))
+      .errors(Errors),
+
+    normalizedThreads: oc
+      .route({
+        method: "GET",
+        path: "/bridge/normalized-threads",
+        summary: "List threads normalized for the conversation surface",
+      })
+      .input(z.object({ limit: z.number().optional() }).optional())
+      .output(z.object({ data: z.array(ConversationThreadSchema) }))
+      .errors(Errors),
+
+    normalizedTimeline: oc
+      .route({
+        method: "GET",
+        path: "/bridge/normalized-timeline",
+        summary: "Get paginated timeline entries normalized for the conversation surface",
+      })
+      .input(
+        z.object({
+          id: z.string(),
+          limit: z.number().optional(),
+          cursor: z.string().optional(),
+        }),
+      )
+      .output(ConversationMessagePageSchema)
       .errors(Errors),
   },
 });

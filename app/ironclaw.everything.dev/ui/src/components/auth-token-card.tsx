@@ -2,7 +2,7 @@ import { KeyRound } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { AuthGate } from "@/hooks/ironclaw-chat-types";
+import type { AuthGate } from "@/hooks/conversation-chat-types";
 
 interface AuthTokenCardProps {
   gate: AuthGate;

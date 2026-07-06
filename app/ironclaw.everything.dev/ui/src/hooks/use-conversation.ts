@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { type ApiClient, useApiClient } from "@/app";
-import { messagesToUIMessages } from "@/lib/ironclaw-message-parts";
+import { messagesToUIMessages } from "@/lib/conversation-message-parts";
 
 export interface ConversationMessage {
   id: string;
@@ -32,8 +32,8 @@ export function threadListQueryOptions(apiClient: ApiClient) {
   return {
     queryKey: THREADS_KEY,
     queryFn: async () => {
-      const data = await (apiClient as any).conversation.listThreads();
-      return { threads: (data?.data ?? []) as ConversationThread[], nextCursor: null };
+      const data = await apiClient.conversation.listThreads();
+      return { threads: data?.data ?? [], nextCursor: null };
     },
     staleTime: 5_000,
   } as const;

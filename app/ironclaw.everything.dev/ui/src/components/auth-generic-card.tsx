@@ -1,6 +1,6 @@
 import { ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { AuthGate } from "@/hooks/ironclaw-chat-types";
+import type { AuthGate } from "@/hooks/conversation-chat-types";
 
 interface AuthGenericCardProps {
   gate: AuthGate;

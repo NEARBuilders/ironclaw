@@ -11,6 +11,14 @@
     "./contract": {
       "types": "./src/contract.ts",
       "default": "./src/contract.ts"
+    },
+    "./normalize": {
+      "types": "./src/normalize.ts",
+      "default": "./src/normalize.ts"
+    },
+    "./chat-bridge": {
+      "types": "./src/chat-bridge.ts",
+      "default": "./src/chat-bridge.ts"
     }
   },
   "peerDependencies": {

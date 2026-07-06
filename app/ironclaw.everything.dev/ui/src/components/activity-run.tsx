@@ -12,7 +12,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useState } from "react";
-import { parseIronclawToolResultEnvelope } from "@/lib/ironclaw-message-parts";
+import { parseToolResultEnvelope } from "@/lib/conversation-message-parts";
 import { cn } from "@/lib/utils";
 
 type ToolItem = {
@@ -172,7 +172,7 @@ function ToolDetailPanel({
   resultContent,
   verbose,
 }: {
-  envelope: ReturnType<typeof parseIronclawToolResultEnvelope>;
+  envelope: ReturnType<typeof parseToolResultEnvelope>;
   resultContent: string | null;
   verbose?: boolean;
 }) {
@@ -240,7 +240,7 @@ function ToolRunRow({ item, verbose }: { item: ToolItem; verbose?: boolean }) {
 
   const resultContent =
     item.result && typeof item.result.content === "string" ? item.result.content : null;
-  const envelope = parseIronclawToolResultEnvelope(item.result?.content ?? item.call.output);
+  const envelope = parseToolResultEnvelope(item.result?.content ?? item.call.output);
 
   const inputFromArgs = (() => {
     if (envelope?.inputSummary) return envelope.inputSummary;

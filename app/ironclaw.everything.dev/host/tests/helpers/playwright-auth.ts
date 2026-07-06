@@ -48,7 +48,7 @@ export async function loginAnonymously(page: Page, baseUrl: string) {
   });
 
   await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: /anonymous/i }).click();
+  await page.getByRole("button", { name: /continue anonymously/i }).click();
   await page.waitForURL(/\/home/, { timeout: 15000 });
 }
 
@@ -242,29 +242,6 @@ export function setupIronclawApiMock(page: Page, app: RebornAppHost) {
           status: res.status,
           contentType: "application/json",
           body: JSON.stringify(data),
-        });
-      }
-
-      if (
-        procedure.includes("conversation.live") ||
-        procedure.includes("threads.streamEvents") ||
-        procedure.includes("streamEvents")
-      ) {
-        const input = body?.input ?? {};
-        const threadId =
-          typeof input?.threadId === "string"
-            ? input.threadId
-            : typeof input?.id === "string"
-              ? input.id
-              : "thread-001";
-        return route.fulfill({
-          status: 200,
-          contentType: "text/event-stream",
-          body: await (
-            await fetch(
-              `${app.rebornBaseUrl}/api/webchat/v2/threads/${threadId}/events?token=${app.rebornToken}`,
-            )
-          ).text(),
         });
       }
 

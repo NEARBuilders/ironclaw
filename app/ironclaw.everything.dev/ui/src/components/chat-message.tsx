@@ -42,8 +42,8 @@ function InlineAttachmentImage({
           if (!cancelled) setSrc(url);
           return;
         }
-        const result = await apiClient.ironclaw.threads.getAttachment({
-          id: threadId,
+        const result = await apiClient.conversation.getAttachment({
+          threadId,
           messageId,
           attachmentId,
         });

@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import type { PendingApproval } from "@/hooks/ironclaw-chat-types";
+import type { PendingApproval } from "@/hooks/conversation-chat-types";
 
 const WRITE_RE = /(write|edit|delete|remove|patch|create|move|rename|chmod|rm\b)/;
 const EXEC_RE = /(bash|shell|exec|run|command|terminal|spawn|process)/;

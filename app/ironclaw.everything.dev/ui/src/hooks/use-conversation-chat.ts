@@ -2,18 +2,18 @@ import type { StreamChunk, UIMessage } from "@tanstack/ai";
 import { useChat, fetchServerSentEvents } from "@tanstack/ai-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useApiClient } from "@/app";
-import type { AuthGate, PendingApproval } from "@/hooks/ironclaw-chat-types";
+import type { AuthGate, PendingApproval } from "@/hooks/conversation-chat-types";
 import type { StagedAttachment } from "@/lib/attachments";
-import { clearThreadStatus, setThreadStatus } from "@/lib/ironclaw-thread-status";
+import { clearThreadStatus, setThreadStatus } from "@/lib/conversation-thread-status";
 
 type GateResolution = "approved" | "denied" | "credential_provided" | "cancelled";
 
-interface UseIronclawChatOptions {
+interface UseConversationChatOptions {
   threadId: string;
   initialMessages: UIMessage[];
 }
 
-export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOptions) {
+export function useConversationChat({ threadId, initialMessages }: UseConversationChatOptions) {
   const apiClient = useApiClient();
 
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
@@ -96,20 +96,22 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
         setRunId(null);
         setPendingApprovals([]);
         setAuthGates([]);
-        setThreadStatus(threadId, { hasActiveRun: false });
+        setThreadStatus(threadId, { hasActiveRun: false, isLoading: false, hasPendingApprovals: false });
 
         const errorData = pendingErrorDataRef.current;
         pendingErrorDataRef.current = null;
-        const parts: any[] = [{ type: "text", content: chunk.message ?? "Run failed" }];
+        const errorParts: UIMessage["parts"] = [
+          { type: "text" as const, content: chunk.message ?? "Run failed" },
+        ];
         if (errorData) {
-          parts.push({ type: "error-data", content: errorData });
+          (errorParts as unknown[]).push({ type: "error-data" as const, content: errorData });
         }
         setSystemMessages((prev) => [
           ...prev,
           {
             id: `error-${Date.now()}`,
-            role: "system",
-            parts,
+            role: "system" as const,
+            parts: errorParts,
           },
         ]);
         return;
@@ -121,7 +123,7 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
         setRunId(null);
         setPendingApprovals([]);
         setAuthGates([]);
-        setThreadStatus(threadId, { hasActiveRun: false });
+        setThreadStatus(threadId, { hasActiveRun: false, isLoading: false, hasPendingApprovals: false });
         return;
       }
 
@@ -154,7 +156,7 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
         return;
       }
 
-      if (name === "ironclaw.auth-required") {
+      if (name === "auth-required") {
         const prompt = val ?? {};
         setAuthGates((prev) => [
           ...prev,
@@ -173,15 +175,15 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
         return;
       }
 
-      if (name === "ironclaw.failed") {
-        const details = (val as any)?.details ?? val;
+      if (name === "failed") {
+        const details = val?.details ?? val;
         if (details) {
           pendingErrorDataRef.current = details;
         }
         return;
       }
 
-      if (name === "ironclaw.skill-activation") {
+      if (name === "skill-activation") {
         const skillNames: string[] = (val?.skillNames ?? []) as string[];
         const feedback: string[] = (val?.feedback ?? []) as string[];
         const text = [...skillNames.map((n) => `Skill activated: ${n}`), ...feedback]
@@ -200,9 +202,8 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
         return;
       }
 
-      if (name === "ironclaw.cursor") {
+      if (name === "cursor") {
         const c = (val?.cursor as string) ?? undefined;
-        console.log("[client]", threadId.slice(0, 8), "captured cursor:", c?.slice(0, 30));
         if (c) setCursor(c);
         return;
       }
@@ -230,11 +231,6 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
     setStreamInterrupted(false);
     setCursor(undefined);
   }, [threadId]);
-
-  useEffect(() => {
-    console.log("[client]", threadId.slice(0, 8), "forwardedProps.afterCursor:",
-      cursor ? cursor.slice(0, 30) : "NONE");
-  }, [cursor]);
 
   useEffect(() => {
     return () => {
@@ -284,7 +280,7 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
     if (currentRunId) {
       apiClient.conversation.cancelRun({ threadId, runId: currentRunId }).catch(() => {});
     }
-    setThreadStatus(threadId, { hasActiveRun: false });
+    setThreadStatus(threadId, { hasActiveRun: false, isLoading: false, hasPendingApprovals: false });
     chat.stop();
   }, [chat, apiClient, threadId]);
 
@@ -302,6 +298,11 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
         resolution,
         always: opts?.always,
         credentialRef: opts?.credentialRef,
+      });
+      setPendingApprovals((prev) => {
+        const next = prev.filter((approval) => approval.gateRef !== gateRef);
+        setThreadStatus(threadId, { hasPendingApprovals: next.length > 0 });
+        return next;
       });
     },
     [apiClient, threadId],

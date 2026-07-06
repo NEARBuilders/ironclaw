@@ -3,6 +3,87 @@ import { eventIterator, oc } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
 import { contract as ironclawContract } from "../../plugins/ironclaw/src/contract";
 
+const ConversationChatMessagePartSchema = z.object({
+  type: z.enum(["text", "tool-call", "tool-result", "thinking", "image", "file", "document"]),
+  content: z.string().optional(),
+  toolCallId: z.string().optional(),
+  toolName: z.string().optional(),
+  args: z.string().optional(),
+  state: z.string().optional(),
+  output: z.unknown().optional(),
+  source: z
+    .object({
+      type: z.enum(["data", "url"]),
+      value: z.string(),
+      mimeType: z.string().optional(),
+      filename: z.string().optional(),
+    })
+    .optional(),
+  image: z.string().optional(),
+});
+
+const PRECONDITION_FAILED = { status: 412, message: "Precondition failed" };
+
+const ConversationChatMessageSchema = z.object({
+  id: z.string(),
+  role: z.enum(["user", "assistant", "system", "reasoning", "tool"]),
+  content: z.union([z.string(), z.array(z.any())]).optional(),
+  parts: z.array(ConversationChatMessagePartSchema).optional(),
+  createdAt: z.string().optional(),
+});
+
+const ThreadChatInputSchema = z.object({
+  threadId: z.string(),
+  messages: z.array(ConversationChatMessageSchema),
+  forwardedProps: z.record(z.string(), z.unknown()).optional(),
+  clientActionId: z.string().optional(),
+  pluginId: z.string().optional(),
+});
+
+const ConversationLiveChunkSchema = z.object({
+  type: z.enum([
+    "RUN_STARTED",
+    "RUN_FINISHED",
+    "RUN_ERROR",
+    "TOOL_CALL_START",
+    "TOOL_CALL_ARGS",
+    "TOOL_CALL_END",
+    "TEXT_MESSAGE_START",
+    "TEXT_MESSAGE_CONTENT",
+    "TEXT_MESSAGE_END",
+    "STEP_STARTED",
+    "STEP_FINISHED",
+    "CUSTOM",
+  ]),
+  threadId: z.string(),
+  runId: z.string().optional(),
+  messageId: z.string().optional(),
+  parentMessageId: z.string().optional(),
+  role: z.enum(["assistant", "tool"]).optional(),
+  toolCallId: z.string().optional(),
+  toolCallName: z.string().optional(),
+  toolName: z.string().optional(),
+  index: z.number().optional(),
+  delta: z.string().optional(),
+  args: z.string().optional(),
+  input: z.unknown().optional(),
+  result: z.string().optional(),
+  state: z.string().optional(),
+  finishReason: z.string().nullable().optional(),
+  message: z.string().optional(),
+  details: z.string().optional(),
+  name: z.string().optional(),
+  value: z.unknown().optional(),
+  stepName: z.string().optional(),
+  stepType: z.string().optional(),
+  stepId: z.string().optional(),
+  content: z.string().optional(),
+  model: z.string().optional(),
+  signature: z.string().optional(),
+});
+
+export type ConversationLiveChunkType = z.infer<typeof ConversationLiveChunkSchema>;
+
 export const RegisterInputSchema = z.object({
   agentId: z.string().min(1).max(64),
   participantName: z.string().min(1).max(128),
@@ -65,6 +146,7 @@ const ConversationMessageSchema = z.object({
   status: z.enum(["submitted", "finalized", "failed"]),
   sequence: z.number(),
   runId: z.string().nullable(),
+  toolResultRef: z.string().nullable().optional(),
   attachments: z.array(ConversationAttachmentRefSchema).optional(),
 });
 
@@ -88,6 +170,28 @@ const ConversationMessagePageSchema = z.object({
   total: z.number(),
 });
 
+const ConversationThreadCreateInputSchema = z.object({
+  clientActionId: z.string().optional(),
+  pluginId: z.string().optional(),
+});
+
+const ConversationThreadCreateSchema = z.object({
+  threadId: z.string(),
+  title: z.string().nullable().optional(),
+});
+
+const ConversationThreadDeleteInputSchema = z.object({
+  threadId: z.string(),
+  pluginId: z.string().optional(),
+});
+
+const ConversationAttachmentDownloadSchema = z.object({
+  contentBase64: z.string(),
+  mimeType: z.string(),
+  filename: z.string(),
+  sizeBytes: z.number(),
+});
+
 export type ConversationMessageType = z.infer<typeof ConversationMessageSchema>;
 export type ConversationMessagePageType = z.infer<typeof ConversationMessagePageSchema>;
 
@@ -101,40 +205,6 @@ export const ConversationSendAckSchema = z.object({
   outcome: z.string().optional(),
   status: z.string().optional(),
   activeRunId: z.string().optional(),
-});
-
-export const ConversationChatMessagePartSchema = z.object({
-  type: z.enum(["text", "tool-call", "tool-result", "thinking", "image", "file", "document"]),
-  content: z.string().optional(),
-  toolCallId: z.string().optional(),
-  toolName: z.string().optional(),
-  args: z.string().optional(),
-  state: z.string().optional(),
-  output: z.unknown().optional(),
-  source: z
-    .object({
-      type: z.enum(["data", "url"]),
-      value: z.string(),
-      mimeType: z.string().optional(),
-      filename: z.string().optional(),
-    })
-    .optional(),
-  image: z.string().optional(),
-});
-
-export const ConversationChatMessageSchema = z.object({
-  id: z.string(),
-  role: z.enum(["user", "assistant", "system", "reasoning", "tool"]),
-  content: z.union([z.string(), z.array(z.any())]).optional(),
-  parts: z.array(ConversationChatMessagePartSchema).optional(),
-  createdAt: z.string().optional(),
-});
-
-const ThreadChatInputSchema = z.object({
-  threadId: z.string(),
-  messages: z.array(ConversationChatMessageSchema),
-  forwardedProps: z.record(z.string(), z.unknown()).optional(),
-  clientActionId: z.string().optional(),
 });
 
 const ThreadApproveInputSchema = z.object({
@@ -158,48 +228,6 @@ const SubmitManualTokenInputSchema = z.object({
   threadId: z.string(),
   runId: z.string(),
   gateRef: z.string(),
-});
-
-export const ConversationLiveChunkSchema = z.object({
-  type: z.enum([
-    "RUN_STARTED",
-    "RUN_FINISHED",
-    "RUN_ERROR",
-    "TOOL_CALL_START",
-    "TOOL_CALL_ARGS",
-    "TOOL_CALL_END",
-    "TEXT_MESSAGE_START",
-    "TEXT_MESSAGE_CONTENT",
-    "TEXT_MESSAGE_END",
-    "STEP_STARTED",
-    "STEP_FINISHED",
-    "CUSTOM",
-  ]),
-  threadId: z.string(),
-  runId: z.string().optional(),
-  messageId: z.string().optional(),
-  parentMessageId: z.string().optional(),
-  role: z.enum(["assistant", "tool"]).optional(),
-  toolCallId: z.string().optional(),
-  toolCallName: z.string().optional(),
-  toolName: z.string().optional(),
-  index: z.number().optional(),
-  delta: z.string().optional(),
-  args: z.string().optional(),
-  input: z.unknown().optional(),
-  result: z.string().optional(),
-  state: z.string().optional(),
-  finishReason: z.string().nullable().optional(),
-  message: z.string().optional(),
-  details: z.string().optional(),
-  name: z.string().optional(),
-  value: z.unknown().optional(),
-  stepName: z.string().optional(),
-  stepType: z.string().optional(),
-  stepId: z.string().optional(),
-  content: z.string().optional(),
-  model: z.string().optional(),
-  signature: z.string().optional(),
 });
 
 export const ConversationEventSchema = z.object({
@@ -322,8 +350,21 @@ export const contract = oc.router({
   conversation: {
     listThreads: oc
       .route({ method: "GET", path: "/conversation/threads", summary: "List conversation threads" })
+      .input(z.object({ pluginId: z.string().optional() }).optional())
       .output(z.object({ data: z.array(ConversationThreadSchema) }))
-      .errors({ UNAUTHORIZED }),
+      .errors({ UNAUTHORIZED, BAD_REQUEST, PRECONDITION_FAILED }),
+
+    createThread: oc
+      .route({ method: "POST", path: "/conversation/threads", summary: "Create a conversation thread" })
+      .input(ConversationThreadCreateInputSchema)
+      .output(ConversationThreadCreateSchema)
+      .errors({ UNAUTHORIZED, BAD_REQUEST, PRECONDITION_FAILED }),
+
+    deleteThread: oc
+      .route({ method: "DELETE", path: "/conversation/threads/{threadId}", summary: "Delete a conversation thread" })
+      .input(ConversationThreadDeleteInputSchema)
+      .output(z.object({ success: z.boolean() }))
+      .errors({ UNAUTHORIZED, NOT_FOUND, BAD_REQUEST, PRECONDITION_FAILED }),
 
     getMessages: oc
       .route({
@@ -336,10 +377,11 @@ export const contract = oc.router({
           threadId: z.string(),
           cursor: z.string().optional(),
           limit: z.number().optional(),
+          pluginId: z.string().optional(),
         }),
       )
       .output(ConversationMessagePageSchema)
-      .errors({ UNAUTHORIZED, NOT_FOUND }),
+      .errors({ UNAUTHORIZED, NOT_FOUND, BAD_REQUEST, PRECONDITION_FAILED }),
 
     sendMessage: oc
       .route({
@@ -353,26 +395,11 @@ export const contract = oc.router({
           content: z.string(),
           clientActionId: z.string().optional(),
           attachments: z.array(ConversationAttachmentInputSchema).optional(),
+          pluginId: z.string().optional(),
         }),
       )
       .output(ConversationSendAckSchema)
-      .errors({ UNAUTHORIZED, NOT_FOUND }),
-
-    live: oc
-      .route({
-        method: "GET",
-        path: "/conversation/threads/{threadId}/live",
-        summary: "Stream a live conversation run",
-      })
-      .input(
-        z.object({
-          threadId: z.string(),
-          runId: z.string().optional(),
-          afterCursor: z.string().optional(),
-        }),
-      )
-      .output(eventIterator(ConversationLiveChunkSchema))
-      .errors({ UNAUTHORIZED, NOT_FOUND }),
+      .errors({ UNAUTHORIZED, NOT_FOUND, BAD_REQUEST, PRECONDITION_FAILED }),
 
     threadChat: oc
       .route({
@@ -382,7 +409,7 @@ export const contract = oc.router({
       })
       .input(ThreadChatInputSchema)
       .output(eventIterator(ConversationLiveChunkSchema))
-      .errors({ UNAUTHORIZED, NOT_FOUND }),
+      .errors({ UNAUTHORIZED, NOT_FOUND, BAD_REQUEST, PRECONDITION_FAILED }),
 
     threadApprove: oc
       .route({
@@ -390,9 +417,9 @@ export const contract = oc.router({
         path: "/conversation/threads/{threadId}/approve",
         summary: "Resolve a gate (approve/deny/cancel/credential_provided)",
       })
-      .input(ThreadApproveInputSchema)
+      .input(ThreadApproveInputSchema.extend({ pluginId: z.string().optional() }))
       .output(z.object({ success: z.boolean() }))
-      .errors({ UNAUTHORIZED, NOT_FOUND }),
+      .errors({ UNAUTHORIZED, NOT_FOUND, BAD_REQUEST, PRECONDITION_FAILED }),
 
     cancelRun: oc
       .route({
@@ -400,7 +427,7 @@ export const contract = oc.router({
         path: "/conversation/threads/{threadId}/cancel",
         summary: "Cancel an active run",
       })
-      .input(CancelRunInputSchema)
+      .input(CancelRunInputSchema.extend({ pluginId: z.string().optional() }))
       .output(z.object({ success: z.boolean() }))
       .errors({ UNAUTHORIZED, NOT_FOUND }),
 
@@ -410,13 +437,27 @@ export const contract = oc.router({
         path: "/conversation/threads/{threadId}/manual-token",
         summary: "Submit a manual token to store a credential",
       })
-      .input(SubmitManualTokenInputSchema)
+      .input(SubmitManualTokenInputSchema.extend({ pluginId: z.string().optional() }))
       .output(z.object({ credentialRef: z.string() }))
-      .errors({ UNAUTHORIZED, NOT_FOUND }),
+      .errors({ UNAUTHORIZED, NOT_FOUND, BAD_REQUEST, PRECONDITION_FAILED }),
+
+    getAttachment: oc
+      .route({
+        method: "GET",
+        path: "/conversation/threads/{threadId}/messages/{messageId}/attachments/{attachmentId}",
+        summary: "Download a conversation attachment",
+      })
+      .input(
+        z.object({
+          threadId: z.string(),
+          messageId: z.string(),
+          attachmentId: z.string(),
+          pluginId: z.string().optional(),
+        }),
+      )
+      .output(ConversationAttachmentDownloadSchema)
+      .errors({ UNAUTHORIZED, NOT_FOUND, BAD_REQUEST, PRECONDITION_FAILED }),
   },
 });
 
 export type ContractType = typeof contract;
-
-export type ConversationLiveChunkType = z.infer<typeof ConversationLiveChunkSchema>;
-

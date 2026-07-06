@@ -47,7 +47,7 @@ import { ironclawStatusQueryKey, useIronclawStatus } from "@/hooks/use-ironclaw-
 import {
   getThreadStatuses,
   subscribe as subscribeThreadStatus,
-} from "@/lib/ironclaw-thread-status";
+} from "@/lib/conversation-thread-status";
 
 export const Route = createFileRoute("/_layout/_authenticated/chat")({
   beforeLoad: async ({ context }) => {
@@ -104,7 +104,7 @@ function ChatLayout() {
   const threadsQuery = useConversationThreads();
 
   const threads = useMemo(() => {
-    const all = (threadsQuery.data?.threads ?? []) as ConversationThread[];
+    const all = [...((threadsQuery.data?.threads ?? []) as ConversationThread[])];
     return all.sort((a, b) => {
       const aTime = a.updatedAt ?? a.createdAt ?? "";
       const bTime = b.updatedAt ?? b.createdAt ?? "";
@@ -114,7 +114,7 @@ function ChatLayout() {
 
   const createThread = useCallback(async () => {
     try {
-      const result = await apiClient.ironclaw.threads.create({
+      const result = await apiClient.conversation.createThread({
         clientActionId: `ui-${crypto.randomUUID()}`,
       });
       threadsQuery.refetch();
@@ -135,7 +135,7 @@ function ChatLayout() {
     if (!threadId) return;
     setDeleteConfirmTarget(null);
     try {
-      await apiClient.ironclaw.threads.delete({ id: threadId });
+      await apiClient.conversation.deleteThread({ threadId });
       threadsQuery.refetch();
       if (activeThreadId === threadId) {
         navigate({ to: "/chat" });
@@ -166,7 +166,7 @@ function ChatLayout() {
     for (const thread of threads) {
       const status = statuses.get(thread.threadId);
       if (!status) continue;
-      if (status.hasPendingApprovals) {
+      if (status.hasPendingApprovals && thread.threadId !== activeThreadId) {
         map.set(thread.threadId, "needs-attention");
       } else if (status.isLoading || status.hasActiveRun) {
         map.set(thread.threadId, "running");

@@ -1,7 +1,7 @@
 import { ExternalLink } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import type { AuthGate } from "@/hooks/ironclaw-chat-types";
+import type { AuthGate } from "@/hooks/conversation-chat-types";
 
 interface AuthOauthCardProps {
   gate: AuthGate;

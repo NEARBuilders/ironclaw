@@ -305,6 +305,7 @@ export declare const GateResolutionSchema: z.ZodEnum<{
 export declare const ChatEventSchema: z.ZodObject<{
     cursor: z.ZodOptional<z.ZodString>;
     type: z.ZodEnum<{
+        failed: "failed";
         cancelled: "cancelled";
         accepted: "accepted";
         running: "running";
@@ -314,7 +315,6 @@ export declare const ChatEventSchema: z.ZodObject<{
         gate: "gate";
         auth_required: "auth_required";
         final_reply: "final_reply";
-        failed: "failed";
         projection_snapshot: "projection_snapshot";
         projection_update: "projection_update";
         keep_alive: "keep_alive";
@@ -732,6 +732,161 @@ export declare const ProjectMemberSchema: z.ZodObject<{
     displayName: z.ZodOptional<z.ZodString>;
     email: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
+export type ConversationLiveChunkType = z.infer<typeof ConversationLiveChunkSchema>;
+export declare const ConversationLiveChunkSchema: z.ZodObject<{
+    type: z.ZodEnum<{
+        RUN_STARTED: "RUN_STARTED";
+        RUN_FINISHED: "RUN_FINISHED";
+        RUN_ERROR: "RUN_ERROR";
+        TOOL_CALL_START: "TOOL_CALL_START";
+        TOOL_CALL_ARGS: "TOOL_CALL_ARGS";
+        TOOL_CALL_END: "TOOL_CALL_END";
+        TEXT_MESSAGE_START: "TEXT_MESSAGE_START";
+        TEXT_MESSAGE_CONTENT: "TEXT_MESSAGE_CONTENT";
+        TEXT_MESSAGE_END: "TEXT_MESSAGE_END";
+        STEP_STARTED: "STEP_STARTED";
+        STEP_FINISHED: "STEP_FINISHED";
+        CUSTOM: "CUSTOM";
+    }>;
+    threadId: z.ZodString;
+    runId: z.ZodOptional<z.ZodString>;
+    messageId: z.ZodOptional<z.ZodString>;
+    parentMessageId: z.ZodOptional<z.ZodString>;
+    role: z.ZodOptional<z.ZodEnum<{
+        assistant: "assistant";
+        tool: "tool";
+    }>>;
+    toolCallId: z.ZodOptional<z.ZodString>;
+    toolCallName: z.ZodOptional<z.ZodString>;
+    toolName: z.ZodOptional<z.ZodString>;
+    index: z.ZodOptional<z.ZodNumber>;
+    delta: z.ZodOptional<z.ZodString>;
+    args: z.ZodOptional<z.ZodString>;
+    input: z.ZodOptional<z.ZodUnknown>;
+    result: z.ZodOptional<z.ZodString>;
+    state: z.ZodOptional<z.ZodString>;
+    finishReason: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+    message: z.ZodOptional<z.ZodString>;
+    details: z.ZodOptional<z.ZodString>;
+    name: z.ZodOptional<z.ZodString>;
+    value: z.ZodOptional<z.ZodUnknown>;
+    stepName: z.ZodOptional<z.ZodString>;
+    stepType: z.ZodOptional<z.ZodString>;
+    stepId: z.ZodOptional<z.ZodString>;
+    content: z.ZodOptional<z.ZodString>;
+    model: z.ZodOptional<z.ZodString>;
+    signature: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const ConversationChatMessagePartSchema: z.ZodObject<{
+    type: z.ZodEnum<{
+        image: "image";
+        document: "document";
+        text: "text";
+        file: "file";
+        "tool-call": "tool-call";
+        "tool-result": "tool-result";
+        thinking: "thinking";
+    }>;
+    content: z.ZodOptional<z.ZodString>;
+    toolCallId: z.ZodOptional<z.ZodString>;
+    toolName: z.ZodOptional<z.ZodString>;
+    args: z.ZodOptional<z.ZodString>;
+    state: z.ZodOptional<z.ZodString>;
+    output: z.ZodOptional<z.ZodUnknown>;
+    source: z.ZodOptional<z.ZodObject<{
+        type: z.ZodEnum<{
+            data: "data";
+            url: "url";
+        }>;
+        value: z.ZodString;
+        mimeType: z.ZodOptional<z.ZodString>;
+        filename: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    image: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const ConversationChatMessageSchema: z.ZodObject<{
+    id: z.ZodString;
+    role: z.ZodEnum<{
+        user: "user";
+        assistant: "assistant";
+        tool: "tool";
+        system: "system";
+        reasoning: "reasoning";
+    }>;
+    content: z.ZodOptional<z.ZodUnion<readonly [z.ZodString, z.ZodArray<z.ZodAny>]>>;
+    parts: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        type: z.ZodEnum<{
+            image: "image";
+            document: "document";
+            text: "text";
+            file: "file";
+            "tool-call": "tool-call";
+            "tool-result": "tool-result";
+            thinking: "thinking";
+        }>;
+        content: z.ZodOptional<z.ZodString>;
+        toolCallId: z.ZodOptional<z.ZodString>;
+        toolName: z.ZodOptional<z.ZodString>;
+        args: z.ZodOptional<z.ZodString>;
+        state: z.ZodOptional<z.ZodString>;
+        output: z.ZodOptional<z.ZodUnknown>;
+        source: z.ZodOptional<z.ZodObject<{
+            type: z.ZodEnum<{
+                data: "data";
+                url: "url";
+            }>;
+            value: z.ZodString;
+            mimeType: z.ZodOptional<z.ZodString>;
+            filename: z.ZodOptional<z.ZodString>;
+        }, z.core.$strip>>;
+        image: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>>;
+    createdAt: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const ThreadChatInputSchema: z.ZodObject<{
+    threadId: z.ZodString;
+    messages: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        role: z.ZodEnum<{
+            user: "user";
+            assistant: "assistant";
+            tool: "tool";
+            system: "system";
+            reasoning: "reasoning";
+        }>;
+        content: z.ZodOptional<z.ZodUnion<readonly [z.ZodString, z.ZodArray<z.ZodAny>]>>;
+        parts: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            type: z.ZodEnum<{
+                image: "image";
+                document: "document";
+                text: "text";
+                file: "file";
+                "tool-call": "tool-call";
+                "tool-result": "tool-result";
+                thinking: "thinking";
+            }>;
+            content: z.ZodOptional<z.ZodString>;
+            toolCallId: z.ZodOptional<z.ZodString>;
+            toolName: z.ZodOptional<z.ZodString>;
+            args: z.ZodOptional<z.ZodString>;
+            state: z.ZodOptional<z.ZodString>;
+            output: z.ZodOptional<z.ZodUnknown>;
+            source: z.ZodOptional<z.ZodObject<{
+                type: z.ZodEnum<{
+                    data: "data";
+                    url: "url";
+                }>;
+                value: z.ZodString;
+                mimeType: z.ZodOptional<z.ZodString>;
+                filename: z.ZodOptional<z.ZodString>;
+            }, z.core.$strip>>;
+            image: z.ZodOptional<z.ZodString>;
+        }, z.core.$strip>>>;
+        createdAt: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    forwardedProps: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    clientActionId: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
 export declare const contract: {
     ping: import("@orpc/contract").ContractProcedure<import("@orpc/contract").Schema<unknown, unknown>, z.ZodObject<{
         status: z.ZodLiteral<"ok">;
@@ -762,6 +917,10 @@ export declare const contract: {
             message: string;
         };
         BAD_REQUEST: {
+            status: number;
+            message: string;
+        };
+        PRECONDITION_FAILED: {
             status: number;
             message: string;
         };
@@ -817,6 +976,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -844,6 +1007,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -867,6 +1034,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -923,6 +1094,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -989,6 +1164,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -1017,6 +1196,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -1056,6 +1239,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -1069,7 +1256,7 @@ export declare const contract: {
             id: z.ZodString;
             afterCursor: z.ZodOptional<z.ZodString>;
         }, z.core.$strip>, import("@orpc/contract").Schema<AsyncIteratorObject<{
-            type: "cancelled" | "accepted" | "running" | "capability_progress" | "capability_activity" | "capability_display_preview" | "gate" | "auth_required" | "final_reply" | "failed" | "projection_snapshot" | "projection_update" | "keep_alive";
+            type: "failed" | "cancelled" | "accepted" | "running" | "capability_progress" | "capability_activity" | "capability_display_preview" | "gate" | "auth_required" | "final_reply" | "projection_snapshot" | "projection_update" | "keep_alive";
             cursor?: string | undefined;
             ack?: {
                 outcome: "submitted";
@@ -1183,7 +1370,7 @@ export declare const contract: {
             } | undefined;
             state?: Record<string, unknown> | undefined;
         }, unknown, void>, import("@orpc/shared").AsyncIteratorClass<{
-            type: "cancelled" | "accepted" | "running" | "capability_progress" | "capability_activity" | "capability_display_preview" | "gate" | "auth_required" | "final_reply" | "failed" | "projection_snapshot" | "projection_update" | "keep_alive";
+            type: "failed" | "cancelled" | "accepted" | "running" | "capability_progress" | "capability_activity" | "capability_display_preview" | "gate" | "auth_required" | "final_reply" | "projection_snapshot" | "projection_update" | "keep_alive";
             cursor?: string | undefined;
             ack?: {
                 outcome: "submitted";
@@ -1309,6 +1496,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -1393,6 +1584,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -1426,6 +1621,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -1464,6 +1663,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -1491,6 +1694,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -1522,6 +1729,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -1584,6 +1795,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -1607,6 +1822,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -1636,6 +1855,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -1659,6 +1882,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -1695,6 +1922,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -1725,6 +1956,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -1762,6 +1997,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -1813,6 +2052,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -1845,6 +2088,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -1888,6 +2135,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -1925,6 +2176,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -1959,6 +2214,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -2019,6 +2278,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -2045,6 +2308,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -2087,6 +2354,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -2134,6 +2405,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -2162,6 +2437,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -2186,6 +2465,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -2217,6 +2500,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -2241,6 +2528,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -2271,6 +2562,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -2294,6 +2589,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -2336,6 +2635,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -2364,6 +2667,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -2412,6 +2719,10 @@ export declare const contract: {
                     status: number;
                     message: string;
                 };
+                PRECONDITION_FAILED: {
+                    status: number;
+                    message: string;
+                };
                 CONFLICT: {
                     status: number;
                     message: string;
@@ -2449,6 +2760,10 @@ export declare const contract: {
                     status: number;
                     message: string;
                 };
+                PRECONDITION_FAILED: {
+                    status: number;
+                    message: string;
+                };
                 CONFLICT: {
                     status: number;
                     message: string;
@@ -2472,6 +2787,10 @@ export declare const contract: {
                     message: string;
                 };
                 BAD_REQUEST: {
+                    status: number;
+                    message: string;
+                };
+                PRECONDITION_FAILED: {
                     status: number;
                     message: string;
                 };
@@ -2504,6 +2823,10 @@ export declare const contract: {
                     message: string;
                 };
                 BAD_REQUEST: {
+                    status: number;
+                    message: string;
+                };
+                PRECONDITION_FAILED: {
                     status: number;
                     message: string;
                 };
@@ -2542,6 +2865,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -2568,6 +2895,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -2609,6 +2940,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -2646,6 +2981,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -2673,6 +3012,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -2709,6 +3052,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -2741,6 +3088,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -2769,6 +3120,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -2805,6 +3160,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -2828,6 +3187,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -2862,6 +3225,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -2890,6 +3257,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -2924,6 +3295,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -2948,6 +3323,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -2981,6 +3360,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -3007,6 +3390,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
             CONFLICT: {
                 status: number;
                 message: string;
@@ -3028,6 +3415,10 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
@@ -3059,6 +3450,238 @@ export declare const contract: {
                 message: string;
             };
             BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
+            CONFLICT: {
+                status: number;
+                message: string;
+            };
+            GATEWAY_ERROR: {
+                status: number;
+                message: string;
+            };
+        }>>, Record<never, never>>;
+    };
+    bridge: {
+        threadChat: import("@orpc/contract").ContractProcedure<z.ZodObject<{
+            threadId: z.ZodString;
+            messages: z.ZodArray<z.ZodObject<{
+                id: z.ZodString;
+                role: z.ZodEnum<{
+                    user: "user";
+                    assistant: "assistant";
+                    tool: "tool";
+                    system: "system";
+                    reasoning: "reasoning";
+                }>;
+                content: z.ZodOptional<z.ZodUnion<readonly [z.ZodString, z.ZodArray<z.ZodAny>]>>;
+                parts: z.ZodOptional<z.ZodArray<z.ZodObject<{
+                    type: z.ZodEnum<{
+                        image: "image";
+                        document: "document";
+                        text: "text";
+                        file: "file";
+                        "tool-call": "tool-call";
+                        "tool-result": "tool-result";
+                        thinking: "thinking";
+                    }>;
+                    content: z.ZodOptional<z.ZodString>;
+                    toolCallId: z.ZodOptional<z.ZodString>;
+                    toolName: z.ZodOptional<z.ZodString>;
+                    args: z.ZodOptional<z.ZodString>;
+                    state: z.ZodOptional<z.ZodString>;
+                    output: z.ZodOptional<z.ZodUnknown>;
+                    source: z.ZodOptional<z.ZodObject<{
+                        type: z.ZodEnum<{
+                            data: "data";
+                            url: "url";
+                        }>;
+                        value: z.ZodString;
+                        mimeType: z.ZodOptional<z.ZodString>;
+                        filename: z.ZodOptional<z.ZodString>;
+                    }, z.core.$strip>>;
+                    image: z.ZodOptional<z.ZodString>;
+                }, z.core.$strip>>>;
+                createdAt: z.ZodOptional<z.ZodString>;
+            }, z.core.$strip>>;
+            forwardedProps: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+            clientActionId: z.ZodOptional<z.ZodString>;
+        }, z.core.$strip>, import("@orpc/contract").Schema<AsyncIteratorObject<{
+            type: "RUN_STARTED" | "RUN_FINISHED" | "RUN_ERROR" | "TOOL_CALL_START" | "TOOL_CALL_ARGS" | "TOOL_CALL_END" | "TEXT_MESSAGE_START" | "TEXT_MESSAGE_CONTENT" | "TEXT_MESSAGE_END" | "STEP_STARTED" | "STEP_FINISHED" | "CUSTOM";
+            threadId: string;
+            runId?: string | undefined;
+            messageId?: string | undefined;
+            parentMessageId?: string | undefined;
+            role?: "assistant" | "tool" | undefined;
+            toolCallId?: string | undefined;
+            toolCallName?: string | undefined;
+            toolName?: string | undefined;
+            index?: number | undefined;
+            delta?: string | undefined;
+            args?: string | undefined;
+            input?: unknown;
+            result?: string | undefined;
+            state?: string | undefined;
+            finishReason?: string | null | undefined;
+            message?: string | undefined;
+            details?: string | undefined;
+            name?: string | undefined;
+            value?: unknown;
+            stepName?: string | undefined;
+            stepType?: string | undefined;
+            stepId?: string | undefined;
+            content?: string | undefined;
+            model?: string | undefined;
+            signature?: string | undefined;
+        }, unknown, void>, import("@orpc/shared").AsyncIteratorClass<{
+            type: "RUN_STARTED" | "RUN_FINISHED" | "RUN_ERROR" | "TOOL_CALL_START" | "TOOL_CALL_ARGS" | "TOOL_CALL_END" | "TEXT_MESSAGE_START" | "TEXT_MESSAGE_CONTENT" | "TEXT_MESSAGE_END" | "STEP_STARTED" | "STEP_FINISHED" | "CUSTOM";
+            threadId: string;
+            runId?: string | undefined;
+            messageId?: string | undefined;
+            parentMessageId?: string | undefined;
+            role?: "assistant" | "tool" | undefined;
+            toolCallId?: string | undefined;
+            toolCallName?: string | undefined;
+            toolName?: string | undefined;
+            index?: number | undefined;
+            delta?: string | undefined;
+            args?: string | undefined;
+            input?: unknown;
+            result?: string | undefined;
+            state?: string | undefined;
+            finishReason?: string | null | undefined;
+            message?: string | undefined;
+            details?: string | undefined;
+            name?: string | undefined;
+            value?: unknown;
+            stepName?: string | undefined;
+            stepType?: string | undefined;
+            stepId?: string | undefined;
+            content?: string | undefined;
+            model?: string | undefined;
+            signature?: string | undefined;
+        }, unknown, void>>, import("@orpc/contract").MergedErrorMap<Record<never, never>, import("@orpc/contract").MergedErrorMap<Record<never, never>, {
+            UNAUTHORIZED: {
+                status: number;
+                message: string;
+            };
+            NOT_FOUND: {
+                status: number;
+                message: string;
+            };
+            BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
+            CONFLICT: {
+                status: number;
+                message: string;
+            };
+            GATEWAY_ERROR: {
+                status: number;
+                message: string;
+            };
+        }>>, Record<never, never>>;
+        normalizedThreads: import("@orpc/contract").ContractProcedure<z.ZodOptional<z.ZodObject<{
+            limit: z.ZodOptional<z.ZodNumber>;
+        }, z.core.$strip>>, z.ZodObject<{
+            data: z.ZodArray<z.ZodObject<{
+                threadId: z.ZodString;
+                title: z.ZodNullable<z.ZodString>;
+                tenantId: z.ZodString;
+                agentId: z.ZodString;
+                projectId: z.ZodNullable<z.ZodString>;
+                createdByActorId: z.ZodString;
+                createdAt: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+                updatedAt: z.ZodOptional<z.ZodNullable<z.ZodString>>;
+                parentThreadId: z.ZodNullable<z.ZodString>;
+                isSubagent: z.ZodBoolean;
+            }, z.core.$strip>>;
+        }, z.core.$strip>, import("@orpc/contract").MergedErrorMap<Record<never, never>, import("@orpc/contract").MergedErrorMap<Record<never, never>, {
+            UNAUTHORIZED: {
+                status: number;
+                message: string;
+            };
+            NOT_FOUND: {
+                status: number;
+                message: string;
+            };
+            BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
+                status: number;
+                message: string;
+            };
+            CONFLICT: {
+                status: number;
+                message: string;
+            };
+            GATEWAY_ERROR: {
+                status: number;
+                message: string;
+            };
+        }>>, Record<never, never>>;
+        normalizedTimeline: import("@orpc/contract").ContractProcedure<z.ZodObject<{
+            id: z.ZodString;
+            limit: z.ZodOptional<z.ZodNumber>;
+            cursor: z.ZodOptional<z.ZodString>;
+        }, z.core.$strip>, z.ZodObject<{
+            messages: z.ZodArray<z.ZodObject<{
+                id: z.ZodString;
+                threadId: z.ZodString;
+                role: z.ZodEnum<{
+                    user: "user";
+                    assistant: "assistant";
+                }>;
+                text: z.ZodString;
+                createdAt: z.ZodNullable<z.ZodString>;
+                status: z.ZodEnum<{
+                    submitted: "submitted";
+                    finalized: "finalized";
+                    failed: "failed";
+                }>;
+                sequence: z.ZodNumber;
+                runId: z.ZodNullable<z.ZodString>;
+                attachments: z.ZodOptional<z.ZodArray<z.ZodObject<{
+                    id: z.ZodString;
+                    kind: z.ZodEnum<{
+                        audio: "audio";
+                        image: "image";
+                        document: "document";
+                    }>;
+                    mimeType: z.ZodString;
+                    filename: z.ZodOptional<z.ZodString>;
+                    sizeBytes: z.ZodOptional<z.ZodNumber>;
+                }, z.core.$strip>>>;
+            }, z.core.$strip>>;
+            nextCursor: z.ZodNullable<z.ZodString>;
+            hasMore: z.ZodBoolean;
+            total: z.ZodNumber;
+        }, z.core.$strip>, import("@orpc/contract").MergedErrorMap<Record<never, never>, import("@orpc/contract").MergedErrorMap<Record<never, never>, {
+            UNAUTHORIZED: {
+                status: number;
+                message: string;
+            };
+            NOT_FOUND: {
+                status: number;
+                message: string;
+            };
+            BAD_REQUEST: {
+                status: number;
+                message: string;
+            };
+            PRECONDITION_FAILED: {
                 status: number;
                 message: string;
             };
