@@ -1,7 +1,7 @@
 {
   "extends": "bos://work.efiz.near/nearbuilders.org",
   "account": "work.efiz.near",
-  "domain": "ironclaw.everything.dev",
+  "domain": "korea.nearbuilders.org",
   "title": "IronClaw",
   "description": "IronClaw Reborn Dashboard Interface",
   "staging": {

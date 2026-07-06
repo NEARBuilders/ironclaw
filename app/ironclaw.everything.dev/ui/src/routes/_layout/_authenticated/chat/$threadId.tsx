@@ -70,26 +70,6 @@ function ThreadLayout() {
     };
   }, [threadId, threadsQuery.data]);
 
-  const threadState = useMemo(
-    () =>
-      threadMeta
-        ? {
-            thread: {
-              threadId: threadMeta.threadId,
-              title: threadMeta.title,
-              scope: {
-                tenantId: threadMeta.scope.tenantId,
-                agentId: threadMeta.scope.agentId,
-                projectId: threadMeta.scope.projectId,
-              },
-              createdByActorId: threadMeta.createdByActorId,
-            },
-            messages: [],
-          }
-        : null,
-    [threadMeta],
-  );
-
   if (isLogsRoute) return <Outlet />;
 
   const firstPendingApproval = chat.pendingApprovals[0];
@@ -100,7 +80,22 @@ function ThreadLayout() {
   return (
     <>
       <ChatIdentityBar
-        threadState={threadState}
+        threadState={
+          threadMeta
+            ? {
+                thread: {
+                  threadId: threadMeta.threadId,
+                  title: threadMeta.title,
+                  scope: {
+                    tenantId: threadMeta.scope.tenantId,
+                    agentId: threadMeta.scope.agentId,
+                    projectId: threadMeta.scope.projectId,
+                  },
+                  createdByActorId: threadMeta.createdByActorId,
+                },
+              }
+            : null
+        }
         onOpenMobileSidebar={onOpenMobileSidebar}
         onToggleDesktopSidebar={onToggleDesktopSidebar}
         activeThreadTitle={threadMeta?.title ?? `Thread ${threadId.slice(0, 8)}`}

@@ -44,10 +44,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { type ConversationThread, useConversationThreads } from "@/hooks/use-conversation";
 import { ironclawStatusQueryKey, useIronclawStatus } from "@/hooks/use-ironclaw-status";
-import {
-  getThreadStatuses,
-  subscribe as subscribeThreadStatus,
-} from "@/lib/conversation-thread-status";
 
 export const Route = createFileRoute("/_layout/_authenticated/chat")({
   beforeLoad: async ({ context }) => {
@@ -149,7 +145,6 @@ function ChatLayout() {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [, tick] = useState(0);
 
   const filteredThreads = useMemo(() => {
     if (!searchQuery.trim()) return threads;
@@ -160,29 +155,9 @@ function ChatLayout() {
     });
   }, [threads, searchQuery]);
 
-  const threadState = useMemo(() => {
-    const map = new Map<string, "running" | "needs-attention">();
-    const statuses = getThreadStatuses();
-    for (const thread of threads) {
-      const status = statuses.get(thread.threadId);
-      if (!status) continue;
-      if (status.hasPendingApprovals && thread.threadId !== activeThreadId) {
-        map.set(thread.threadId, "needs-attention");
-      } else if (status.isLoading || status.hasActiveRun) {
-        map.set(thread.threadId, "running");
-      }
-    }
-    return map;
-  }, [threads, tick]);
-
   useEffect(() => {
     setSheetOpen(false);
   }, [location.pathname]);
-
-  useEffect(() => {
-    const unsub = subscribeThreadStatus(() => tick((n) => n + 1));
-    return unsub;
-  }, [subscribeThreadStatus]);
 
   const isResizing = useRef(false);
   const startX = useRef(0);
@@ -353,12 +328,6 @@ function ChatLayout() {
                         </button>
                       )}
                       <span className="relative shrink-0">
-                        {threadState.get(thread.threadId) === "running" && (
-                          <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-[color:var(--near-green)]" />
-                        )}
-                        {threadState.get(thread.threadId) === "needs-attention" && (
-                          <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-500" />
-                        )}
                         <MessageSquare size={14} />
                       </span>
                       <span className="truncate text-xs">
@@ -560,7 +529,7 @@ function ChatLayout() {
         <div className="flex flex-1 flex-col min-w-0 h-full overflow-hidden">
           <Outlet />
         </div>
-      </div>
+        </div>
 
       <Dialog
         open={deleteConfirmTarget !== null}

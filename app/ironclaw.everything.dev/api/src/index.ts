@@ -978,6 +978,22 @@ export default createPlugin.withPlugins<PluginsClient>()({
             }
           }),
 
+        subscribeThread: builder.conversation.subscribeThread
+          .use(requireAuth)
+          .handler(async function* ({ input, signal, context }: any) {
+            const resolvedContext = await resolveConversationContext(input.pluginId, context);
+            const client = resolveConversationPlugin(input.pluginId, resolvedContext);
+            const gen = await client.bridge.threadChat({
+              threadId: input.threadId,
+              messages: [],
+              forwardedProps: input.afterCursor ? { afterCursor: input.afterCursor } : undefined,
+            });
+            for await (const event of gen) {
+              if (signal?.aborted) break;
+              yield event;
+            }
+          }),
+
         threadApprove: builder.conversation.threadApprove
           .use(requireAuth)
           .handler(async ({ input, context }: any) => {

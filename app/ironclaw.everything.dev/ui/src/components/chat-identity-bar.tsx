@@ -14,8 +14,6 @@ interface ThreadState {
     };
     createdByActorId?: string;
   };
-  messages: Array<Record<string, unknown>>;
-  summaryArtifacts?: Array<Record<string, unknown>>;
 }
 
 interface ChatIdentityBarProps {

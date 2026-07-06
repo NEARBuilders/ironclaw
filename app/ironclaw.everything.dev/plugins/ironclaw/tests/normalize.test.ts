@@ -209,8 +209,25 @@ describe("createThreadChatBridge", () => {
 
     expect(svc.sendMessage).toHaveBeenCalledTimes(1);
     expect(events[0]!.type).toBe("RUN_STARTED");
+    expect(events.some((e) => e.type === "TEXT_MESSAGE_END")).toBe(true);
     expect(events.some((e) => e.type === "TEXT_MESSAGE_CONTENT")).toBe(true);
     expect(events[events.length - 1]!.type).toBe("RUN_FINISHED");
+  });
+
+  it("can stream subscription-only updates without sending a message", async () => {
+    const svc = mockSvc([
+      event("projection_update", {
+        state: {
+          items: [{ runStatus: { runId: "sub-run-1", status: "running" } }],
+        },
+      }),
+    ]);
+
+    const handler = createThreadChatBridge(svc);
+    const events = await collectEvents(handler, { threadId: "thread-1", messages: [] });
+
+    expect(svc.sendMessage).not.toHaveBeenCalled();
+    expect(events.length).toBeGreaterThan(0);
   });
 
   it("emits approval-requested for gate events", async () => {

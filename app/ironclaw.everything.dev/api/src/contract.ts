@@ -411,6 +411,22 @@ export const contract = oc.router({
       .output(eventIterator(ConversationLiveChunkSchema))
       .errors({ UNAUTHORIZED, NOT_FOUND, BAD_REQUEST, PRECONDITION_FAILED }),
 
+    subscribeThread: oc
+      .route({
+        method: "POST",
+        path: "/conversation/threads/{threadId}/events",
+        summary: "Subscribe to live conversation events",
+      })
+      .input(
+        z.object({
+          threadId: z.string(),
+          afterCursor: z.string().optional(),
+          pluginId: z.string().optional(),
+        }),
+      )
+      .output(eventIterator(ConversationLiveChunkSchema))
+      .errors({ UNAUTHORIZED, NOT_FOUND, BAD_REQUEST, PRECONDITION_FAILED }),
+
     threadApprove: oc
       .route({
         method: "POST",

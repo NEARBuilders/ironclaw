@@ -28,6 +28,10 @@ export interface ConversationThread {
 
 const THREADS_KEY = ["conversation", "threads"] as const;
 
+export function threadMessagesQueryKey(threadId: string) {
+  return ["conversation", "messages", threadId] as const;
+}
+
 export function threadListQueryOptions(apiClient: ApiClient) {
   return {
     queryKey: THREADS_KEY,
@@ -41,7 +45,7 @@ export function threadListQueryOptions(apiClient: ApiClient) {
 
 export function threadMessagesQueryOptions(apiClient: ApiClient, threadId: string) {
   return {
-    queryKey: ["conversation", "messages", threadId] as const,
+    queryKey: threadMessagesQueryKey(threadId),
     queryFn: async () => {
       const page = await apiClient.conversation.getMessages({ threadId, limit: 100 });
       return messagesToUIMessages(page.messages ?? []);

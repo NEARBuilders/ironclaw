@@ -12,10 +12,13 @@ import {
   Wrench,
 } from "lucide-react";
 import { useState } from "react";
-import { parseToolResultEnvelope } from "@/lib/conversation-message-parts";
-import { cn } from "@/lib/utils";
+import {
+  parseToolResultEnvelope,
+  type ToolResultEnvelope,
+} from "../lib/conversation-message-parts";
+import { cn } from "../lib/utils";
 
-type ToolItem = {
+export type ToolItem = {
   call: ToolCallPart;
   result?: ToolResultPart;
 };
@@ -79,6 +82,33 @@ function toolStatus(item: ToolItem): "running" | "success" | "error" {
     default:
       return "running";
   }
+}
+
+export function resolveToolRunEnvelope(item: ToolItem): ToolResultEnvelope | null {
+  const resultEnvelope = parseToolResultEnvelope(item.result?.content);
+  if (resultEnvelope?.output?.trim()) return resultEnvelope;
+
+  const callEnvelope = parseToolResultEnvelope(item.call.output);
+  if (callEnvelope?.output?.trim()) return callEnvelope;
+
+  return resultEnvelope ?? callEnvelope;
+}
+
+export function resolveToolRunResultText(item: ToolItem): string | null {
+  const envelope = resolveToolRunEnvelope(item);
+  if (envelope?.output?.trim()) return envelope.output;
+
+  const resultContent = item.result?.content;
+  if (typeof resultContent === "string" && resultContent.trim()) {
+    return resultContent;
+  }
+
+  const callOutput = item.call.output;
+  if (typeof callOutput === "string" && callOutput.trim()) {
+    return callOutput;
+  }
+
+  return null;
 }
 
 function RichResult({ text }: { text: string }) {
@@ -172,14 +202,14 @@ function ToolDetailPanel({
   resultContent,
   verbose,
 }: {
-  envelope: ReturnType<typeof parseToolResultEnvelope>;
+  envelope: ToolResultEnvelope | null;
   resultContent: string | null;
   verbose?: boolean;
 }) {
   const tabs: { id: string; label: string; content: React.ReactNode }[] = [];
 
-  if (resultContent) {
-    const displayText = envelope?.output ?? resultContent;
+  if (resultContent !== null) {
+    const displayText = envelope?.output?.trim() ? envelope.output : resultContent;
     tabs.push({ id: "result", label: "Result", content: <RichResult text={displayText} /> });
   }
   if (envelope?.inputSummary) {
@@ -238,9 +268,8 @@ function ToolRunRow({ item, verbose }: { item: ToolItem; verbose?: boolean }) {
   const Icon = toolIcon(item.call.name);
   const [expanded, setExpanded] = useState(status === "error");
 
-  const resultContent =
-    item.result && typeof item.result.content === "string" ? item.result.content : null;
-  const envelope = parseToolResultEnvelope(item.result?.content ?? item.call.output);
+  const envelope = resolveToolRunEnvelope(item);
+  const resultContent = resolveToolRunResultText(item);
 
   const inputFromArgs = (() => {
     if (envelope?.inputSummary) return envelope.inputSummary;

@@ -1,27 +1,37 @@
-import type { StreamChunk, UIMessage } from "@tanstack/ai";
-import { useChat, fetchServerSentEvents } from "@tanstack/ai-react";
+import type { UIMessage } from "@tanstack/ai";
+import type { StreamChunk } from "@tanstack/ai/client";
+import { useChat } from "@tanstack/ai-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useApiClient } from "@/app";
 import type { AuthGate, PendingApproval } from "@/hooks/conversation-chat-types";
 import type { StagedAttachment } from "@/lib/attachments";
-import { clearThreadStatus, setThreadStatus } from "@/lib/conversation-thread-status";
+import { threadMessagesQueryKey } from "@/hooks/use-conversation";
+import { createThreadLiveConnection } from "@/chat/thread-live-connection";
 
-type GateResolution = "approved" | "denied" | "credential_provided" | "cancelled";
-
-interface UseConversationChatOptions {
+export interface UseConversationChatOptions {
   threadId: string;
   initialMessages: UIMessage[];
 }
 
+type GateResolution = "approved" | "denied" | "credential_provided" | "cancelled";
+
+function threadResumeCursorKey(threadId: string) {
+  return ["conversation", "thread-resume-cursor", threadId] as const;
+}
+
 export function useConversationChat({ threadId, initialMessages }: UseConversationChatOptions) {
   const apiClient = useApiClient();
+  const queryClient = useQueryClient();
 
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [authGates, setAuthGates] = useState<AuthGate[]>([]);
   const [runId, setRunId] = useState<string | null>(null);
   const [streamInterrupted, setStreamInterrupted] = useState(false);
   const [systemMessages, setSystemMessages] = useState<UIMessage[]>([]);
-  const [cursor, setCursor] = useState<string | undefined>();
+  const [cursor, setCursor] = useState<string | undefined>(() =>
+    queryClient.getQueryData<string>(threadResumeCursorKey(threadId)) ?? undefined,
+  );
 
   const runIdRef = useRef<string | null>(null);
   const runCompletedNormallyRef = useRef(false);
@@ -29,48 +39,55 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
   const intentionalStopRef = useRef(false);
   const pendingErrorDataRef = useRef<unknown>(null);
   const prevLoadingRef = useRef(false);
+  const cursorRef = useRef<string | undefined>(cursor);
+
+  useEffect(() => {
+    const cachedCursor = queryClient.getQueryData<string>(threadResumeCursorKey(threadId)) ?? undefined;
+    setCursor(cachedCursor);
+    cursorRef.current = cachedCursor;
+    runIdRef.current = null;
+    runCompletedNormallyRef.current = false;
+    runErroredRef.current = false;
+    intentionalStopRef.current = false;
+    pendingErrorDataRef.current = null;
+    prevLoadingRef.current = false;
+    setSystemMessages([]);
+    setPendingApprovals([]);
+    setAuthGates([]);
+    setRunId(null);
+    setStreamInterrupted(false);
+  }, [queryClient, threadId]);
+
+  const updateCursor = useCallback(
+    (next: string | undefined) => {
+      cursorRef.current = next;
+      setCursor(next);
+      if (next === undefined) {
+        queryClient.removeQueries({ queryKey: threadResumeCursorKey(threadId) });
+      } else {
+        queryClient.setQueryData(threadResumeCursorKey(threadId), next);
+      }
+    },
+    [queryClient, threadId],
+  );
 
   const connection = useMemo(
     () =>
-      fetchServerSentEvents(
-        () => `/api/conversation/threads/${encodeURIComponent(threadId)}/chat`,
-      ),
-    [threadId],
+      createThreadLiveConnection({
+        apiClient,
+        threadId,
+        getCursor: () => cursorRef.current,
+        setCursor: updateCursor,
+      }),
+    [apiClient, threadId, updateCursor],
   );
-
-  const persistence = useMemo(
-    () => ({
-      getItem: (id: string) => {
-        try {
-          const raw = sessionStorage.getItem(`ic:msg:${id}`);
-          return raw ? (JSON.parse(raw) as UIMessage[]) : null;
-        } catch {
-          return null;
-        }
-      },
-      setItem: (id: string, messages: UIMessage[]) => {
-        try {
-          sessionStorage.setItem(`ic:msg:${id}`, JSON.stringify(messages));
-        } catch {}
-      },
-      removeItem: (id: string) => {
-        try {
-          sessionStorage.removeItem(`ic:msg:${id}`);
-        } catch {}
-      },
-    }),
-    [],
-  );
-
-  const forwardedProps = useMemo(() => ({ afterCursor: cursor }), [cursor]);
 
   const chat = useChat({
     connection,
     initialMessages,
     threadId,
     id: threadId,
-    persistence,
-    forwardedProps,
+    live: true,
     devtools: { name: `Thread ${threadId.slice(0, 8)}` },
 
     onChunk(chunk: StreamChunk) {
@@ -82,11 +99,6 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
         runCompletedNormallyRef.current = false;
         runErroredRef.current = false;
         intentionalStopRef.current = false;
-        setThreadStatus(threadId, {
-          hasActiveRun: true,
-          isLoading: true,
-          hasPendingApprovals: false,
-        });
         return;
       }
 
@@ -96,13 +108,10 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
         setRunId(null);
         setPendingApprovals([]);
         setAuthGates([]);
-        setThreadStatus(threadId, { hasActiveRun: false, isLoading: false, hasPendingApprovals: false });
 
         const errorData = pendingErrorDataRef.current;
         pendingErrorDataRef.current = null;
-        const errorParts: UIMessage["parts"] = [
-          { type: "text" as const, content: chunk.message ?? "Run failed" },
-        ];
+        const errorParts: UIMessage["parts"] = [{ type: "text" as const, content: chunk.message ?? "Run failed" }];
         if (errorData) {
           (errorParts as unknown[]).push({ type: "error-data" as const, content: errorData });
         }
@@ -123,7 +132,6 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
         setRunId(null);
         setPendingApprovals([]);
         setAuthGates([]);
-        setThreadStatus(threadId, { hasActiveRun: false, isLoading: false, hasPendingApprovals: false });
         return;
       }
 
@@ -152,7 +160,6 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
               | undefined,
           },
         ]);
-        setThreadStatus(threadId, { hasPendingApprovals: true });
         return;
       }
 
@@ -204,39 +211,34 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
 
       if (name === "cursor") {
         const c = (val?.cursor as string) ?? undefined;
-        if (c) setCursor(c);
-        return;
+        if (c) {
+          updateCursor(c);
+        }
       }
     },
   });
 
   useEffect(() => {
+    if (chat.messages.length === 0 && initialMessages.length > 0) {
+      chat.setMessages(initialMessages);
+    }
+  }, [chat.messages, chat.setMessages, initialMessages]);
+
+  useEffect(() => {
+    if (chat.messages.length === 0) return;
+    queryClient.setQueryData(threadMessagesQueryKey(threadId), chat.messages);
+  }, [chat.messages, queryClient, threadId]);
+
+  const messages = useMemo(() => [...chat.messages, ...systemMessages], [chat.messages, systemMessages]);
+
+  useEffect(() => {
     if (prevLoadingRef.current && !chat.isLoading) {
-      if (
-        !runCompletedNormallyRef.current &&
-        !runErroredRef.current &&
-        !intentionalStopRef.current
-      ) {
+      if (!runCompletedNormallyRef.current && !runErroredRef.current && !intentionalStopRef.current) {
         setStreamInterrupted(true);
       }
     }
     prevLoadingRef.current = chat.isLoading;
   }, [chat.isLoading]);
-
-  useEffect(() => {
-    setSystemMessages([]);
-    setPendingApprovals([]);
-    setAuthGates([]);
-    setRunId(null);
-    setStreamInterrupted(false);
-    setCursor(undefined);
-  }, [threadId]);
-
-  useEffect(() => {
-    return () => {
-      clearThreadStatus(threadId);
-    };
-  }, [threadId]);
 
   const sendMessage = useCallback(
     (content: string, attachments?: StagedAttachment[]) => {
@@ -246,32 +248,34 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
       setAuthGates([]);
       setStreamInterrupted(false);
       intentionalStopRef.current = false;
-      setThreadStatus(threadId, { hasPendingApprovals: false });
 
       if (attachments?.length) {
-        chat
+        void chat
           .sendMessage({
             content: [
               { type: "text", content } as const,
-              ...attachments.map(
-                (a) =>
-                  ({
-                    type: "image",
-                    source: { type: "data", value: a.dataBase64, mimeType: a.mimeType },
-                  }) as const,
-              ),
+              ...attachments.map((a) => {
+                const type: "image" | "document" = a.mimeType.startsWith("image/")
+                  ? "image"
+                  : "document";
+                return {
+                  type,
+                  source: { type: "data", value: a.dataBase64, mimeType: a.mimeType },
+                } as const;
+              }),
             ],
           })
           .catch((err) => {
             console.error("[ironclaw] sendMessage stream failed:", err);
           });
-      } else {
-        chat.sendMessage(content).catch((err) => {
-          console.error("[ironclaw] sendMessage stream failed:", err);
-        });
+        return;
       }
+
+      void chat.sendMessage(content).catch((err) => {
+        console.error("[ironclaw] sendMessage stream failed:", err);
+      });
     },
-    [chat, threadId],
+    [chat],
   );
 
   const stop = useCallback(() => {
@@ -280,9 +284,13 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
     if (currentRunId) {
       apiClient.conversation.cancelRun({ threadId, runId: currentRunId }).catch(() => {});
     }
-    setThreadStatus(threadId, { hasActiveRun: false, isLoading: false, hasPendingApprovals: false });
+    runIdRef.current = null;
+    setRunId(null);
+    setPendingApprovals([]);
+    setAuthGates([]);
+    setStreamInterrupted(false);
     chat.stop();
-  }, [chat, apiClient, threadId]);
+  }, [apiClient, chat, threadId]);
 
   const resolveGate = useCallback(
     async (
@@ -299,11 +307,7 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
         always: opts?.always,
         credentialRef: opts?.credentialRef,
       });
-      setPendingApprovals((prev) => {
-        const next = prev.filter((approval) => approval.gateRef !== gateRef);
-        setThreadStatus(threadId, { hasPendingApprovals: next.length > 0 });
-        return next;
-      });
+      setPendingApprovals((prev) => prev.filter((approval) => approval.gateRef !== gateRef));
     },
     [apiClient, threadId],
   );
@@ -330,8 +334,7 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
   );
 
   const copyConversation = useCallback(async () => {
-    const all = [...chat.messages, ...systemMessages];
-    const text = all
+    const text = messages
       .map((msg) => {
         const role = msg.role === "user" ? "User" : "Assistant";
         const textParts: string[] = [];
@@ -353,10 +356,10 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
       })
       .join("\n\n---\n\n");
     await navigator.clipboard.writeText(text);
-  }, [chat.messages, systemMessages]);
+  }, [messages]);
 
   return {
-    messages: [...chat.messages, ...systemMessages],
+    messages,
     isLoading: chat.isLoading,
     error: chat.error?.message ?? null,
     runId,
@@ -369,5 +372,8 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
     submitAuthToken,
     copyConversation,
     threadId,
+    isSubscribed: chat.isSubscribed,
+    connectionStatus: chat.connectionStatus,
+    sessionGenerating: chat.sessionGenerating,
   };
 }

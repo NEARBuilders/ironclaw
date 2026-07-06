@@ -38,6 +38,10 @@ function normalizeDetails(value: unknown): string | undefined {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function serializeToolResultEnvelope(envelope: {
   output: string;
   outputKind: string | null;
@@ -46,6 +50,80 @@ function serializeToolResultEnvelope(envelope: {
   title: string;
 }): string {
   return JSON.stringify(envelope);
+}
+
+function firstNonEmptyText(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+  if (value == null) return null;
+  try {
+    const text = JSON.stringify(value);
+    return text && text !== "{}" && text !== "[]" ? text : null;
+  } catch {
+    const text = String(value).trim();
+    return text ? text : null;
+  }
+}
+
+function readFirstText(source: Record<string, unknown> | undefined, keys: string[]): string | null {
+  if (!source) return null;
+  for (const key of keys) {
+    const text = firstNonEmptyText(source[key]);
+    if (text) return text;
+  }
+  return null;
+}
+
+function buildToolResultEnvelope(
+  source: Record<string, unknown> | undefined,
+  fallback?: Partial<{
+    output: string | null;
+    outputKind: string | null;
+    truncated: boolean;
+    inputSummary: string | null;
+    title: string;
+  }>,
+): string {
+  const title =
+    readFirstText(source, ["title", "name", "toolName", "capabilityId", "capability_id"]) ??
+    fallback?.title ??
+    "tool";
+  const output =
+    readFirstText(source, [
+      "output",
+      "outputPreview",
+      "output_preview",
+      "outputSummary",
+      "output_summary",
+      "result",
+      "resultPreview",
+      "result_preview",
+      "summary",
+      "text",
+      "content",
+      "message",
+      "details",
+    ]) ??
+    fallback?.output ??
+    "";
+  const inputSummary =
+    readFirstText(source, ["inputSummary", "input_summary", "input", "query", "prompt"]) ??
+    fallback?.inputSummary ??
+    null;
+  const outputKind =
+    readFirstText(source, ["outputKind", "output_kind", "kind", "format"]) ??
+    fallback?.outputKind ??
+    null;
+
+  return serializeToolResultEnvelope({
+    output,
+    outputKind,
+    truncated: Boolean(source?.truncated ?? source?.isTruncated ?? fallback?.truncated),
+    inputSummary,
+    title,
+  });
 }
 
 function resolveToolCallId(
@@ -150,7 +228,7 @@ function extractUserInput(
 
   for (const part of parts) {
     if (part.type === "image" || part.type === "file" || part.type === "document") {
-      const src = part.source;
+      const src = isRecord(part.source) ? part.source : undefined;
       if (src?.type === "data" && src.value) {
         attachments.push({
           mimeType: src.mimeType ?? (part.type === "image" ? "image/png" : "application/octet-stream"),
@@ -164,7 +242,7 @@ function extractUserInput(
   if (attachments.length === 0 && Array.isArray(content)) {
     for (const part of content) {
       if (part.type === "image" || part.type === "file" || part.type === "document") {
-        const src = part.source;
+        const src = isRecord(part.source) ? part.source : undefined;
         if (src?.type === "data" && src.value) {
           attachments.push({
             mimeType: src.mimeType ?? (part.type === "image" ? "image/png" : "application/octet-stream"),
@@ -222,16 +300,19 @@ export function createThreadChatBridge(svc: BridgeService) {
       forwardedProps?.attachments as unknown[] | undefined,
     );
 
-    const ack: AcceptedResponse = await svc.sendMessage({
-      id: threadId,
-      content: text,
-      clientActionId,
-      attachments: attachments as
-        | Array<{ mimeType: string; filename?: string; dataBase64: string }>
-        | undefined,
-    });
+    const shouldSend = Boolean(text.trim() || (attachments?.length ?? 0) > 0);
+    const ack: AcceptedResponse | undefined = shouldSend
+      ? await svc.sendMessage({
+          id: threadId,
+          content: text,
+          clientActionId,
+          attachments: attachments as
+            | Array<{ mimeType: string; filename?: string; dataBase64: string }>
+            | undefined,
+        })
+      : undefined;
 
-    if (ack.outcome === "rejected_busy") {
+    if (ack?.outcome === "rejected_busy") {
       yield {
         type: "RUN_ERROR" as const,
         threadId,
@@ -241,7 +322,7 @@ export function createThreadChatBridge(svc: BridgeService) {
       return;
     }
 
-    const ackRunId = ack.runId;
+    const ackRunId = ack?.runId;
     const afterCursor = forwardedProps?.afterCursor as string | undefined;
     const upstream = svc.streamEvents({
       id: threadId,
@@ -259,6 +340,7 @@ export function createThreadChatBridge(svc: BridgeService) {
     const emitRunStarted = (runId: string | undefined): LiveChunk[] => {
       if (runStarted) return [];
       runStarted = true;
+      messageOpened = true;
       const rid = runId ?? ackRunId ?? crypto.randomUUID();
       return [
         { type: "RUN_STARTED", threadId, runId: rid } as LiveChunk,
@@ -348,20 +430,14 @@ export function createThreadChatBridge(svc: BridgeService) {
           });
           if (resultEntry) {
             const c = JSON.parse(resultEntry.content);
-            const title = c.title ?? preview?.title ?? "tool";
-            const envelope = serializeToolResultEnvelope({
-              output:
-                c.output ??
-                c.output_preview ??
-                c.output_summary ??
-                preview?.outputSummary ??
-                preview?.outputPreview ??
-                "",
-              outputKind: c.output_kind ?? c.outputKind ?? preview?.outputKind ?? null,
-              truncated: Boolean(c.truncated ?? preview?.truncated),
-              inputSummary: c.input_summary ?? c.inputSummary ?? preview?.inputSummary ?? null,
-              title,
+            const envelope = buildToolResultEnvelope(c, {
+              output: preview?.outputSummary ?? preview?.outputPreview ?? null,
+              outputKind: preview?.outputKind ?? null,
+              truncated: Boolean(preview?.truncated),
+              inputSummary: preview?.inputSummary ?? null,
+              title: preview?.title ?? undefined,
             });
+            const title = preview?.title ?? c.title ?? c.name ?? c.capabilityId ?? "tool";
             yield emitToolEnd(
               invocationId,
               title,
@@ -372,8 +448,8 @@ export function createThreadChatBridge(svc: BridgeService) {
             );
           } else if (preview) {
             const title = preview.title ?? "tool";
-            const envelope = serializeToolResultEnvelope({
-              output: preview.outputSummary ?? preview.outputPreview ?? "",
+            const envelope = buildToolResultEnvelope(preview, {
+              output: preview.outputSummary ?? preview.outputPreview ?? null,
               outputKind: preview.outputKind ?? null,
               truncated: Boolean(preview.truncated),
               inputSummary: preview.inputSummary ?? null,
@@ -396,8 +472,8 @@ export function createThreadChatBridge(svc: BridgeService) {
           const preview = pendingPreviews.get(invocationId);
           const title = preview?.title ?? preview?.capabilityId ?? "tool";
           if (preview) {
-            const envelope = serializeToolResultEnvelope({
-              output: preview.outputSummary ?? preview.outputPreview ?? "",
+            const envelope = buildToolResultEnvelope(preview, {
+              output: preview.outputSummary ?? preview.outputPreview ?? null,
               outputKind: preview.outputKind ?? null,
               truncated: Boolean(preview.truncated),
               inputSummary: preview.inputSummary ?? null,
@@ -768,8 +844,8 @@ export function createThreadChatBridge(svc: BridgeService) {
                     yield emitToolArgs(invocationId, JSON.stringify({ input: "" }), projRunId);
                   }
                   const errorKind = (ca.errorKind ?? ca.error_kind) as string | undefined;
-                  const envelope = serializeToolResultEnvelope({
-                    output: errorKind ? `Error: ${errorKind}` : "",
+                  const envelope = buildToolResultEnvelope(ca, {
+                    output: errorKind ? `Error: ${errorKind}` : null,
                     outputKind: null,
                     truncated: false,
                     inputSummary: null,
@@ -892,13 +968,13 @@ export function createThreadChatBridge(svc: BridgeService) {
                   try {
                     const raw = await svc.getTimeline({ id: threadId, limit: 10 });
                     const entries: any[] = raw.data ?? [];
-                const assistantText = findAssistantTextForRun(entries, runId);
-                if (assistantText) {
-                  terminalTextEmitted = true;
-                  const msgId = assistantMessageId(runId);
-                  yield {
-                    type: "TEXT_MESSAGE_CONTENT",
-                    threadId,
+                    const assistantText = findAssistantTextForRun(entries, runId);
+                    if (assistantText) {
+                      terminalTextEmitted = true;
+                      const msgId = assistantMessageId(runId);
+                      yield {
+                        type: "TEXT_MESSAGE_CONTENT",
+                        threadId,
                         runId,
                         messageId: msgId,
                         delta: assistantText,
