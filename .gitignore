@@ -69,6 +69,8 @@ trace_*.json
 # `webui-v2-beta` is enabled; the reviewable source lives under static/js/.
 /crates/ironclaw_webui_v2_static/static/dist/
 
+node_modules/
+
 # Python cache
 __pycache__/
 *.pyc
