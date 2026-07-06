@@ -24,8 +24,8 @@ export const Route = createFileRoute("/_layout/_authenticated/chat/$threadId")({
       await context.queryClient.ensureQueryData(
         threadMessagesQueryOptions(context.apiClient, params.threadId),
       );
-    } catch {
-      // IronClaw not available
+    } catch (err) {
+      console.error("[chat] Failed to pre-fetch thread messages:", err);
     }
   },
   component: ThreadLayout,
@@ -178,6 +178,7 @@ function ThreadLayout() {
       ) : null}
 
       <ChatMessageList
+        threadId={threadId}
         streamLoading={isBusy}
         empty={messagesWithContent.length === 0 && !isBusy}
         emptyMessage="No messages yet. Send a message to start."

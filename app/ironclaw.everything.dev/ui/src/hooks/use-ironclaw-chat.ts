@@ -21,6 +21,7 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
   const [runId, setRunId] = useState<string | null>(null);
   const [streamInterrupted, setStreamInterrupted] = useState(false);
   const [systemMessages, setSystemMessages] = useState<UIMessage[]>([]);
+  const [cursor, setCursor] = useState<string | undefined>();
 
   const runIdRef = useRef<string | null>(null);
   const runCompletedNormallyRef = useRef(false);
@@ -37,10 +38,39 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
     [threadId],
   );
 
+  const persistence = useMemo(
+    () => ({
+      getItem: (id: string) => {
+        try {
+          const raw = sessionStorage.getItem(`ic:msg:${id}`);
+          return raw ? (JSON.parse(raw) as UIMessage[]) : null;
+        } catch {
+          return null;
+        }
+      },
+      setItem: (id: string, messages: UIMessage[]) => {
+        try {
+          sessionStorage.setItem(`ic:msg:${id}`, JSON.stringify(messages));
+        } catch {}
+      },
+      removeItem: (id: string) => {
+        try {
+          sessionStorage.removeItem(`ic:msg:${id}`);
+        } catch {}
+      },
+    }),
+    [],
+  );
+
+  const forwardedProps = useMemo(() => ({ afterCursor: cursor }), [cursor]);
+
   const chat = useChat({
     connection,
     initialMessages,
     threadId,
+    id: threadId,
+    persistence,
+    forwardedProps,
     devtools: { name: `Thread ${threadId.slice(0, 8)}` },
 
     onChunk(chunk: StreamChunk) {
@@ -169,6 +199,13 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
         }
         return;
       }
+
+      if (name === "ironclaw.cursor") {
+        const c = (val?.cursor as string) ?? undefined;
+        console.log("[client]", threadId.slice(0, 8), "captured cursor:", c?.slice(0, 30));
+        if (c) setCursor(c);
+        return;
+      }
     },
   });
 
@@ -191,18 +228,19 @@ export function useIronclawChat({ threadId, initialMessages }: UseIronclawChatOp
     setAuthGates([]);
     setRunId(null);
     setStreamInterrupted(false);
+    setCursor(undefined);
   }, [threadId]);
+
+  useEffect(() => {
+    console.log("[client]", threadId.slice(0, 8), "forwardedProps.afterCursor:",
+      cursor ? cursor.slice(0, 30) : "NONE");
+  }, [cursor]);
 
   useEffect(() => {
     return () => {
       clearThreadStatus(threadId);
     };
   }, [threadId]);
-
-  useEffect(() => {
-    if (initialMessages.length === 0) return;
-    chat.setMessages(initialMessages);
-  }, [initialMessages, chat.setMessages]);
 
   const sendMessage = useCallback(
     (content: string, attachments?: StagedAttachment[]) => {

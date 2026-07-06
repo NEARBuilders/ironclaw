@@ -46,6 +46,7 @@ export function threadMessagesQueryOptions(apiClient: ApiClient, threadId: strin
       const page = await apiClient.conversation.getMessages({ threadId, limit: 100 });
       return messagesToUIMessages(page.messages ?? []);
     },
+    staleTime: 30_000,
   } as const;
 }
 

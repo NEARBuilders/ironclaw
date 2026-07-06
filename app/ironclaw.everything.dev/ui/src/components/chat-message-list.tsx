@@ -8,6 +8,7 @@ interface ChatMessageListProps {
   empty?: boolean;
   emptyMessage?: string;
   streamLoading?: boolean;
+  threadId?: string;
 }
 
 const NEAR_BOTTOM_THRESHOLD = 120;
@@ -17,6 +18,7 @@ export function ChatMessageList({
   empty,
   emptyMessage = "No messages yet",
   streamLoading,
+  threadId,
 }: ChatMessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -58,6 +60,11 @@ export function ChatMessageList({
   const prevStreamLoadingRef = useRef(streamLoading);
   const userScrolledAwayRef = useRef(false);
   const lastKnownScrollTopRef = useRef(0);
+
+  useEffect(() => {
+    userScrolledAwayRef.current = false;
+    requestAnimationFrame(() => scrollToBottom("instant"));
+  }, [threadId]);
 
   useEffect(() => {
     const wasEmpty = prevEmptyRef.current;

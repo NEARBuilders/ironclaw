@@ -232,15 +232,19 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
     }
 
     const ackRunId = ack.runId;
+    const afterCursor = forwardedProps?.afterCursor as string | undefined;
+    console.log("[bridge]", threadId.slice(0, 8),
+      afterCursor ? `resume from cursor ${afterCursor.slice(0, 30)}` : "NO cursor — starting from origin");
     const upstream = await ic.threads.streamEvents({
       id: threadId,
-      afterCursor: undefined,
+      afterCursor,
     });
     const pendingPreviews = new Map<string, ChatEvent["preview"]>();
     const activeToolCalls = new Set<string>();
     let runStarted = false;
     let messageOpened = false;
     let terminalTextEmitted = false;
+    let latestCursor: string | undefined;
     const seenTextIds = new Set<string>();
 
     const emitRunStarted = (runId: string | undefined): LiveChunk[] => {
@@ -406,8 +410,14 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
       for await (const raw of upstream as AsyncIterable<ChatEvent>) {
         if (signal?.aborted) break;
 
+        if (raw.cursor) latestCursor = raw.cursor;
+
         const type = raw.type;
         const eventRunId = extractEventRunId(raw) ?? ackRunId ?? crypto.randomUUID();
+
+        if (type?.startsWith("projection") || type === "final_reply") {
+          console.log("[bridge]", type, "cursor:", raw.cursor ? raw.cursor.slice(0, 30) : "MISSING");
+        }
 
         if (type === "accepted" || type === "running") {
           yield* emitRunStarted(eventRunId);
@@ -647,6 +657,7 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
         }
 
         if (type === "projection_snapshot" || type === "projection_update") {
+          if (afterCursor && type === "projection_snapshot") continue;
           const projectionState = raw.state as Record<string, unknown> | undefined;
           const items = projectionState?.items as Array<Record<string, unknown>> | undefined;
           if (items && items.length > 0) {
@@ -996,6 +1007,12 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
         } catch {
           // ignore close failures
         }
+      }
+      if (latestCursor) {
+        console.log("[bridge] yielding cursor:", latestCursor.slice(0, 30));
+        yield emitCustom("ironclaw.cursor", { cursor: latestCursor });
+      } else {
+        console.log("[bridge] WARNING: no cursor to yield");
       }
     }
   };
