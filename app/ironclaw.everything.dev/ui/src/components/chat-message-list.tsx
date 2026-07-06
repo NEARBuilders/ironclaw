@@ -1,5 +1,5 @@
 import { ArrowDown, MessageSquare } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
@@ -38,18 +38,46 @@ export function ChatMessageList({
     bottomRef.current?.scrollIntoView({ behavior, block: "end" });
   }, []);
 
+  const scrollUserMessageToTop = useCallback(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const userMessages = vp.querySelectorAll<HTMLElement>('[data-role="user"]');
+    const lastUser = userMessages[userMessages.length - 1];
+    if (!lastUser) {
+      scrollToBottom("instant");
+      return;
+    }
+    const vpRect = vp.getBoundingClientRect();
+    const msgRect = lastUser.getBoundingClientRect();
+    const topOffset = vpRect.height * 0.2;
+    const targetScrollTop = vp.scrollTop + msgRect.top - vpRect.top - topOffset;
+    vp.scrollTo({ top: Math.max(0, targetScrollTop), behavior: "instant" });
+  }, [scrollToBottom]);
+
   const prevEmptyRef = useRef(empty);
   const prevStreamLoadingRef = useRef(streamLoading);
   const userScrolledAwayRef = useRef(false);
+  const lastKnownScrollTopRef = useRef(0);
 
   useEffect(() => {
     const wasEmpty = prevEmptyRef.current;
+    const prevStreaming = prevStreamLoadingRef.current;
     prevEmptyRef.current = empty;
     prevStreamLoadingRef.current = streamLoading;
 
-    if (wasEmpty && !empty) {
+    const newlyNotEmpty = wasEmpty && !empty;
+    const streamingJustStarted = !prevStreaming && streamLoading;
+
+    if (newlyNotEmpty) {
       userScrolledAwayRef.current = false;
-      requestAnimationFrame(() => scrollToBottom("instant"));
+      requestAnimationFrame(() => scrollUserMessageToTop());
+      return;
+    }
+
+    if (streamingJustStarted) {
+      if (!userScrolledAwayRef.current) {
+        requestAnimationFrame(() => scrollUserMessageToTop());
+      }
       return;
     }
 
@@ -58,7 +86,7 @@ export function ChatMessageList({
     if (isNearBottom()) {
       requestAnimationFrame(() => scrollToBottom("smooth"));
     }
-  }, [children, empty, streamLoading, isNearBottom, scrollToBottom]);
+  }, [children, empty, streamLoading, isNearBottom, scrollToBottom, scrollUserMessageToTop]);
 
   useEffect(() => {
     const vp = viewportRef.current;
@@ -67,7 +95,8 @@ export function ChatMessageList({
     const onScroll = () => {
       const nearBottom = isNearBottom();
       setShowScrollButton(!nearBottom);
-      if (!nearBottom && prevStreamLoadingRef.current) {
+      lastKnownScrollTopRef.current = vp.scrollTop;
+      if (!nearBottom) {
         userScrolledAwayRef.current = true;
       }
       if (nearBottom) {
@@ -78,6 +107,16 @@ export function ChatMessageList({
     vp.addEventListener("scroll", onScroll, { passive: true });
     return () => vp.removeEventListener("scroll", onScroll);
   }, [isNearBottom]);
+
+  useLayoutEffect(() => {
+    if (!userScrolledAwayRef.current) return;
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const snapshot = lastKnownScrollTopRef.current;
+    if (vp.scrollTop !== snapshot) {
+      vp.scrollTop = snapshot;
+    }
+  });
 
   if (empty) {
     return (
@@ -93,14 +132,23 @@ export function ChatMessageList({
   return (
     <div ref={wrapperRef} className="relative min-h-0 flex-1 overflow-hidden">
       <ScrollArea className="h-full">
-        <div className="mx-auto max-w-4xl space-y-4 p-2 sm:p-4">
+        <div
+          className="mx-auto max-w-4xl space-y-4 p-2 sm:p-4"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          aria-label="Chat messages"
+        >
           {children}
           <div ref={bottomRef} />
         </div>
       </ScrollArea>
       <button
         type="button"
-        onClick={() => scrollToBottom("smooth")}
+        onClick={() => {
+          userScrolledAwayRef.current = false;
+          scrollToBottom("smooth");
+        }}
         className={cn(
           "absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-md transition-all duration-200 hover:bg-muted hover:text-foreground",
           showScrollButton
@@ -108,8 +156,17 @@ export function ChatMessageList({
             : "opacity-0 translate-y-2 pointer-events-none",
         )}
       >
-        <ArrowDown size={12} />
-        Scroll to bottom
+        {streamLoading && showScrollButton ? (
+          <>
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[color:var(--near-green)]" />
+            IronClaw is responding
+          </>
+        ) : (
+          <>
+            <ArrowDown size={12} />
+            Scroll to bottom
+          </>
+        )}
       </button>
     </div>
   );

@@ -272,6 +272,7 @@ export function ChatMessage({ message, isOptimistic, status, verbose }: ChatMess
 
   return (
     <div
+      data-role={message.role}
       className={cn("group flex w-full gap-2", isUser ? "justify-end" : "justify-start items-end")}
     >
       {!isUser && (

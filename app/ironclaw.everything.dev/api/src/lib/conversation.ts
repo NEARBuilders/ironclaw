@@ -1,52 +1,3 @@
-export interface ConversationThread {
-  threadId: string;
-  title: string | null;
-  tenantId: string;
-  agentId: string;
-  projectId: string | null;
-  createdByActorId: string;
-  createdAt: string | null;
-  updatedAt: string | null;
-  parentThreadId: string | null;
-  isSubagent: boolean;
-}
-
-export interface ConversationAttachmentRef {
-  id: string;
-  kind: "audio" | "image" | "document";
-  mimeType: string;
-  filename?: string;
-  sizeBytes?: number;
-}
-
-export interface ConversationMessage {
-  id: string;
-  threadId: string;
-  role: "user" | "assistant";
-  text: string;
-  createdAt: string | null;
-  status: "submitted" | "finalized" | "failed";
-  sequence: number;
-  runId: string | null;
-  attachments?: ConversationAttachmentRef[];
-}
-
-export interface ConversationMessagePage {
-  messages: ConversationMessage[];
-  nextCursor: string | null;
-  hasMore: boolean;
-  total: number;
-}
-
-export interface ConversationSendAck {
-  threadId: string;
-  runId: string;
-  acceptedMessageRef: string;
-  pendingMessageId: string;
-  submittedAt: string;
-  eventCursor?: number;
-}
-
 function parseSubagentMetadata(raw: any): {
   parentThreadId: string | null;
   isSubagent: boolean;
@@ -69,7 +20,7 @@ function parseSubagentMetadata(raw: any): {
   return { parentThreadId: null, isSubagent: false, displayTitle: null };
 }
 
-export function normalizeThread(raw: any): ConversationThread {
+export function normalizeThread(raw: any) {
   const scope = raw.scope ?? {};
   const subagent = parseSubagentMetadata(raw);
   const title =
@@ -106,7 +57,7 @@ function statusFromString(s: string | undefined): "submitted" | "finalized" | "f
   return "submitted";
 }
 
-export function normalizeTimelineEntry(raw: any, threadId: string): ConversationMessage {
+export function normalizeTimelineEntry(raw: any, threadId: string) {
   return {
     id: raw.messageId ?? raw.message_id ?? raw.id ?? "",
     threadId,
@@ -126,7 +77,7 @@ export function normalizeTimelineEntry(raw: any, threadId: string): Conversation
   };
 }
 
-export function normalizeTimelinePage(raw: any, threadId: string): ConversationMessagePage {
+export function normalizeTimelinePage(raw: any, threadId: string) {
   const data: any[] = raw.data ?? [];
   const meta = raw.meta ?? {};
   return {

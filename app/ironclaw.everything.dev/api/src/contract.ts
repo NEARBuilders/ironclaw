@@ -88,6 +88,9 @@ const ConversationMessagePageSchema = z.object({
   total: z.number(),
 });
 
+export type ConversationMessageType = z.infer<typeof ConversationMessageSchema>;
+export type ConversationMessagePageType = z.infer<typeof ConversationMessagePageSchema>;
+
 export const ConversationSendAckSchema = z.object({
   threadId: z.string(),
   runId: z.string().optional(),
@@ -101,19 +104,28 @@ export const ConversationSendAckSchema = z.object({
 });
 
 export const ConversationChatMessagePartSchema = z.object({
-  type: z.enum(["text", "tool-call", "tool-result", "thinking"]),
+  type: z.enum(["text", "tool-call", "tool-result", "thinking", "image", "file", "document"]),
   content: z.string().optional(),
   toolCallId: z.string().optional(),
   toolName: z.string().optional(),
   args: z.string().optional(),
   state: z.string().optional(),
   output: z.unknown().optional(),
+  source: z
+    .object({
+      type: z.enum(["data", "url"]),
+      value: z.string(),
+      mimeType: z.string().optional(),
+      filename: z.string().optional(),
+    })
+    .optional(),
+  image: z.string().optional(),
 });
 
 export const ConversationChatMessageSchema = z.object({
   id: z.string(),
-  role: z.enum(["user", "assistant", "system"]),
-  content: z.string().optional(),
+  role: z.enum(["user", "assistant", "system", "reasoning", "tool"]),
+  content: z.union([z.string(), z.array(z.any())]).optional(),
   parts: z.array(ConversationChatMessagePartSchema).optional(),
   createdAt: z.string().optional(),
 });
@@ -159,6 +171,8 @@ export const ConversationLiveChunkSchema = z.object({
     "TEXT_MESSAGE_START",
     "TEXT_MESSAGE_CONTENT",
     "TEXT_MESSAGE_END",
+    "STEP_STARTED",
+    "STEP_FINISHED",
     "CUSTOM",
   ]),
   threadId: z.string(),
@@ -180,6 +194,12 @@ export const ConversationLiveChunkSchema = z.object({
   details: z.string().optional(),
   name: z.string().optional(),
   value: z.unknown().optional(),
+  stepName: z.string().optional(),
+  stepType: z.string().optional(),
+  stepId: z.string().optional(),
+  content: z.string().optional(),
+  model: z.string().optional(),
+  signature: z.string().optional(),
 });
 
 export const ConversationEventSchema = z.object({
@@ -399,5 +419,4 @@ export const contract = oc.router({
 export type ContractType = typeof contract;
 
 export type ConversationLiveChunkType = z.infer<typeof ConversationLiveChunkSchema>;
-export type ConversationMessageType = z.infer<typeof ConversationMessageSchema>;
-export type ConversationMessagePageType = z.infer<typeof ConversationMessagePageSchema>;
+

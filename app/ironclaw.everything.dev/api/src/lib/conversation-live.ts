@@ -1,40 +1,8 @@
+import type { z } from "zod";
 import type { AcceptedResponse, ChatEvent } from "../../../plugins/ironclaw/src/contract";
 import { ConversationLiveChunkSchema } from "../contract";
 
-type LiveChunkType =
-  | "RUN_STARTED"
-  | "RUN_FINISHED"
-  | "RUN_ERROR"
-  | "TOOL_CALL_START"
-  | "TOOL_CALL_ARGS"
-  | "TOOL_CALL_END"
-  | "TEXT_MESSAGE_START"
-  | "TEXT_MESSAGE_CONTENT"
-  | "TEXT_MESSAGE_END"
-  | "CUSTOM";
-
-type LiveChunk = {
-  type: LiveChunkType;
-  threadId: string;
-  runId?: string;
-  messageId?: string;
-  parentMessageId?: string;
-  role?: "assistant" | "tool";
-  toolCallId?: string;
-  toolCallName?: string;
-  toolName?: string;
-  index?: number;
-  delta?: string;
-  args?: string;
-  input?: unknown;
-  result?: string;
-  state?: string;
-  finishReason?: string | null;
-  message?: string;
-  details?: string;
-  name?: string;
-  value?: unknown;
-};
+type LiveChunk = z.infer<typeof ConversationLiveChunkSchema>;
 
 function normalizeMessage(value: unknown): string {
   if (value instanceof Error) return value.message;
@@ -166,6 +134,71 @@ function createChunk(chunk: LiveChunk): LiveChunk {
   return chunk;
 }
 
+function extractUserInput(
+  lastUserMsg: Record<string, unknown> | undefined,
+  forwardedAttachments: unknown[] | undefined,
+): { text: string; attachments: unknown[] | undefined } {
+  if (!lastUserMsg) return { text: "", attachments: undefined };
+
+  const attachments: unknown[] = [];
+  const parts = (lastUserMsg.parts ?? []) as any[];
+  const content = lastUserMsg.content;
+
+  // Extract from UIMessage parts[] (post-multimodal-format)
+  for (const part of parts) {
+    if (part.type === "image" || part.type === "file" || part.type === "document") {
+      const src = part.source;
+      if (src?.type === "data" && src.value) {
+        attachments.push({
+          mimeType: src.mimeType ?? (part.type === "image" ? "image/png" : "application/octet-stream"),
+          filename: src.filename,
+          dataBase64: src.value,
+        });
+      }
+    }
+  }
+
+  // Extract from ContentPart[] content (wire-format -- useChat MultimodalContent)
+  if (attachments.length === 0 && Array.isArray(content)) {
+    for (const part of content) {
+      if (part.type === "image" || part.type === "file" || part.type === "document") {
+        const src = part.source;
+        if (src?.type === "data" && src.value) {
+          attachments.push({
+            mimeType: src.mimeType ?? (part.type === "image" ? "image/png" : "application/octet-stream"),
+            filename: src.filename,
+            dataBase64: src.value,
+          });
+        }
+      }
+    }
+  }
+
+  // Fallback: forwardedProps.attachments (backward compat)
+  if (attachments.length === 0 && forwardedAttachments?.length) {
+    attachments.push(...forwardedAttachments);
+  }
+
+  // Extract text
+  let text = "";
+  if (typeof content === "string") {
+    text = content;
+  } else if (Array.isArray(content)) {
+    text = content
+      .filter((p: any) => p.type === "text")
+      .map((p: any) => p.content ?? p.text ?? "")
+      .join("");
+  }
+  if (!text) {
+    text = parts
+      .filter((p: any) => p.type === "text")
+      .map((p: any) => p.content ?? "")
+      .join("");
+  }
+
+  return { text, attachments: attachments.length > 0 ? attachments : undefined };
+}
+
 export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }) {
   return async function* ({ input, signal, context }: any) {
     const ic = services.ironclaw(context);
@@ -176,12 +209,14 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
     const forwardedProps = input.forwardedProps as Record<string, unknown> | undefined;
 
     const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
-    const content = (lastUserMsg?.content as string) ?? "";
-    const attachments = (forwardedProps?.attachments as any[] | undefined) ?? undefined;
+    const { text, attachments } = extractUserInput(
+      lastUserMsg,
+      forwardedProps?.attachments as unknown[] | undefined,
+    );
 
     const ack: AcceptedResponse = await ic.threads.sendMessage({
       id: threadId,
-      content,
+      content: text,
       clientActionId,
       attachments,
     });
@@ -673,15 +708,22 @@ export function createThreadChatBridge(services: { ironclaw: (ctx: any) => any }
             yield* emitRunStarted(projRunId);
 
             for (const th of thinkingItems) {
-              yield emitCustom(
-                "ironclaw.thinking",
-                {
-                  body: th.body,
-                  id: th.id ?? undefined,
-                  runId: th.runId ?? th.run_id ?? projRunId,
-                },
-                projRunId,
-              );
+              const stepRunId = (th.runId ?? th.run_id ?? projRunId) as string;
+              yield createChunk({
+                type: "STEP_STARTED",
+                stepName: "thinking",
+                stepType: "thinking",
+                threadId,
+                runId: stepRunId,
+              });
+              yield createChunk({
+                type: "STEP_FINISHED",
+                stepName: "thinking",
+                stepType: "thinking",
+                content: th.body as string,
+                threadId,
+                runId: stepRunId,
+              });
             }
 
             for (const ca of capActivities) {
