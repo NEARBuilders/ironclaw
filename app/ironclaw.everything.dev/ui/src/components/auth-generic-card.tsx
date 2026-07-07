@@ -4,10 +4,11 @@ import type { AuthGate } from "@/hooks/conversation-chat-types";
 
 interface AuthGenericCardProps {
   gate: AuthGate;
+  onApprove: () => void;
   onCancel: () => void;
 }
 
-export function AuthGenericCard({ gate, onCancel }: AuthGenericCardProps) {
+export function AuthGenericCard({ gate, onApprove, onCancel }: AuthGenericCardProps) {
   return (
     <div className="mx-auto w-full max-w-lg rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
       <div className="mb-3 flex items-center gap-2">
@@ -33,6 +34,9 @@ export function AuthGenericCard({ gate, onCancel }: AuthGenericCardProps) {
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <Button variant="default" size="sm" onClick={onApprove}>
+          Approve
+        </Button>
         <a href="/settings" className={buttonVariants({ variant: "outline", size: "sm" })}>
           Configure in Settings
         </a>

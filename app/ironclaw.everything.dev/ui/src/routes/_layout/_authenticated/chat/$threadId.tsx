@@ -111,69 +111,6 @@ function ThreadLayout() {
           Connection lost — messages may be incomplete. Send a new message to continue.
         </div>
       )}
-      {firstAuthGate ? (
-        firstAuthGate.challengeKind === "oauth_url" ? (
-          <div className="border-b border-border px-4 py-3">
-            <AuthOauthCard
-              gate={firstAuthGate}
-              onCancel={() =>
-                chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "cancelled")
-              }
-            />
-          </div>
-        ) : firstAuthGate.challengeKind === "manual_token" ? (
-          <div className="border-b border-border px-4 py-3">
-            <AuthTokenCard
-              gate={firstAuthGate}
-              onSubmit={async (token) => {
-                if (chat.runId) {
-                  await chat.submitAuthToken(
-                    chat.runId,
-                    firstAuthGate.gateRef,
-                    firstAuthGate.provider ?? "",
-                    firstAuthGate.accountLabel ?? "",
-                    token,
-                  );
-                }
-              }}
-              onCancel={() =>
-                chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "cancelled")
-              }
-            />
-          </div>
-        ) : (
-          <div className="border-b border-border px-4 py-3">
-            <AuthGenericCard
-              gate={firstAuthGate}
-              onCancel={() =>
-                chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "cancelled")
-              }
-            />
-          </div>
-        )
-      ) : firstPendingApproval ? (
-        <div className="border-b border-border px-4 py-3">
-          <ApprovalCard
-            approval={firstPendingApproval}
-            onApprove={() =>
-              chat.runId && chat.resolveGate(chat.runId, firstPendingApproval.gateRef, "approved")
-            }
-            onDeny={() =>
-              chat.runId && chat.resolveGate(chat.runId, firstPendingApproval.gateRef, "denied")
-            }
-            onAlways={
-              firstPendingApproval.allowAlways
-                ? () =>
-                    chat.runId &&
-                    chat.resolveGate(chat.runId, firstPendingApproval.gateRef, "approved", {
-                      always: true,
-                    })
-                : undefined
-            }
-          />
-        </div>
-      ) : null}
-
       {messagesWithContent.length === 0 && !isBusy ? (
         <KoreaPromptEmptyState onSelect={handleSend} disabled={isBusy} />
       ) : (
@@ -183,6 +120,78 @@ function ThreadLayout() {
           empty={false}
           emptyMessage="No messages yet. Send a message to start."
         >
+          {firstAuthGate ? (
+            <div className="flex justify-start items-end">
+              <img
+                src="/logo.png"
+                alt="IronClaw"
+                className="shrink-0 w-6 h-6 sm:w-7 sm:h-7 mb-0.5 transition-transform duration-300 ease-out hover:scale-125 hover:-rotate-12 hover:drop-shadow-[0_0_8px_rgba(17,145,240,0.6)] cursor-pointer"
+              />
+              {firstAuthGate.challengeKind === "oauth_url" ? (
+                <AuthOauthCard
+                  gate={firstAuthGate}
+                  onCancel={() =>
+                    chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "cancelled")
+                  }
+                />
+              ) : firstAuthGate.challengeKind === "manual_token" ? (
+                <AuthTokenCard
+                  gate={firstAuthGate}
+                  onSubmit={async (token) => {
+                    if (chat.runId) {
+                      await chat.submitAuthToken(
+                        chat.runId,
+                        firstAuthGate.gateRef,
+                        firstAuthGate.provider ?? "",
+                        firstAuthGate.accountLabel ?? "",
+                        token,
+                      );
+                    }
+                  }}
+                  onCancel={() =>
+                    chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "cancelled")
+                  }
+                />
+              ) : (
+                <AuthGenericCard
+                  gate={firstAuthGate}
+                  onApprove={() =>
+                    chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "approved")
+                  }
+                  onCancel={() =>
+                    chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "cancelled")
+                  }
+                />
+              )}
+            </div>
+          ) : firstPendingApproval ? (
+            <div className="flex justify-start items-end">
+              <img
+                src="/logo.png"
+                alt="IronClaw"
+                className="shrink-0 w-6 h-6 sm:w-7 sm:h-7 mb-0.5 transition-transform duration-300 ease-out hover:scale-125 hover:-rotate-12 hover:drop-shadow-[0_0_8px_rgba(17,145,240,0.6)] cursor-pointer"
+              />
+              <ApprovalCard
+                approval={firstPendingApproval}
+                onApprove={() =>
+                  chat.runId && chat.resolveGate(chat.runId, firstPendingApproval.gateRef, "approved")
+                }
+                onDeny={() =>
+                  chat.runId && chat.resolveGate(chat.runId, firstPendingApproval.gateRef, "denied")
+                }
+                onAlways={
+                  firstPendingApproval.allowAlways
+                    ? () =>
+                        chat.runId &&
+                        chat.resolveGate(chat.runId, firstPendingApproval.gateRef, "approved", {
+                          always: true,
+                        })
+                    : undefined
+                }
+              />
+            </div>
+          ) : null}
+
           {messagesWithContent.map((message) => (
             <ChatMessage key={message.id} message={message} verbose={verbose} />
           ))}
