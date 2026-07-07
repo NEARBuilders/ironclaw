@@ -91,21 +91,32 @@ pub struct SignedSessionLoginWiring {
     pub access_session_service: Arc<dyn AccessSessionService>,
 }
 
-/// Build a standalone `AccessSessionService` from the operator secret.
+/// Build both an authenticator and an access session service from the
+/// operator secret, so env-bearer deployments can mint AND validate
+/// per-user access sessions without a full SSO setup.
 ///
-/// This produces a store capable of minting tenant-scoped access
-/// sessions even when no SSO provider is configured. The returned
-/// store is backed by the same HMAC key as the full signed-session
-/// login surface, so sessions minted by one path are valid for the
-/// other.
-pub fn build_access_session_service(
+/// The returned authenticator is a [`CompositeAuthenticator`] that
+/// accepts minted session tokens alongside the existing env-bearer
+/// token. The returned `AccessSessionService` shares the same
+/// underlying store, so revocation and expiry are consistent.
+pub fn build_access_session_for_env_bearer(
     operator_secret: &SecretString,
     tenant_id: &TenantId,
-) -> Arc<dyn AccessSessionService> {
-    Arc::new(SignedTokenSessionStore::from_operator_secret(
+    env_authenticator: Arc<dyn WebuiAuthenticator>,
+) -> (Arc<dyn WebuiAuthenticator>, Arc<dyn AccessSessionService>) {
+    let store = Arc::new(SignedTokenSessionStore::from_operator_secret(
         operator_secret,
         tenant_id,
-    ))
+    ));
+    let session_store: Arc<dyn SessionStore> = store.clone();
+    let access_session_service: Arc<dyn AccessSessionService> = store;
+    let session_authenticator: Arc<dyn WebuiAuthenticator> =
+        Arc::new(SessionAuthenticator::new(session_store));
+    let authenticator: Arc<dyn WebuiAuthenticator> = Arc::new(CompositeAuthenticator::new(
+        session_authenticator,
+        env_authenticator,
+    ));
+    (authenticator, access_session_service)
 }
 
 /// Assemble the signed-token login surface from host config. Returns

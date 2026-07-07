@@ -19,7 +19,7 @@ use ironclaw_reborn_composition::{
     WebuiAuthenticator,
 };
 use ironclaw_reborn_webui_ingress::{
-    SignedSessionLoginConfig, build_access_session_service, build_signed_session_login,
+    SignedSessionLoginConfig, build_access_session_for_env_bearer, build_signed_session_login,
 };
 use secrecy::SecretString;
 
@@ -74,15 +74,18 @@ pub(crate) async fn build_webui_auth_surface(
     local_trigger_access: Option<LocalTriggerAccessBootstrapConfig>,
 ) -> anyhow::Result<WebuiAuthSurface> {
     let Some(sso) = sso_startup else {
-        // No SSO providers: keep the env-bearer authenticator and mount no
-        // public routes. There are no SSO logins to seed local trigger
-        // access for, so any bootstrap config is unused on this path.
-        // Still create an access session service so operator-minted
-        // access sessions work without SSO.
-        let access_session_service =
-            build_access_session_service(&session_signing_secret, &tenant_id);
+        // No SSO providers: build a composite authenticator that accepts
+        // minted session tokens alongside the env-bearer token, plus an
+        // access session service backed by the same store. No public
+        // login routes.
+        let (authenticator, access_session_service) =
+            build_access_session_for_env_bearer(
+                &session_signing_secret,
+                &tenant_id,
+                env_authenticator,
+            );
         return Ok(WebuiAuthSurface {
-            authenticator: env_authenticator,
+            authenticator,
             public_mount: None,
             access_session_service: Some(access_session_service),
         });
