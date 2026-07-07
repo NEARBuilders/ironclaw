@@ -4422,7 +4422,7 @@ impl RebornServicesApi for RebornServices {
 
     async fn mint_access_session(
         &self,
-        _caller: WebUiAuthenticatedCaller,
+        caller: WebUiAuthenticatedCaller,
         request: WebUiMintAccessSessionRequest,
     ) -> Result<WebUiMintAccessSessionResponse, RebornServicesError> {
         let Some(ref service) = self.access_session_service else {

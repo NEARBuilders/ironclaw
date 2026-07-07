@@ -23,15 +23,15 @@
         "ALLOW_UNTRUSTED_SSR",
         "CSP_STRICT"
       ],
-      "production": "https://elliot-braem-5192-host-ironclaw-nearbuilders-35c0e2ce0-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-5201-host-ironclaw-nearbuilders-93d96ed5b-ze.zephyrcloud.app",
       "integrity": "sha384-uzbBU2DfN9ozBwVXUPjGyv+w29xMfBYmNTYnKuQLsxvzNTufAO6PWH6QrpPa51bB"
     },
     "ui": {
       "development": "local:ui",
-      "ssr": "https://elliot-braem-5189-ui-ironclaw-nearbuilders-6f94f09a6-ze.zephyrcloud.app",
-      "ssrIntegrity": "sha384-dqxeoQaUTCaITsara9nesPvuUaxGAgTljxAATbe1mOIRFngW+yr8w2jhMGySdAQL",
-      "production": "https://elliot-braem-5188-ui-ironclaw-nearbuilders-ff1088af0-ze.zephyrcloud.app",
-      "integrity": "sha384-HqlEzSKSeY/8cZMd6sWXGfRoSVJg8m1XswPOqLo0kmPxbxdfBMkxpQ9vMlD/lSSK"
+      "ssr": "https://elliot-braem-5198-ui-ironclaw-nearbuilders-3cf826858-ze.zephyrcloud.app",
+      "ssrIntegrity": "sha384-BlHB+YEPPtI4KB0oKbnn5ilDgk3Y7YxM1GKqS2V7Fim7c3tGb5L8jv09tx6AR8mt",
+      "production": "https://elliot-braem-5197-ui-ironclaw-nearbuilders-17edacdc6-ze.zephyrcloud.app",
+      "integrity": "sha384-pqVADaKTjElnb9arzd/A6WKb/Bb8SGGjEZj+Kac6FhA2qesVlEX11+fWOnZsC2SA"
     },
     "api": {
       "development": "local:api",
@@ -39,8 +39,21 @@
         "API_DATABASE_URL",
         "BETTER_AUTH_SECRET"
       ],
-      "production": "https://elliot-braem-5190-api-ironclaw-nearbuilders-e58f8d157-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-5199-api-ironclaw-nearbuilders-0e89ae113-ze.zephyrcloud.app",
       "integrity": "sha384-DPT54Ky/d2jzWH1g48qKT7NXAjl42DuduDwnge7VKjN2RmjslXHCSsNZxTSdfqqz"
+    },
+    "auth": {
+      "extends": "bos://auth.everything.near/auth.everything.dev",
+      "variables": {
+        "socialProviders": {
+          "github": {
+            "clientId": "Ov23libvkEQgZ9KF9e9L"
+          },
+          "google": {
+            "clientId": ""
+          }
+        }
+      }
     }
   },
   "plugins": {
@@ -50,8 +63,8 @@
     "ironclaw": {
       "development": "local:plugins/ironclaw",
       "secrets": [],
-      "production": "https://elliot-braem-5191-every-plugin-ironclaw-ironclaw--e9e8e9574-ze.zephyrcloud.app",
-      "integrity": "sha384-Qlmz7fXLWbm2QZCwYJPxQTZA2vzEAcfr85+rvm/9ltxcitbMMGiuptu36u7KWV01"
+      "production": "https://elliot-braem-5200-every-plugin-ironclaw-ironclaw--1f0c7d1e4-ze.zephyrcloud.app",
+      "integrity": "sha384-cuSSb26K510x4VN47d7b1fAjJITqOcEKYWPju4p/miUmjXlaNkTm+hoR0DvMQC5R"
     }
   }
 }
