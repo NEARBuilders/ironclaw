@@ -37,7 +37,6 @@
       "development": "local:api",
       "secrets": [
         "API_DATABASE_URL",
-        "IRONCLAW_BASE_URL",
         "BETTER_AUTH_SECRET"
       ],
       "production": "https://elliot-braem-5190-api-ironclaw-nearbuilders-e58f8d157-ze.zephyrcloud.app",
@@ -50,10 +49,7 @@
     },
     "ironclaw": {
       "development": "local:plugins/ironclaw",
-      "secrets": [
-        "IRONCLAW_BASE_URL",
-        "IRONCLAW_API_TOKEN"
-      ],
+      "secrets": [],
       "production": "https://elliot-braem-5191-every-plugin-ironclaw-ironclaw--e9e8e9574-ze.zephyrcloud.app",
       "integrity": "sha384-Qlmz7fXLWbm2QZCwYJPxQTZA2vzEAcfr85+rvm/9ltxcitbMMGiuptu36u7KWV01"
     }

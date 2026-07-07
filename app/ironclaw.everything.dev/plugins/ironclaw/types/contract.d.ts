@@ -928,6 +928,10 @@ export declare const contract: {
             status: number;
             message: string;
         };
+        TOO_MANY_REQUESTS: {
+            status: number;
+            message: string;
+        };
         GATEWAY_ERROR: {
             status: number;
             message: string;
@@ -984,6 +988,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -1015,6 +1023,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -1042,6 +1054,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -1102,6 +1118,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -1172,6 +1192,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -1204,6 +1228,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -1244,6 +1272,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -1504,6 +1536,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -1592,6 +1628,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -1629,6 +1669,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -1671,6 +1715,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -1702,6 +1750,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -1737,6 +1789,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -1803,6 +1859,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -1830,6 +1890,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -1863,6 +1927,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -1890,6 +1958,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -1930,6 +2002,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -1964,6 +2040,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -2005,6 +2085,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -2060,6 +2144,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -2096,6 +2184,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -2143,6 +2235,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -2184,6 +2280,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -2222,6 +2322,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -2286,6 +2390,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -2316,6 +2424,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -2362,6 +2474,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -2413,6 +2529,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -2445,6 +2565,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -2473,6 +2597,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -2508,6 +2636,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -2536,6 +2668,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -2570,6 +2706,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -2597,6 +2737,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -2643,6 +2787,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -2675,6 +2823,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -2727,6 +2879,10 @@ export declare const contract: {
                     status: number;
                     message: string;
                 };
+                TOO_MANY_REQUESTS: {
+                    status: number;
+                    message: string;
+                };
                 GATEWAY_ERROR: {
                     status: number;
                     message: string;
@@ -2768,6 +2924,10 @@ export declare const contract: {
                     status: number;
                     message: string;
                 };
+                TOO_MANY_REQUESTS: {
+                    status: number;
+                    message: string;
+                };
                 GATEWAY_ERROR: {
                     status: number;
                     message: string;
@@ -2795,6 +2955,10 @@ export declare const contract: {
                     message: string;
                 };
                 CONFLICT: {
+                    status: number;
+                    message: string;
+                };
+                TOO_MANY_REQUESTS: {
                     status: number;
                     message: string;
                 };
@@ -2831,6 +2995,10 @@ export declare const contract: {
                     message: string;
                 };
                 CONFLICT: {
+                    status: number;
+                    message: string;
+                };
+                TOO_MANY_REQUESTS: {
                     status: number;
                     message: string;
                 };
@@ -2873,6 +3041,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -2903,6 +3075,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -2948,6 +3124,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -2989,6 +3169,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -3020,6 +3204,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -3060,6 +3248,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -3096,6 +3288,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -3128,6 +3324,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -3168,6 +3368,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -3195,6 +3399,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -3233,6 +3441,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -3265,6 +3477,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -3303,6 +3519,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -3331,6 +3551,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -3368,6 +3592,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -3398,6 +3626,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -3423,6 +3655,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -3458,6 +3694,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -3586,6 +3826,10 @@ export declare const contract: {
                 status: number;
                 message: string;
             };
+            TOO_MANY_REQUESTS: {
+                status: number;
+                message: string;
+            };
             GATEWAY_ERROR: {
                 status: number;
                 message: string;
@@ -3624,6 +3868,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };
@@ -3686,6 +3934,10 @@ export declare const contract: {
                 message: string;
             };
             CONFLICT: {
+                status: number;
+                message: string;
+            };
+            TOO_MANY_REQUESTS: {
                 status: number;
                 message: string;
             };

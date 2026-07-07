@@ -49,36 +49,12 @@ async function lookupCredentialsByScope(
       return {
         baseUrl: conns[0].baseUrl,
         apiToken,
+        mode: (conns[0].mode as "direct" | "hosted" | undefined) ?? "direct",
         connectionId: conns[0].id,
       };
     }
   }
   return null;
-}
-
-async function mintAccessSession(baseUrl: string, operatorToken: string, tenantId: string) {
-  const resp = await fetch(
-    `${baseUrl.replace(/\/+$/, "")}/api/webchat/v2/operator/access-sessions`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${operatorToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ tenant_id: tenantId }),
-      signal: AbortSignal.timeout(10_000),
-    },
-  );
-  if (!resp.ok) {
-    throw new Error(
-      `Failed to mint access session for tenant ${tenantId}: ${resp.status} ${resp.statusText}`,
-    );
-  }
-  const data = (await resp.json()) as { token?: string };
-  if (!data.token) {
-    throw new Error(`Access session response missing token for tenant ${tenantId}`);
-  }
-  return data.token;
 }
 
 function resolveTenantForScope(
@@ -142,8 +118,6 @@ export default createPlugin.withPlugins<PluginsClient>()({
 
   secrets: z.object({
     API_DATABASE_URL: z.string().default("pglite:.bos/api/:memory:"),
-    IRONCLAW_BASE_URL: z.string().optional(),
-    IRONCLAW_API_TOKEN: z.string().optional(),
     BETTER_AUTH_SECRET: z.string().min(32).optional(),
   }),
 
@@ -158,6 +132,12 @@ export default createPlugin.withPlugins<PluginsClient>()({
       })
       .optional(),
     organizationId: z.string().optional(),
+    credentialKind: z.enum(["direct", "hosted"]).optional(),
+    actingUserId: z.string().optional(),
+    hostedBaseUrl: z.string().optional(),
+    hostedOperatorToken: z.string().optional(),
+    agentId: z.string().optional(),
+    projectId: z.string().optional(),
     apiKey: z
       .object({
         id: z.string(),
@@ -208,39 +188,27 @@ export default createPlugin.withPlugins<PluginsClient>()({
 
     const resolveIronclawContext = async (context: any) => {
       const { userId, organizationId, apiKey } = context;
+      const effectiveUserId = userId ?? apiKey?.userId;
+      const platformCreds = s.db
+        ? await lookupCredentialsByScope(s.db, "__platform_default__", "platform", encryptionKey)
+        : null;
+
+      if (platformCreds?.mode === "hosted") {
+        if (!effectiveUserId) {
+          throw new ORPCError("UNAUTHORIZED", { message: "User ID required" });
+        }
+
+        return {
+          ...context,
+          credentialKind: "hosted" as const,
+          actingUserId: effectiveUserId,
+          hostedBaseUrl: platformCreds.baseUrl,
+          hostedOperatorToken: platformCreds.apiToken,
+        };
+      }
 
       if (s.db) {
         try {
-          // Check if user explicitly prefers hosted mode — skip DB entirely
-          if (userId) {
-            const prefs = await s.db
-              .select()
-              .from(userPreferences)
-              .where(eq(userPreferences.userId, userId));
-            if (prefs[0]?.ironclawMode === "hosted") {
-              if (s.secrets?.IRONCLAW_BASE_URL && s.secrets?.IRONCLAW_API_TOKEN) {
-                const tenantId = organizationId ?? userId;
-                const sessionToken = tenantId
-                  ? await mintAccessSession(
-                      s.secrets.IRONCLAW_BASE_URL,
-                      s.secrets.IRONCLAW_API_TOKEN,
-                      tenantId,
-                    )
-                  : s.secrets.IRONCLAW_API_TOKEN;
-                return {
-                  ...context,
-                  baseUrl: s.secrets.IRONCLAW_BASE_URL,
-                  apiToken: sessionToken,
-                };
-              }
-              if (s.secrets?.IRONCLAW_BASE_URL) {
-                return context;
-              }
-              return context;
-            }
-          }
-
-          // Priority 1: org-level credentials (when org context is active)
           if (organizationId) {
             const orgCreds = await lookupCredentialsByScope(
               s.db,
@@ -249,12 +217,17 @@ export default createPlugin.withPlugins<PluginsClient>()({
               encryptionKey,
             );
             if (orgCreds) {
-              return { ...context, baseUrl: orgCreds.baseUrl, apiToken: orgCreds.apiToken };
+              return {
+                ...context,
+                credentialKind: "direct" as const,
+                baseUrl: orgCreds.baseUrl,
+                apiToken: orgCreds.apiToken,
+                hostedBaseUrl: undefined,
+                hostedOperatorToken: undefined,
+              };
             }
           }
 
-          // Priority 2: personal credentials (checked regardless of org context)
-          const effectiveUserId = userId ?? apiKey?.userId;
           if (effectiveUserId) {
             const personalCreds = await lookupCredentialsByScope(
               s.db,
@@ -265,47 +238,32 @@ export default createPlugin.withPlugins<PluginsClient>()({
             if (personalCreds) {
               return {
                 ...context,
+                credentialKind: "direct" as const,
                 baseUrl: personalCreds.baseUrl,
                 apiToken: personalCreds.apiToken,
+                hostedBaseUrl: undefined,
+                hostedOperatorToken: undefined,
               };
             }
           }
 
-          // Priority 3: platform default
-          const platformCreds = await lookupCredentialsByScope(
-            s.db,
-            "__platform_default__",
-            "platform",
-            encryptionKey,
-          );
           if (platformCreds) {
-            return { ...context, baseUrl: platformCreds.baseUrl, apiToken: platformCreds.apiToken };
+            return {
+              ...context,
+              credentialKind: "direct" as const,
+              baseUrl: platformCreds.baseUrl,
+              apiToken: platformCreds.apiToken,
+              hostedBaseUrl: undefined,
+              hostedOperatorToken: undefined,
+            };
           }
         } catch (e) {
           console.error("[auth] DB credential lookup error:", e);
         }
       }
 
-      // Priority 4: host secrets with full config
-      if (s.secrets?.IRONCLAW_BASE_URL && s.secrets?.IRONCLAW_API_TOKEN) {
-        const tenantId = organizationId ?? userId ?? apiKey?.userId;
-        const sessionToken = tenantId
-          ? await mintAccessSession(
-              s.secrets.IRONCLAW_BASE_URL,
-              s.secrets.IRONCLAW_API_TOKEN,
-              tenantId,
-            )
-          : s.secrets.IRONCLAW_API_TOKEN;
-        return { ...context, baseUrl: s.secrets.IRONCLAW_BASE_URL, apiToken: sessionToken };
-      }
-
-      // Priority 5: host secrets with base URL only (plugin resolves token itself)
-      if (s.secrets?.IRONCLAW_BASE_URL) {
-        return context;
-      }
-
       // No credentials resolved from any source
-      const isAuthenticated = !!(context.userId || context.apiKey?.userId);
+      const isAuthenticated = !!effectiveUserId;
       if (isAuthenticated) {
         throw new ORPCError("PRECONDITION_FAILED", {
           message:
@@ -488,6 +446,7 @@ export default createPlugin.withPlugins<PluginsClient>()({
               return {
                 baseUrl: creds.baseUrl,
                 apiToken: "",
+                mode: creds.mode,
                 hasToken: true,
                 scope,
               };
@@ -511,15 +470,18 @@ export default createPlugin.withPlugins<PluginsClient>()({
               const db = s.db;
 
               let apiToken = input.apiToken;
+              let mode = input.mode;
               if (!apiToken) {
                 const existing = await lookupCredentialsByScope(db, tenantId, scope, encryptionKey);
                 if (existing) apiToken = existing.apiToken;
+                if (!mode) mode = existing?.mode ?? "direct";
               }
               if (!apiToken) {
                 throw new ORPCError("BAD_REQUEST", {
                   message: "API token is required when no token is already configured",
                 });
               }
+              if (!mode) mode = "direct";
 
               const storedToken = encryptionKey
                 ? encryptApiToken(apiToken, encryptionKey)
@@ -531,6 +493,7 @@ export default createPlugin.withPlugins<PluginsClient>()({
                 .values({
                   id: connectionId,
                   name: `${scope} connection for ${tenantId}`,
+                  mode,
                   baseUrl: input.baseUrl,
                   apiTokenEncrypted: storedToken,
                   createdBy: userId,
@@ -538,6 +501,7 @@ export default createPlugin.withPlugins<PluginsClient>()({
                 .onConflictDoUpdate({
                   target: ironclawConnections.id,
                   set: {
+                    mode,
                     baseUrl: input.baseUrl,
                     apiTokenEncrypted: storedToken,
                     updatedBy: userId,
@@ -597,11 +561,21 @@ export default createPlugin.withPlugins<PluginsClient>()({
             .handler(async ({ context }) => {
               const uid = context.userId!;
               const db = s.db;
+              const platformCreds = await lookupCredentialsByScope(
+                db,
+                "__platform_default__",
+                "platform",
+                encryptionKey,
+              );
+              if (platformCreds?.mode === "hosted") {
+                return { mode: "hosted" as const };
+              }
               const rows = await db
                 .select()
                 .from(userPreferences)
                 .where(eq(userPreferences.userId, uid));
-              return { mode: (rows[0]?.ironclawMode as "auto" | "hosted" | "local") ?? "auto" };
+              const storedMode = rows[0]?.ironclawMode as "auto" | "hosted" | "local" | undefined;
+              return { mode: storedMode === "hosted" ? "auto" : storedMode ?? "auto" };
             }),
 
           setMode: builder.ironclaw.settings.setMode

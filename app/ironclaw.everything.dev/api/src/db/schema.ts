@@ -42,6 +42,7 @@ export const tenantCredentials = pgTable("tenant_credentials", {
 export const ironclawConnections = pgTable("ironclaw_connections", {
   id: text("id").primaryKey(),
   name: text("name").notNull().default(""),
+  mode: text("mode").notNull().default("direct"),
   baseUrl: text("base_url").notNull(),
   apiTokenEncrypted: text("api_token_encrypted").notNull(),
   createdBy: text("created_by"),

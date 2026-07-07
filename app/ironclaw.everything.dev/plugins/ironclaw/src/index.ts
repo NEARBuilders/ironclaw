@@ -4,6 +4,7 @@ import { ORPCError } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
 
 import { contract } from "./contract";
+import { resolveHostedAccessToken, resolveHostedIdentity } from "./hosted-session";
 import { IronclawService, IronclawUpstreamError } from "./service";
 import { createThreadChatBridge, createIronclawBridgeServiceFromService } from "./chat-bridge";
 import { normalizeThread, normalizeTimelinePage } from "./normalize";
@@ -21,16 +22,19 @@ export default createPlugin({
     baseUrl: z.url().default("http://localhost:3001"),
   }),
 
-  secrets: z.object({
-    IRONCLAW_API_TOKEN: z.string().optional(),
-    IRONCLAW_BASE_URL: z.string().optional(),
-  }),
+  secrets: z.object({}),
 
   context: z.object({
     userId: z.string().optional(),
     sessionId: z.string().optional(),
+    credentialKind: z.enum(["direct", "hosted"]).optional(),
+    actingUserId: z.string().optional(),
     baseUrl: z.string().optional(),
     apiToken: z.string().optional(),
+    hostedBaseUrl: z.string().optional(),
+    hostedOperatorToken: z.string().optional(),
+    agentId: z.string().optional(),
+    projectId: z.string().optional(),
     reqHeaders: z.custom<Headers>().optional(),
     getRawBody: z.custom<() => Promise<string>>().optional(),
   }),
@@ -44,19 +48,54 @@ export default createPlugin({
   createRouter: (context, builder) => {
     const { config } = context;
 
-    const defaultToken = isConfigured(config.secrets.IRONCLAW_API_TOKEN)
-      ? config.secrets.IRONCLAW_API_TOKEN
-      : undefined;
+    const resolveService = async (
+      reqCtx: {
+        credentialKind?: "direct" | "hosted";
+        actingUserId?: string;
+        userId?: string;
+        baseUrl?: string;
+        apiToken?: string;
+        hostedBaseUrl?: string;
+        hostedOperatorToken?: string;
+        agentId?: string;
+        projectId?: string;
+      },
+    ) => {
+      if (reqCtx.credentialKind === "hosted") {
+        const hostedBaseUrl = reqCtx.hostedBaseUrl;
+        const hostedOperatorToken = reqCtx.hostedOperatorToken;
+        if (!isConfigured(hostedBaseUrl) || !isConfigured(hostedOperatorToken)) {
+          throw new ORPCError("PRECONDITION_FAILED", {
+            message:
+              "IronClaw hosted mode is not configured. Set the platform hosted IronClaw settings in Admin → IronClaw.",
+          });
+        }
 
-    const resolveService = (reqCtx: { baseUrl?: string; apiToken?: string }) => {
-      const baseUrl =
-        reqCtx.baseUrl ?? config.secrets.IRONCLAW_BASE_URL ?? config.variables.baseUrl;
-      const apiToken = reqCtx.apiToken ?? defaultToken;
+        const hostedIdentity = resolveHostedIdentity(reqCtx);
+        if (!hostedIdentity) {
+          throw new ORPCError("PRECONDITION_FAILED", {
+            message: "IronClaw hosted mode requires an authenticated user ID",
+          });
+        }
+
+        const sessionToken = await resolveHostedAccessToken({
+          baseUrl: hostedBaseUrl,
+          operatorToken: hostedOperatorToken,
+          tenantId: hostedIdentity.tenantId,
+          userId: hostedIdentity.userId,
+          agentId: reqCtx.agentId,
+          projectId: reqCtx.projectId,
+        });
+
+        return new IronclawService(hostedBaseUrl, sessionToken);
+      }
+
+      const baseUrl = reqCtx.baseUrl ?? config.variables.baseUrl;
+      const apiToken = reqCtx.apiToken;
       if (!isConfigured(apiToken)) {
         throw new ORPCError("PRECONDITION_FAILED", {
           message:
-            "IronClaw is not configured. Set the API token in Settings → IronClaw, " +
-            "or provide IRONCLAW_API_TOKEN via the plugin secrets configuration.",
+            "IronClaw direct mode is not configured. Save a tunnel URL and API token in Settings → IronClaw.",
         });
       }
       return new IronclawService(baseUrl, apiToken);
@@ -79,6 +118,7 @@ export default createPlugin({
             404: "NOT_FOUND",
             409: "CONFLICT",
             412: "PRECONDITION_FAILED",
+            429: "TOO_MANY_REQUESTS",
           }[error.status] ?? "GATEWAY_ERROR";
         throw new ORPCError(code, {
           message: error.message,
@@ -102,7 +142,7 @@ export default createPlugin({
       (fn: (svc: IronclawService, ctx: any) => any) =>
       async ({ context: ctx }: any) => {
         try {
-          return await fn(resolveService(ctx), ctx);
+          return await fn(await resolveService(ctx), ctx);
         } catch (error) {
           toOrpcError(error);
         }
@@ -112,7 +152,7 @@ export default createPlugin({
       (fn: (svc: IronclawService, input: any, ctx: any) => any) =>
       async ({ input, context: ctx }: any) => {
         try {
-          return await fn(resolveService(ctx), input, ctx);
+          return await fn(await resolveService(ctx), input, ctx);
         } catch (error) {
           toOrpcError(error);
         }
@@ -120,7 +160,7 @@ export default createPlugin({
 
     const rStream = (fn: (svc: IronclawService, input: any, ctx: any) => any) =>
       async function* ({ input, signal, context: ctx }: any) {
-        const svc = resolveService(ctx);
+        const svc = await resolveService(ctx);
         const gen = fn(svc, input, ctx);
         try {
           for await (const event of gen) {
@@ -503,19 +543,19 @@ export default createPlugin({
         },
       },
 
-      bridge: {
-        threadChat: builder.bridge.threadChat.use(requireAuth).handler(async function* ({
-          input,
-          signal,
-          context: ctx,
-        }: any) {
-          try {
-            const svc = resolveService(ctx);
-            const bridgeSvc = createIronclawBridgeServiceFromService(svc);
-            const bridge = createThreadChatBridge(bridgeSvc);
-            for await (const chunk of bridge({ input, signal })) {
-              yield chunk;
-            }
+        bridge: {
+          threadChat: builder.bridge.threadChat.use(requireAuth).handler(async function* ({
+            input,
+            signal,
+            context: ctx,
+          }: any) {
+            try {
+              const svc = await resolveService(ctx);
+              const bridgeSvc = createIronclawBridgeServiceFromService(svc);
+              const bridge = createThreadChatBridge(bridgeSvc);
+              for await (const chunk of bridge({ input, signal })) {
+                yield chunk;
+              }
           } catch (error) {
             toOrpcError(error);
           }

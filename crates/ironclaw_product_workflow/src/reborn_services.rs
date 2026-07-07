@@ -4436,14 +4436,19 @@ impl RebornServicesApi for RebornServices {
                 false,
             )
         })?;
-        let user_id = UserId::new("operator").map_err(|_| {
-            RebornServicesError::from_status_kind(
-                RebornServicesErrorCode::Internal,
-                RebornServicesErrorKind::Internal,
-                500,
-                false,
-            )
-        })?;
+        let user_id = request
+            .user_id
+            .as_deref()
+            .map(UserId::new)
+            .unwrap_or_else(|| Ok(caller.user_id.clone()))
+            .map_err(|_| {
+                RebornServicesError::from_status_kind(
+                    RebornServicesErrorCode::InvalidRequest,
+                    RebornServicesErrorKind::Validation,
+                    400,
+                    false,
+                )
+            })?;
         let agent_id = request
             .agent_id
             .map(|id| AgentId::new(id).map_err(|_| {

@@ -11,11 +11,11 @@ import { Label } from "@/components/ui/label";
 export const Route = createFileRoute("/_layout/_authenticated/admin/ironclaw")({
   component: AdminIronclaw,
   head: () => ({
-    title: "Admin | IronClaw Default",
+    title: "Admin | IronClaw Platform",
     meta: [
       {
         name: "description",
-        content: "Configure the platform-wide default IronClaw tunnel.",
+        content: "Configure the platform-wide IronClaw mode and connection settings.",
       },
     ],
   }),
@@ -25,6 +25,7 @@ function AdminIronclaw() {
   const apiClient = useApiClient();
   const [baseUrl, setBaseUrl] = useState("");
   const [apiToken, setApiToken] = useState("");
+  const [mode, setMode] = useState<"direct" | "hosted">("direct");
   const [tokenConfigured, setTokenConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -37,6 +38,7 @@ function AdminIronclaw() {
       .then((res) => {
         setBaseUrl(res.baseUrl);
         setTokenConfigured(res.hasToken ?? false);
+        setMode((res.mode as "direct" | "hosted" | undefined) ?? "direct");
         setHasSettings(true);
       })
       .catch(() => {
@@ -51,12 +53,13 @@ function AdminIronclaw() {
     try {
       await apiClient.ironclaw.settings.update({
         baseUrl,
+        mode,
         ...(apiToken ? { apiToken } : {}),
         scope: "platform",
       });
       setHasSettings(true);
       if (apiToken) setTokenConfigured(true);
-      toast.success("IronClaw platform default saved");
+      toast.success(mode === "hosted" ? "Hosted IronClaw saved" : "IronClaw platform default saved");
     } catch (err: any) {
       toast.error(err.message ?? "Failed to save settings");
     } finally {
@@ -70,9 +73,10 @@ function AdminIronclaw() {
       await apiClient.ironclaw.settings.delete({ scope: "platform" });
       setBaseUrl("");
       setApiToken("");
+      setMode("direct");
       setTokenConfigured(false);
       setHasSettings(false);
-      toast.success("Disconnected from platform tunnel");
+      toast.success("Disconnected from platform IronClaw");
     } catch (err: any) {
       toast.error(err.message ?? "Failed to disconnect");
     } finally {
@@ -83,9 +87,9 @@ function AdminIronclaw() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h2 className="text-lg font-semibold text-foreground">IronClaw Default Tunnel</h2>
+        <h2 className="text-lg font-semibold text-foreground">IronClaw Platform</h2>
         <p className="text-sm text-muted-foreground">
-          Configure the platform-wide default tunnel for all users without a personal or org tunnel.
+          Configure the platform-wide IronClaw mode for everyone.
         </p>
       </div>
 
@@ -96,29 +100,61 @@ function AdminIronclaw() {
       ) : (
         <form onSubmit={handleSave} className="space-y-4">
           <Card className="space-y-4 p-5">
+            <div className="flex items-center gap-2 pb-4 border-b border-border">
+              <span className="text-xs text-muted-foreground">Mode:</span>
+              <div className="flex rounded-md border border-border overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setMode("direct")}
+                  className={`px-3 py-1 text-xs font-medium transition-colors ${
+                    mode === "direct"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Platform Tunnel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("hosted")}
+                  className={`px-3 py-1 text-xs font-medium transition-colors ${
+                    mode === "hosted"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Hosted Agent
+                </button>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="tunnelUrl" className="flex items-center gap-1.5">
                 <Terminal size={14} />
-                Tunnel URL
+                {mode === "hosted" ? "Hosted URL" : "Tunnel URL"}
               </Label>
               <Input
                 id="tunnelUrl"
                 value={baseUrl}
                 onChange={(e) => setBaseUrl(e.target.value)}
-                placeholder="https://your-tunnel.ngrok.io"
+                placeholder={
+                  mode === "hosted"
+                    ? "https://your-railway-app.up.railway.app"
+                    : "https://your-tunnel.ngrok.io"
+                }
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Public URL pointing to your ironclaw reborn binary (e.g. via ngrok, Cloudflare
-                Tunnel). This is the platform-wide default tunnel. All users without a personal or
-                org tunnel will use this.
+                {mode === "hosted"
+                  ? "Public URL for the deployed IronClaw service. All users will mint per-user sessions against this deployment."
+                  : "Public URL pointing to your ironclaw reborn binary (e.g. via ngrok, Cloudflare Tunnel). This is the platform-wide default tunnel. All users without a personal or org tunnel will use this."}
               </p>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="apiToken" className="flex items-center gap-1.5">
                 <Key size={14} />
-                API Token
+                {mode === "hosted" ? "Operator Token" : "API Token"}
               </Label>
               <Input
                 id="apiToken"
@@ -126,14 +162,20 @@ function AdminIronclaw() {
                 value={apiToken}
                 onChange={(e) => setApiToken(e.target.value)}
                 placeholder={
-                  tokenConfigured ? "Token is configured" : "The bearer token your binary expects"
+                  tokenConfigured
+                    ? "Token is configured"
+                    : mode === "hosted"
+                      ? "The operator token for the hosted deployment"
+                      : "The bearer token your binary expects"
                 }
                 required={!tokenConfigured}
               />
               <p className="text-xs text-muted-foreground">
                 {tokenConfigured
                   ? "Token is already configured. Leave empty to keep the existing token."
-                  : "Must match the bearer token configured on your Reborn binary."}
+                  : mode === "hosted"
+                    ? "Must match the operator token for the hosted IronClaw deployment."
+                    : "Must match the bearer token configured on your Reborn binary."}
               </p>
             </div>
           </Card>
@@ -141,7 +183,7 @@ function AdminIronclaw() {
           <div className="flex items-center justify-between gap-4">
             {!hasSettings && (
               <p className="text-xs text-muted-foreground">
-                No settings configured yet. Add your tunnel URL and API token to connect.
+                No settings configured yet. Add a platform URL and token to connect.
               </p>
             )}
             <div className="flex items-center gap-2 ml-auto">
@@ -173,8 +215,8 @@ function AdminIronclaw() {
       <div className="rounded-lg border border-border bg-muted/50 px-4 py-3 space-y-1.5">
         <p className="text-xs font-medium text-foreground">About platform-wide defaults</p>
         <p className="text-xs text-muted-foreground">
-          This configuration is used as the default tunnel for all users who have not configured a
-          personal or organization-specific tunnel. Only admins can configure this setting.
+          This configuration is used for all users when set to Hosted Agent, or as the default
+          platform tunnel when set to Platform Tunnel. Only admins can configure this setting.
         </p>
       </div>
     </div>

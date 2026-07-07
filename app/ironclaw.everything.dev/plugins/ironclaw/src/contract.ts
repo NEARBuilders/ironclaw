@@ -7,6 +7,7 @@ const Errors = {
   BAD_REQUEST: { status: 400, message: "Bad request" },
   PRECONDITION_FAILED: { status: 412, message: "Precondition failed" },
   CONFLICT: { status: 409, message: "Resource conflict" },
+  TOO_MANY_REQUESTS: { status: 429, message: "Too many requests" },
   GATEWAY_ERROR: { status: 502, message: "Ironclaw gateway error" },
 };
 

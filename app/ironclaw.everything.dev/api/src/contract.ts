@@ -112,6 +112,7 @@ export const LeaderboardEntrySchema = z.object({
 export const IronclawSettingsSchema = z.object({
   baseUrl: z.string().url(),
   apiToken: z.string(),
+  mode: z.enum(["direct", "hosted"]).optional(),
   hasToken: z.boolean().optional(),
   updatedAt: z.iso.datetime().optional(),
   scope: z.enum(["personal", "organization", "platform"]).optional(),
@@ -310,6 +311,7 @@ export const contract = oc.router({
           z.object({
             baseUrl: z.string().url(),
             apiToken: z.string().optional(),
+            mode: z.enum(["direct", "hosted"]).optional(),
             scope: IronclawScopeSchema,
           }),
         )
