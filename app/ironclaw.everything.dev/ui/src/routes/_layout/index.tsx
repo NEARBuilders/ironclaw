@@ -40,6 +40,7 @@ function LandingPage() {
           <div className="space-y-3">
             <Link
               to="/chat"
+              preload="intent"
               className="group flex w-full items-center justify-center gap-2.5 rounded-2xl bg-foreground px-6 py-4 text-base font-semibold text-background shadow-sm transition-all duration-200 hover:bg-foreground/90 active:scale-[0.98] touch-manipulation min-h-14"
             >
               <img

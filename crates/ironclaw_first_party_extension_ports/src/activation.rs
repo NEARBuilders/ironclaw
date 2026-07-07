@@ -23,7 +23,7 @@ use thiserror::Error;
 pub const DEFAULT_MAX_ACTIVE_SKILLS: usize = 4;
 
 /// Maximum estimated skill prompt tokens selected for one turn by default.
-pub const DEFAULT_MAX_SKILL_CONTEXT_TOKENS: usize = 4000;
+pub const DEFAULT_MAX_SKILL_CONTEXT_TOKENS: usize = 12000;
 
 const MAX_CONCURRENT_SKILL_ACTIVATION_LOADS: usize = 16;
 const MAX_ACTIVATION_CACHE_ENTRIES: usize = 1024;

@@ -14,7 +14,7 @@
 use crate::types::LoadedSkill;
 
 /// Default maximum context tokens allocated to skills.
-pub const MAX_SKILL_CONTEXT_TOKENS: usize = 4000;
+pub const MAX_SKILL_CONTEXT_TOKENS: usize = 12000;
 
 /// Maximum keyword score cap per skill to prevent gaming via keyword stuffing.
 /// Even if a skill has 20 keywords, it can earn at most this many keyword points.

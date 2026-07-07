@@ -21,7 +21,22 @@ export const Route = createFileRoute("/_layout/login")({
       initialSession ??
       queryClient.getQueryData(sessionQueryOptions(authClient, initialSession).queryKey);
 
-    if (session?.user) {
+  const handleGoogle = async () => {
+    setGooglePending(true);
+    try {
+      const callbackURL =
+        typeof window !== "undefined" ? `${window.location.origin}${redirectTo}` : redirectTo;
+      await auth.signIn.social({
+        provider: "google",
+        callbackURL,
+      });
+    } catch (err) {
+      setGooglePending(false);
+      handleError(err instanceof Error ? err : new Error("Google sign-in failed"));
+    }
+  };
+
+  if (session?.user) {
       const redirectTo = search.redirect?.startsWith("/") ? search.redirect : "/chat";
       throw redirect({ to: redirectTo, search: {} });
     }
@@ -42,6 +57,7 @@ function LoginPage() {
 
   const [nearPending, setNearPending] = useState(false);
   const [githubPending, setGithubPending] = useState(false);
+  const [googlePending, setGooglePending] = useState(false);
 
   const redirectTo = redirect?.startsWith("/") ? redirect : "/chat";
 
@@ -97,7 +113,7 @@ function LoginPage() {
     return <Navigate to={redirectTo} replace search={{}} />;
   }
 
-  const isPending = nearPending || githubPending;
+  const isPending = nearPending || githubPending || googlePending;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -152,17 +168,17 @@ function LoginPage() {
 
             <button
               type="button"
-              disabled
-              aria-disabled="true"
-              className="group flex w-full items-center gap-3 rounded-2xl border-2 border-border bg-card px-5 py-4 text-left opacity-60 cursor-not-allowed touch-manipulation min-h-14"
-              title="Google sign-in coming soon"
+              onClick={handleGoogle}
+              disabled={isPending}
+              className="group flex w-full items-center gap-3 rounded-2xl border-2 border-border bg-card px-5 py-4 text-left transition-all duration-200 hover:border-foreground/40 hover:bg-muted/40 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 touch-manipulation min-h-14"
             >
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted">
                 <GoogleGlyph />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground">Continue with Google</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Coming soon</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {googlePending ? "Redirecting..." : "Continue with Google"}
+                </p>
               </div>
             </button>
           </div>

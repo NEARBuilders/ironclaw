@@ -3848,7 +3848,7 @@ struct LocalDevSkillContextSource {
     execution_adapter: Arc<LocalDevSkillExecutionAdapter>,
 }
 
-const LOCAL_DEV_MAX_SKILL_CONTEXT_TOKENS: usize = 6000;
+const LOCAL_DEV_MAX_SKILL_CONTEXT_TOKENS: usize = 12000;
 
 fn optional_nonzero_u32_env(
     key: &'static str,
@@ -4436,8 +4436,8 @@ output_schema_ref = "schemas/write.output.json"
     fn local_dev_selector_config_uses_large_skill_context_budget() {
         let cfg = super::local_dev_selector_config(true);
         assert_eq!(
-            cfg.max_context_tokens, 6000,
-            "local-dev Reborn skill activation should match the legacy 6000-token skill budget"
+            cfg.max_context_tokens, 12000,
+            "local-dev Reborn skill activation should match the 12000-token skill budget"
         );
     }
 

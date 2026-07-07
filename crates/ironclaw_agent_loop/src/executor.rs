@@ -134,18 +134,20 @@ pub enum HostStage {
 
 fn debug_host_unavailable(stage: HostStage, error: &AgentLoopHostError) {
     match LoopSafeSummary::new(error.safe_summary.clone()) {
-        Ok(safe_summary) => tracing::debug!(
+        Ok(safe_summary) => tracing::warn!(
             stage = ?stage,
             kind = ?error.kind,
             diagnostic_ref = ?error.diagnostic_ref,
             safe_summary = %safe_summary,
+            actual_error = %error,
             "agent loop host call unavailable"
         ),
-        Err(validation_error) => tracing::debug!(
+        Err(validation_error) => tracing::warn!(
             stage = ?stage,
             kind = ?error.kind,
             diagnostic_ref = ?error.diagnostic_ref,
             validation_error = %validation_error,
+            actual_error = %error,
             "agent loop host call unavailable with invalid safe summary"
         ),
     }
