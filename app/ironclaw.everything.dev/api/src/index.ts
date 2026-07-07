@@ -965,18 +965,20 @@ export default createPlugin.withPlugins<PluginsClient>()({
             };
           }),
 
-        threadChat: builder.conversation.threadChat
-          .use(requireAuth)
-          .handler(async function* ({ input, signal, context }: any) {
-            const { pluginId, ...bridgeInput } = input;
-            const resolvedContext = await resolveConversationContext(pluginId, context);
-            const client = resolveConversationPlugin(pluginId, resolvedContext);
-            const gen = await client.bridge.threadChat(bridgeInput);
-            for await (const event of gen) {
-              if (signal?.aborted) break;
-              yield event;
-            }
-          }),
+        threadChat: builder.conversation.threadChat.use(requireAuth).handler(async function* ({
+          input,
+          signal,
+          context,
+        }: any) {
+          const { pluginId, ...bridgeInput } = input;
+          const resolvedContext = await resolveConversationContext(pluginId, context);
+          const client = resolveConversationPlugin(pluginId, resolvedContext);
+          const gen = await client.bridge.threadChat(bridgeInput);
+          for await (const event of gen) {
+            if (signal?.aborted) break;
+            yield event;
+          }
+        }),
 
         subscribeThread: builder.conversation.subscribeThread
           .use(requireAuth)

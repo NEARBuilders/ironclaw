@@ -1,13 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  AlertCircle,
-  Ban,
-  Info,
-  RefreshCw,
-  ScrollText,
-  XCircle,
-} from "lucide-react";
+import { AlertCircle, Ban, Info, RefreshCw, ScrollText, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useApiClient } from "@/app";
 import { Badge } from "@/components/ui/badge";

@@ -355,13 +355,21 @@ export const contract = oc.router({
       .errors({ UNAUTHORIZED, BAD_REQUEST, PRECONDITION_FAILED }),
 
     createThread: oc
-      .route({ method: "POST", path: "/conversation/threads", summary: "Create a conversation thread" })
+      .route({
+        method: "POST",
+        path: "/conversation/threads",
+        summary: "Create a conversation thread",
+      })
       .input(ConversationThreadCreateInputSchema)
       .output(ConversationThreadCreateSchema)
       .errors({ UNAUTHORIZED, BAD_REQUEST, PRECONDITION_FAILED }),
 
     deleteThread: oc
-      .route({ method: "DELETE", path: "/conversation/threads/{threadId}", summary: "Delete a conversation thread" })
+      .route({
+        method: "DELETE",
+        path: "/conversation/threads/{threadId}",
+        summary: "Delete a conversation thread",
+      })
       .input(ConversationThreadDeleteInputSchema)
       .output(z.object({ success: z.boolean() }))
       .errors({ UNAUTHORIZED, NOT_FOUND, BAD_REQUEST, PRECONDITION_FAILED }),

@@ -29,8 +29,8 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
   const [runId, setRunId] = useState<string | null>(null);
   const [streamInterrupted, setStreamInterrupted] = useState(false);
   const [systemMessages, setSystemMessages] = useState<UIMessage[]>([]);
-  const [cursor, setCursor] = useState<string | undefined>(() =>
-    queryClient.getQueryData<string>(threadResumeCursorKey(threadId)) ?? undefined,
+  const [cursor, setCursor] = useState<string | undefined>(
+    () => queryClient.getQueryData<string>(threadResumeCursorKey(threadId)) ?? undefined,
   );
 
   const runIdRef = useRef<string | null>(null);
@@ -42,7 +42,8 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
   const cursorRef = useRef<string | undefined>(cursor);
 
   useEffect(() => {
-    const cachedCursor = queryClient.getQueryData<string>(threadResumeCursorKey(threadId)) ?? undefined;
+    const cachedCursor =
+      queryClient.getQueryData<string>(threadResumeCursorKey(threadId)) ?? undefined;
     setCursor(cachedCursor);
     cursorRef.current = cachedCursor;
     runIdRef.current = null;
@@ -113,7 +114,9 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
 
         const errorData = pendingErrorDataRef.current;
         pendingErrorDataRef.current = null;
-        const errorParts: UIMessage["parts"] = [{ type: "text" as const, content: chunk.message ?? "Run failed" }];
+        const errorParts: UIMessage["parts"] = [
+          { type: "text" as const, content: chunk.message ?? "Run failed" },
+        ];
         if (errorData) {
           (errorParts as unknown[]).push({ type: "error-data" as const, content: errorData });
         }
@@ -159,9 +162,7 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
             destination: approvalInfo.destination as
               | { label?: string; url?: string; domain?: string }
               | undefined,
-            details: approvalInfo.details as
-              | Array<{ label?: string; value?: string }>
-              | undefined,
+            details: approvalInfo.details as Array<{ label?: string; value?: string }> | undefined,
           },
         ]);
         return;
@@ -228,11 +229,18 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
     }
   }, [chat.messages, chat.setMessages, initialMessages]);
 
-  const messages = useMemo(() => [...chat.messages, ...systemMessages], [chat.messages, systemMessages]);
+  const messages = useMemo(
+    () => [...chat.messages, ...systemMessages],
+    [chat.messages, systemMessages],
+  );
 
   useEffect(() => {
     if (prevLoadingRef.current && !chat.isLoading) {
-      if (!runCompletedNormallyRef.current && !runErroredRef.current && !intentionalStopRef.current) {
+      if (
+        !runCompletedNormallyRef.current &&
+        !runErroredRef.current &&
+        !intentionalStopRef.current
+      ) {
         setStreamInterrupted(true);
       }
     }

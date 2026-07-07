@@ -36,9 +36,7 @@ export function serializeToolResultEnvelope(envelope: ToolResultEnvelope): strin
   return JSON.stringify(envelope);
 }
 
-export function parseToolResultEnvelope(
-  content: unknown,
-): ToolResultEnvelope | null {
+export function parseToolResultEnvelope(content: unknown): ToolResultEnvelope | null {
   if (content == null) return null;
 
   if (isRecord(content)) {
@@ -46,7 +44,9 @@ export function parseToolResultEnvelope(
       return {
         title: typeof content.title === "string" ? content.title : "unknown",
         inputSummary: readTextField(content, "input_summary", "inputSummary"),
-        output: asText(content.output ?? content.text ?? content.result ?? content.outputPreview ?? ""),
+        output: asText(
+          content.output ?? content.text ?? content.result ?? content.outputPreview ?? "",
+        ),
         outputKind: readTextField(content, "output_kind", "outputKind"),
         truncated: Boolean(content.truncated),
       };
@@ -70,7 +70,13 @@ export function parseToolResultEnvelope(
       return {
         title: typeof parsed.title === "string" ? parsed.title : capabilityId,
         inputSummary: readTextField(parsed, "input_summary", "inputSummary"),
-        output: asText(parsed.output_preview ?? parsed.outputPreview ?? parsed.output_summary ?? parsed.outputSummary ?? ""),
+        output: asText(
+          parsed.output_preview ??
+            parsed.outputPreview ??
+            parsed.output_summary ??
+            parsed.outputSummary ??
+            "",
+        ),
         outputKind: readTextField(parsed, "output_kind", "outputKind"),
         truncated: Boolean(parsed.truncated),
       };
@@ -139,7 +145,12 @@ export function restMessageToParts(
           ? String(parsed.capability_id ?? parsed.capabilityId)
           : "unknown";
     const outputText = asText(
-      parsed.output_preview ?? parsed.outputPreview ?? parsed.output_summary ?? parsed.outputSummary ?? parsed.output ?? "",
+      parsed.output_preview ??
+        parsed.outputPreview ??
+        parsed.output_summary ??
+        parsed.outputSummary ??
+        parsed.output ??
+        "",
     );
     const status = typeof parsed.status === "string" ? parsed.status : undefined;
     const isError = status === "failed" || status === "error" || status === "killed";

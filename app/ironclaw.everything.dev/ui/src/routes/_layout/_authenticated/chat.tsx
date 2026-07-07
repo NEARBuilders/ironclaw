@@ -6,6 +6,7 @@ import {
   useLocation,
   useMatchRoute,
   useNavigate,
+  useRouterState,
 } from "@tanstack/react-router";
 import {
   ChevronDown,
@@ -88,6 +89,8 @@ function ChatLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const matchRoute = useMatchRoute();
+  const searchStr = useRouterState({ select: (s) => s.location.searchStr });
+  const isAdminView = new URLSearchParams(searchStr ?? "").get("admin") === "1";
   const threadMatch = matchRoute({ to: "/chat/$threadId" });
   const activeThreadId =
     threadMatch && typeof threadMatch === "object" && "params" in threadMatch
@@ -464,72 +467,76 @@ function ChatLayout() {
   return (
     <ChatLayoutCtx.Provider value={ctx}>
       <div className="flex h-full w-full overflow-hidden">
-        <div
-          className="hidden lg:flex h-full shrink-0 flex-col border-r border-border bg-card transition-[width] duration-200 overflow-hidden relative"
-          style={{ width: sidebarOpen ? sidebarWidth : SIDEBAR_COLLAPSED_WIDTH }}
-        >
-          {desktopSidebarHeader}
-          {sidebarOpen ? (
-            <>
-              {threadListContent}
-              <button
-                type="button"
-                aria-label="Resize sidebar"
-                onMouseDown={handleResizeStart}
-                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10 group p-0 border-none bg-transparent"
-                title="Drag to resize"
-              >
-                <div className="absolute right-0 top-0 bottom-0 w-3 -translate-x-1" />
-              </button>
-            </>
-          ) : (
-            <div className="flex flex-col items-center gap-1 py-2">
-              {rootThreads.slice(0, 8).map((thread) => (
-                <button
-                  key={thread.threadId}
-                  type="button"
-                  onClick={() => {
-                    navigate({ to: "/chat/$threadId", params: { threadId: thread.threadId } });
-                    setSidebarOpen(true);
-                  }}
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors touch-manipulation ${
-                    activeThreadId === thread.threadId
-                      ? "bg-primary/15 text-foreground"
-                      : "text-muted-foreground hover:bg-muted"
-                  }`}
-                  title={thread.title ?? `Thread ${thread.threadId.slice(0, 8)}`}
-                >
-                  <MessageSquare size={13} />
-                </button>
-              ))}
-              {!isDisconnected && (
+        {isAdminView && (
+          <div
+            className="hidden lg:flex h-full shrink-0 flex-col border-r border-border bg-card transition-[width] duration-200 overflow-hidden relative"
+            style={{ width: sidebarOpen ? sidebarWidth : SIDEBAR_COLLAPSED_WIDTH }}
+          >
+            {desktopSidebarHeader}
+            {sidebarOpen ? (
+              <>
+                {threadListContent}
                 <button
                   type="button"
-                  onClick={createThread}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors touch-manipulation mt-1"
-                  title="New thread"
+                  aria-label="Resize sidebar"
+                  onMouseDown={handleResizeStart}
+                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10 group p-0 border-none bg-transparent"
+                  title="Drag to resize"
                 >
-                  <Plus size={13} />
+                  <div className="absolute right-0 top-0 bottom-0 w-3 -translate-x-1" />
                 </button>
-              )}
-            </div>
-          )}
-        </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-1 py-2">
+                {rootThreads.slice(0, 8).map((thread) => (
+                  <button
+                    key={thread.threadId}
+                    type="button"
+                    onClick={() => {
+                      navigate({ to: "/chat/$threadId", params: { threadId: thread.threadId } });
+                      setSidebarOpen(true);
+                    }}
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors touch-manipulation ${
+                      activeThreadId === thread.threadId
+                        ? "bg-primary/15 text-foreground"
+                        : "text-muted-foreground hover:bg-muted"
+                    }`}
+                    title={thread.title ?? `Thread ${thread.threadId.slice(0, 8)}`}
+                  >
+                    <MessageSquare size={13} />
+                  </button>
+                ))}
+                {!isDisconnected && (
+                  <button
+                    type="button"
+                    onClick={createThread}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors touch-manipulation mt-1"
+                    title="New thread"
+                  >
+                    <Plus size={13} />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent side="left" className="flex flex-col p-0 lg:hidden w-[min(320px,85vw)]">
-            <SheetHeader className="sr-only">
-              <SheetTitle>Threads</SheetTitle>
-            </SheetHeader>
-            {mobileSidebarHeader}
-            {threadListContent}
-          </SheetContent>
-        </Sheet>
+        {isAdminView && (
+          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+            <SheetContent side="left" className="flex flex-col p-0 lg:hidden w-[min(320px,85vw)]">
+              <SheetHeader className="sr-only">
+                <SheetTitle>Threads</SheetTitle>
+              </SheetHeader>
+              {mobileSidebarHeader}
+              {threadListContent}
+            </SheetContent>
+          </Sheet>
+        )}
 
         <div className="flex flex-1 flex-col min-w-0 h-full overflow-hidden">
           <Outlet />
         </div>
-        </div>
+      </div>
 
       <Dialog
         open={deleteConfirmTarget !== null}

@@ -13,7 +13,11 @@ export interface BridgeService {
     clientActionId?: string;
     attachments?: Array<{ mimeType: string; filename?: string; dataBase64: string }>;
   }): Promise<AcceptedResponse>;
-  streamEvents(input: { id: string; afterCursor?: string; signal?: AbortSignal }): AsyncGenerator<ChatEvent>;
+  streamEvents(input: {
+    id: string;
+    afterCursor?: string;
+    signal?: AbortSignal;
+  }): AsyncGenerator<ChatEvent>;
   getTimeline(input: { id: string; limit?: number }): Promise<{ data: any[] }>;
 }
 
@@ -241,7 +245,8 @@ function extractUserInput(
       const src = isRecord(part.source) ? part.source : undefined;
       if (src?.type === "data" && src.value) {
         attachments.push({
-          mimeType: src.mimeType ?? (part.type === "image" ? "image/png" : "application/octet-stream"),
+          mimeType:
+            src.mimeType ?? (part.type === "image" ? "image/png" : "application/octet-stream"),
           filename: src.filename,
           dataBase64: src.value,
         });
@@ -255,7 +260,8 @@ function extractUserInput(
         const src = isRecord(part.source) ? part.source : undefined;
         if (src?.type === "data" && src.value) {
           attachments.push({
-            mimeType: src.mimeType ?? (part.type === "image" ? "image/png" : "application/octet-stream"),
+            mimeType:
+              src.mimeType ?? (part.type === "image" ? "image/png" : "application/octet-stream"),
             filename: src.filename,
             dataBase64: src.value,
           });
@@ -295,13 +301,10 @@ interface ThreadChatInput {
 }
 
 export function createThreadChatBridge(svc: BridgeService) {
-  return async function* (
-    { input, signal }: { input: ThreadChatInput; signal?: AbortSignal },
-  ) {
+  return async function* ({ input, signal }: { input: ThreadChatInput; signal?: AbortSignal }) {
     const threadId = input.threadId;
     const messages = input.messages ?? [];
-    const clientActionId =
-      input.clientActionId ?? `bridge-${crypto.randomUUID()}`;
+    const clientActionId = input.clientActionId ?? `bridge-${crypto.randomUUID()}`;
     const forwardedProps = input.forwardedProps;
 
     const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
@@ -674,7 +677,14 @@ export function createThreadChatBridge(svc: BridgeService) {
             JSON.stringify({ input: approvalContext }),
             eventRunId,
           );
-          yield emitToolEnd(gateToolCallId, toolName, "output-available", "", approvalContext, eventRunId);
+          yield emitToolEnd(
+            gateToolCallId,
+            toolName,
+            "output-available",
+            "",
+            approvalContext,
+            eventRunId,
+          );
           yield emitCustom(
             "approval-requested",
             {
@@ -695,11 +705,11 @@ export function createThreadChatBridge(svc: BridgeService) {
             },
             eventRunId,
           );
-            yield emitCustom(
-              "gate",
-              { ...prompt, toolCallId: gateToolCallId, toolName, input: approvalContext },
-              eventRunId,
-            );
+          yield emitCustom(
+            "gate",
+            { ...prompt, toolCallId: gateToolCallId, toolName, input: approvalContext },
+            eventRunId,
+          );
           continue;
         }
 
@@ -748,11 +758,7 @@ export function createThreadChatBridge(svc: BridgeService) {
           const message = normalizeMessage(failure ?? raw.response ?? "Run failed");
           const details = normalizeDetails(runState);
           yield* emitRunStarted(eventRunId);
-          yield emitCustom(
-            "failed",
-            { runId: eventRunId, message, details, runState },
-            eventRunId,
-          );
+          yield emitCustom("failed", { runId: eventRunId, message, details, runState }, eventRunId);
           {
             const endChunk = closeMessage(eventRunId);
             if (endChunk) yield endChunk;
@@ -847,7 +853,10 @@ export function createThreadChatBridge(svc: BridgeService) {
             }
 
             for (const th of thinkingItems) {
-              const stepRunId = (th.runId ?? th.run_id ?? projectionRunId ?? crypto.randomUUID()) as string;
+              const stepRunId = (th.runId ??
+                th.run_id ??
+                projectionRunId ??
+                crypto.randomUUID()) as string;
               yield {
                 type: "STEP_STARTED",
                 stepName: "thinking",
@@ -875,14 +884,26 @@ export function createThreadChatBridge(svc: BridgeService) {
                   if (!activeToolCalls.has(invocationId)) {
                     activeToolCalls.add(invocationId);
                     yield emitToolStart(invocationId, title, projectionRunId);
-                    yield emitToolArgs(invocationId, JSON.stringify({ input: "" }), projectionRunId);
+                    yield emitToolArgs(
+                      invocationId,
+                      JSON.stringify({ input: "" }),
+                      projectionRunId,
+                    );
                   }
-                yield emitCustom("capability-activity", { toolCallId: invocationId, toolName: title, ...ca }, projectionRunId);
+                  yield emitCustom(
+                    "capability-activity",
+                    { toolCallId: invocationId, toolName: title, ...ca },
+                    projectionRunId,
+                  );
                 } else {
                   if (!activeToolCalls.has(invocationId)) {
                     activeToolCalls.add(invocationId);
                     yield emitToolStart(invocationId, title, projectionRunId);
-                    yield emitToolArgs(invocationId, JSON.stringify({ input: "" }), projectionRunId);
+                    yield emitToolArgs(
+                      invocationId,
+                      JSON.stringify({ input: "" }),
+                      projectionRunId,
+                    );
                   }
                   const errorKind = (ca.errorKind ?? ca.error_kind) as string | undefined;
                   const envelope = buildToolResultEnvelope(ca, {
@@ -897,7 +918,11 @@ export function createThreadChatBridge(svc: BridgeService) {
                       ? "output-error"
                       : "output-available";
                   yield emitToolEnd(invocationId, title, toolState, envelope, "", projectionRunId);
-                  yield emitCustom("capability-activity", { toolCallId: invocationId, toolName: title, ...ca }, projectionRunId);
+                  yield emitCustom(
+                    "capability-activity",
+                    { toolCallId: invocationId, toolName: title, ...ca },
+                    projectionRunId,
+                  );
                   activeToolCalls.delete(invocationId);
                 }
               }
@@ -909,8 +934,19 @@ export function createThreadChatBridge(svc: BridgeService) {
               if (gateRef) {
                 const gateToolCallId = `gate-${gateRef}`;
                 yield emitToolStart(gateToolCallId, "approval", projectionRunId);
-                yield emitToolArgs(gateToolCallId, JSON.stringify({ input: headline }), projectionRunId);
-                yield emitToolEnd(gateToolCallId, "approval", "output-available", "", headline, projectionRunId);
+                yield emitToolArgs(
+                  gateToolCallId,
+                  JSON.stringify({ input: headline }),
+                  projectionRunId,
+                );
+                yield emitToolEnd(
+                  gateToolCallId,
+                  "approval",
+                  "output-available",
+                  "",
+                  headline,
+                  projectionRunId,
+                );
                 yield emitCustom(
                   "approval-requested",
                   {
@@ -924,10 +960,14 @@ export function createThreadChatBridge(svc: BridgeService) {
                       toolName: "approval",
                       description: headline,
                     },
-                    },
-                    projectionRunId,
+                  },
+                  projectionRunId,
                 );
-                  yield emitCustom("gate", { gateRef, headline, toolCallId: gateToolCallId, toolName: "approval" }, projectionRunId);
+                yield emitCustom(
+                  "gate",
+                  { gateRef, headline, toolCallId: gateToolCallId, toolName: "approval" },
+                  projectionRunId,
+                );
               }
             }
 

@@ -379,9 +379,7 @@ export default createPlugin({
       logs: {
         list: builder.logs.list
           .use(requireAuth)
-          .handler(
-            ri((svc, input) => Effect.runPromise(svc.listLogs(input.threadId))),
-          ),
+          .handler(ri((svc, input) => Effect.runPromise(svc.listLogs(input.threadId)))),
       },
 
       channels: {
@@ -501,47 +499,43 @@ export default createPlugin({
         logs: {
           list: builder.operator.logs.list
             .use(requireAuth)
-            .handler(
-              ri((svc, input) => Effect.runPromise(svc.listOperatorLogs(input))),
-            ),
+            .handler(ri((svc, input) => Effect.runPromise(svc.listOperatorLogs(input)))),
         },
       },
 
       bridge: {
-        threadChat: builder.bridge.threadChat
-          .use(requireAuth)
-          .handler(async function* ({ input, signal, context: ctx }: any) {
-            try {
-              const svc = resolveService(ctx);
-              const bridgeSvc = createIronclawBridgeServiceFromService(svc);
-              const bridge = createThreadChatBridge(bridgeSvc);
-              for await (const chunk of bridge({ input, signal })) {
-                yield chunk;
-              }
-            } catch (error) {
-              toOrpcError(error);
+        threadChat: builder.bridge.threadChat.use(requireAuth).handler(async function* ({
+          input,
+          signal,
+          context: ctx,
+        }: any) {
+          try {
+            const svc = resolveService(ctx);
+            const bridgeSvc = createIronclawBridgeServiceFromService(svc);
+            const bridge = createThreadChatBridge(bridgeSvc);
+            for await (const chunk of bridge({ input, signal })) {
+              yield chunk;
             }
+          } catch (error) {
+            toOrpcError(error);
+          }
+        }),
+
+        normalizedThreads: builder.bridge.normalizedThreads.use(requireAuth).handler(
+          ri(async (svc, input, _ctx) => {
+            const raw = await Effect.runPromise(svc.listThreads(input?.limit ?? 50, undefined));
+            return { data: (raw.data ?? []).map(normalizeThread) };
           }),
+        ),
 
-        normalizedThreads: builder.bridge.normalizedThreads
-          .use(requireAuth)
-          .handler(
-            ri(async (svc, input, _ctx) => {
-              const raw = await Effect.runPromise(svc.listThreads(input?.limit ?? 50, undefined));
-              return { data: (raw.data ?? []).map(normalizeThread) };
-            }),
-          ),
-
-        normalizedTimeline: builder.bridge.normalizedTimeline
-          .use(requireAuth)
-          .handler(
-            ri(async (svc, input, _ctx) => {
-              const raw = await Effect.runPromise(
-                svc.getTimeline(input.id, input.limit ?? 100, input.cursor),
-              );
-              return normalizeTimelinePage(raw, input.id);
-            }),
-          ),
+        normalizedTimeline: builder.bridge.normalizedTimeline.use(requireAuth).handler(
+          ri(async (svc, input, _ctx) => {
+            const raw = await Effect.runPromise(
+              svc.getTimeline(input.id, input.limit ?? 100, input.cursor),
+            );
+            return normalizeTimelinePage(raw, input.id);
+          }),
+        ),
       },
     };
   },

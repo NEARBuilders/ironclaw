@@ -1,16 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ToolCallPart, ToolResultPart } from "@tanstack/ai";
-import {
-  resolveToolRunEnvelope,
-  resolveToolRunResultText,
-  type ToolItem,
-} from "./activity-run";
+import { resolveToolRunEnvelope, resolveToolRunResultText, type ToolItem } from "./activity-run";
 
 function toolItem(
-  overrides: {
-    call?: Partial<ToolCallPart>;
-    result?: ToolResultPart;
-  } = {},
+  overrides: { call?: Partial<ToolCallPart>; result?: ToolResultPart } = {},
 ): ToolItem {
   const call: ToolCallPart = {
     type: "tool-call",

@@ -16,7 +16,9 @@ function extractUserMessage(messages: Array<UIMessage> | Array<ModelMessage>) {
 }
 
 function extractOutgoingContent(message: Record<string, unknown>) {
-  const parts = Array.isArray(message.parts) ? (message.parts as Array<Record<string, unknown>>) : [];
+  const parts = Array.isArray(message.parts)
+    ? (message.parts as Array<Record<string, unknown>>)
+    : [];
   const content = message.content;
 
   const attachments: Array<{ mimeType: string; filename?: string; dataBase64: string }> = [];
@@ -42,7 +44,9 @@ function extractOutgoingContent(message: Record<string, unknown>) {
       ? content
       : Array.isArray(content)
         ? content
-            .filter((part): part is Record<string, unknown> => isRecord(part) && part.type === "text")
+            .filter(
+              (part): part is Record<string, unknown> => isRecord(part) && part.type === "text",
+            )
             .map((part) => String(part.content ?? part.text ?? ""))
             .join("")
         : parts

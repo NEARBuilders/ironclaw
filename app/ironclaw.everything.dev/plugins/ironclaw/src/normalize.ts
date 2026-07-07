@@ -67,7 +67,8 @@ export function normalizeTimelineEntry(raw: any, threadId: string) {
     status: statusFromString(raw.status),
     sequence: raw.sequence ?? 0,
     runId: raw.turnRunId ?? raw.turn_run_id ?? raw.runId ?? raw.run_id ?? null,
-    toolResultRef: raw.toolResultRef ?? raw.tool_result_ref ?? raw.resultRef ?? raw.result_ref ?? null,
+    toolResultRef:
+      raw.toolResultRef ?? raw.tool_result_ref ?? raw.resultRef ?? raw.result_ref ?? null,
     attachments: (raw.attachments ?? []).map((att: any) => ({
       id: att.id ?? att.attachment_id ?? "",
       kind: att.kind ?? "document",

@@ -976,12 +976,7 @@ export class IronclawService {
         if (params?.tail) qp.tail = "true";
         if (params?.follow) qp.follow = "true";
 
-        const raw: any = await this.request(
-          "GET",
-          "/api/webchat/v2/operator/logs",
-          undefined,
-          qp,
-        );
+        const raw: any = await this.request("GET", "/api/webchat/v2/operator/logs", undefined, qp);
         const logsData = raw.logs ?? { entries: [] };
         const logs: LogEntry[] = (logsData.entries ?? []).map((l: any) => ({
           id: l.id,
