@@ -1,5 +1,3 @@
-export const HOSTED_IRONCLAW_TENANT_ID = "ironclaw-hosted";
-
 const ACCESS_SESSION_REFRESH_SKEW_MS = 30_000;
 
 interface HostedSession {
@@ -15,7 +13,6 @@ interface HostedSessionEntry {
 interface HostedSessionRequest {
   baseUrl: string;
   operatorToken: string;
-  tenantId: string;
   userId: string;
   agentId?: string;
   projectId?: string;
@@ -30,7 +27,7 @@ function normalizeBaseUrl(baseUrl: string): string {
 function cacheKey(request: HostedSessionRequest): string {
   return [
     normalizeBaseUrl(request.baseUrl),
-    request.tenantId,
+    request.operatorToken,
     request.userId,
     request.agentId ?? "",
     request.projectId ?? "",
@@ -41,19 +38,41 @@ export function resolveHostedIdentity(context: {
   userId?: string;
   apiKey?: { userId?: string };
   actingUserId?: string;
-}): { tenantId: string; userId: string } | null {
+}): { userId: string } | null {
   const userId = context.actingUserId ?? context.userId ?? context.apiKey?.userId ?? null;
   if (!userId) {
     return null;
   }
 
-  return {
-    tenantId: HOSTED_IRONCLAW_TENANT_ID,
-    userId,
-  };
+  return { userId };
+}
+
+async function discoverHostedTenant(baseUrl: string, operatorToken: string): Promise<string> {
+  const response = await fetch(`${normalizeBaseUrl(baseUrl)}/api/webchat/v2/session`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${operatorToken}`,
+    },
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(
+      `Failed to resolve hosted IronClaw tenant: ${response.status} ${response.statusText}${body ? `: ${body}` : ""}`,
+    );
+  }
+
+  const data = (await response.json()) as { tenant_id?: string };
+  if (!data.tenant_id) {
+    throw new Error("Hosted IronClaw session response missing tenant_id");
+  }
+
+  return data.tenant_id;
 }
 
 async function mintHostedAccessSession(request: HostedSessionRequest): Promise<HostedSession> {
+  const tenantId = await discoverHostedTenant(request.baseUrl, request.operatorToken);
   const response = await fetch(`${normalizeBaseUrl(request.baseUrl)}/api/webchat/v2/operator/access-sessions`, {
     method: "POST",
     headers: {
@@ -61,7 +80,7 @@ async function mintHostedAccessSession(request: HostedSessionRequest): Promise<H
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      tenant_id: request.tenantId,
+      tenant_id: tenantId,
       user_id: request.userId,
       ...(request.agentId ? { agent_id: request.agentId } : {}),
       ...(request.projectId ? { project_id: request.projectId } : {}),
@@ -72,26 +91,26 @@ async function mintHostedAccessSession(request: HostedSessionRequest): Promise<H
   if (!response.ok) {
     const body = await response.text().catch(() => "");
     throw new Error(
-      `Failed to mint access session for tenant ${request.tenantId} user ${request.userId}: ${response.status} ${response.statusText}${body ? `: ${body}` : ""}`,
+      `Failed to mint access session for tenant ${tenantId} user ${request.userId}: ${response.status} ${response.statusText}${body ? `: ${body}` : ""}`,
     );
   }
 
   const data = (await response.json()) as { token?: string; expires_at?: string };
   if (!data.token) {
     throw new Error(
-      `Access session response missing token for tenant ${request.tenantId} user ${request.userId}`,
+      `Access session response missing token for tenant ${tenantId} user ${request.userId}`,
     );
   }
   if (!data.expires_at) {
     throw new Error(
-      `Access session response missing expiry for tenant ${request.tenantId} user ${request.userId}`,
+      `Access session response missing expiry for tenant ${tenantId} user ${request.userId}`,
     );
   }
 
   const expiresAtMs = Date.parse(data.expires_at);
   if (!Number.isFinite(expiresAtMs)) {
     throw new Error(
-      `Access session response had invalid expiry for tenant ${request.tenantId} user ${request.userId}`,
+      `Access session response had invalid expiry for tenant ${tenantId} user ${request.userId}`,
     );
   }
 

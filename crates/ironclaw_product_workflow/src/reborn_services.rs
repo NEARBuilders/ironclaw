@@ -4428,14 +4428,15 @@ impl RebornServicesApi for RebornServices {
         let Some(ref service) = self.access_session_service else {
             return Err(RebornServicesError::service_unavailable(false));
         };
-        let tenant_id = TenantId::new(request.tenant_id).map_err(|_err| {
-            RebornServicesError::from_status_kind(
+        if request.tenant_id != caller.tenant_id.as_str() {
+            return Err(RebornServicesError::from_status_kind(
                 RebornServicesErrorCode::InvalidRequest,
                 RebornServicesErrorKind::Validation,
                 400,
                 false,
-            )
-        })?;
+            ));
+        }
+        let tenant_id = caller.tenant_id.clone();
         let user_id = request
             .user_id
             .as_deref()
@@ -4474,7 +4475,7 @@ impl RebornServicesApi for RebornServices {
         let token = service
             .create_session(tenant_id, user_id, agent_id, project_id)
             .await?;
-        let expires_at = Utc::now() + ChronoDuration::hours(1);
+        let expires_at = Utc::now() + ChronoDuration::days(7);
         Ok(WebUiMintAccessSessionResponse { token, expires_at })
     }
 }

@@ -60,6 +60,8 @@ type ProjectFsStat = z.infer<typeof ProjectFsStatSchema>;
 type DownloadFileResponse = z.infer<typeof DownloadFileResponseSchema>;
 type ToolSetting = z.infer<typeof ToolSettingSchema>;
 type LogEntry = z.infer<typeof LogEntrySchema>;
+type TokenSource = string | (() => string | Promise<string>);
+type UnauthorizedRefresh = () => void | Promise<void>;
 
 interface OperatorLogsParams {
   limit?: number;
@@ -207,11 +209,13 @@ function mapSkill(s: any): Skill {
 
 export class IronclawService {
   private baseUrl: string;
-  private token: string;
+  private tokenSource: TokenSource;
+  private unauthorizedRefresh?: UnauthorizedRefresh;
 
-  constructor(baseUrl: string, token: string) {
+  constructor(baseUrl: string, token: TokenSource, unauthorizedRefresh?: UnauthorizedRefresh) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
-    this.token = token;
+    this.tokenSource = token;
+    this.unauthorizedRefresh = unauthorizedRefresh;
   }
 
   private arrayBufferToBase64(buffer: ArrayBuffer): string {
@@ -224,11 +228,16 @@ export class IronclawService {
     return btoa(binary);
   }
 
-  private async request<T>(
+  private async resolveToken(): Promise<string> {
+    return typeof this.tokenSource === "function" ? await this.tokenSource() : this.tokenSource;
+  }
+
+  private async requestOnce<T>(
     method: string,
     path: string,
     body?: unknown,
     params?: Record<string, string | undefined>,
+    token?: string,
   ): Promise<T> {
     const url = new URL(`${this.baseUrl}${path}`);
     if (params) {
@@ -238,7 +247,7 @@ export class IronclawService {
     }
 
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.token}`,
+      Authorization: `Bearer ${token ?? (await this.resolveToken())}`,
     };
 
     if (body !== undefined || BODY_METHODS.has(method.toUpperCase())) {
@@ -267,10 +276,29 @@ export class IronclawService {
     }
   }
 
-  private async requestBinary(
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    params?: Record<string, string | undefined>,
+  ): Promise<T> {
+    const token = await this.resolveToken();
+    try {
+      return await this.requestOnce(method, path, body, params, token);
+    } catch (error) {
+      if (error instanceof IronclawUpstreamError && error.status === 401 && this.unauthorizedRefresh) {
+        await this.unauthorizedRefresh();
+        return this.requestOnce(method, path, body, params, await this.resolveToken());
+      }
+      throw error;
+    }
+  }
+
+  private async requestBinaryOnce(
     method: string,
     path: string,
     params?: Record<string, string | undefined>,
+    token?: string,
   ): Promise<{ bytes: ArrayBuffer; mimeType: string; filename: string; sizeBytes: number }> {
     const url = new URL(`${this.baseUrl}${path}`);
     if (params) {
@@ -281,7 +309,7 @@ export class IronclawService {
 
     const response = await fetch(url.toString(), {
       method,
-      headers: { Authorization: `Bearer ${this.token}` },
+      headers: { Authorization: `Bearer ${token ?? (await this.resolveToken())}` },
     });
 
     if (!response.ok) {
@@ -296,6 +324,23 @@ export class IronclawService {
     const sizeBytes = Number(response.headers.get("Content-Length")) || bytes.byteLength;
 
     return { bytes, mimeType, filename, sizeBytes };
+  }
+
+  private async requestBinary(
+    method: string,
+    path: string,
+    params?: Record<string, string | undefined>,
+  ): Promise<{ bytes: ArrayBuffer; mimeType: string; filename: string; sizeBytes: number }> {
+    const token = await this.resolveToken();
+    try {
+      return await this.requestBinaryOnce(method, path, params, token);
+    } catch (error) {
+      if (error instanceof IronclawUpstreamError && error.status === 401 && this.unauthorizedRefresh) {
+        await this.unauthorizedRefresh();
+        return this.requestBinaryOnce(method, path, params, await this.resolveToken());
+      }
+      throw error;
+    }
   }
 
   ping() {
@@ -565,8 +610,10 @@ export class IronclawService {
 
   streamEvents(id: string, afterCursor?: string, signal?: AbortSignal): AsyncGenerator<ChatEvent> {
     const baseUrl = this.baseUrl;
-    const token = this.token;
+    const self = this;
     const generator: AsyncGenerator<ChatEvent> = (async function* () {
+      let token = await self.resolveToken();
+      let retriedUnauthorized = false;
       let cursor = afterCursor;
 
       const terminalTypes = new Set(["final_reply", "cancelled", "failed"]);
@@ -728,8 +775,15 @@ export class IronclawService {
             signal,
           });
 
-          if (!response.ok || !response.body)
+          if (!response.ok || !response.body) {
+            if (response.status === 401 && self.unauthorizedRefresh && !retriedUnauthorized) {
+              retriedUnauthorized = true;
+              await self.unauthorizedRefresh();
+              token = await self.resolveToken();
+              continue;
+            }
             throw new Error(`SSE connection failed: ${response.status}`);
+          }
 
           const reader = response.body.getReader();
           const decoder = new TextDecoder();

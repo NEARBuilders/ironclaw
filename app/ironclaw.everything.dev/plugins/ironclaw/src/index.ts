@@ -4,7 +4,11 @@ import { ORPCError } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
 
 import { contract } from "./contract";
-import { resolveHostedAccessToken, resolveHostedIdentity } from "./hosted-session";
+import {
+  clearHostedAccessSessionCache,
+  resolveHostedAccessToken,
+  resolveHostedIdentity,
+} from "./hosted-session";
 import { IronclawService, IronclawUpstreamError } from "./service";
 import { createThreadChatBridge, createIronclawBridgeServiceFromService } from "./chat-bridge";
 import { normalizeThread, normalizeTimelinePage } from "./normalize";
@@ -78,16 +82,18 @@ export default createPlugin({
           });
         }
 
-        const sessionToken = await resolveHostedAccessToken({
-          baseUrl: hostedBaseUrl,
-          operatorToken: hostedOperatorToken,
-          tenantId: hostedIdentity.tenantId,
-          userId: hostedIdentity.userId,
-          agentId: reqCtx.agentId,
-          projectId: reqCtx.projectId,
-        });
-
-        return new IronclawService(hostedBaseUrl, sessionToken);
+        return new IronclawService(
+          hostedBaseUrl,
+          () =>
+            resolveHostedAccessToken({
+              baseUrl: hostedBaseUrl,
+              operatorToken: hostedOperatorToken,
+              userId: hostedIdentity.userId,
+              agentId: reqCtx.agentId,
+              projectId: reqCtx.projectId,
+            }),
+          clearHostedAccessSessionCache,
+        );
       }
 
       const baseUrl = reqCtx.baseUrl ?? config.variables.baseUrl;

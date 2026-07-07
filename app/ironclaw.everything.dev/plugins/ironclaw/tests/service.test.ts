@@ -127,4 +127,41 @@ describe("IronclawService", () => {
       fetchSpy.mockRestore();
     });
   });
+
+  describe("token refresh", () => {
+    it("retries once after refreshing the token on a 401", async () => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+      fetchSpy
+        .mockResolvedValueOnce(new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 }))
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              tenant_id: "tenant-1",
+              user_id: "user-1",
+              capabilities: { operator_webui_config: true },
+            }),
+            { status: 200 },
+          ),
+        );
+
+      let token = "stale-token";
+      let refreshed = false;
+      const svc = new IronclawService(
+        "http://localhost",
+        () => token,
+        async () => {
+          refreshed = true;
+          token = "fresh-token";
+        },
+      );
+
+      const result = await Effect.runPromise(svc.getSession());
+
+      expect(refreshed).toBe(true);
+      expect(result.tenantId).toBe("tenant-1");
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+      fetchSpy.mockRestore();
+    });
+  });
 });
