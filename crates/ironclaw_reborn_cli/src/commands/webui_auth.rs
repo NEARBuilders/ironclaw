@@ -18,7 +18,9 @@ use ironclaw_reborn_composition::{
     AccessSessionService, LocalTriggerAccessStore, PublicRouteMount, RebornIdentityResolver,
     WebuiAuthenticator,
 };
-use ironclaw_reborn_webui_ingress::{SignedSessionLoginConfig, build_signed_session_login};
+use ironclaw_reborn_webui_ingress::{
+    SignedSessionLoginConfig, build_access_session_service, build_signed_session_login,
+};
 use secrecy::SecretString;
 
 use crate::commands::serve_sso::SsoStartupConfig;
@@ -75,10 +77,14 @@ pub(crate) async fn build_webui_auth_surface(
         // No SSO providers: keep the env-bearer authenticator and mount no
         // public routes. There are no SSO logins to seed local trigger
         // access for, so any bootstrap config is unused on this path.
+        // Still create an access session service so operator-minted
+        // access sessions work without SSO.
+        let access_session_service =
+            build_access_session_service(&session_signing_secret, &tenant_id);
         return Ok(WebuiAuthSurface {
             authenticator: env_authenticator,
             public_mount: None,
-            access_session_service: None,
+            access_session_service: Some(access_session_service),
         });
     };
 

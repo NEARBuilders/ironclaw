@@ -91,6 +91,23 @@ pub struct SignedSessionLoginWiring {
     pub access_session_service: Arc<dyn AccessSessionService>,
 }
 
+/// Build a standalone `AccessSessionService` from the operator secret.
+///
+/// This produces a store capable of minting tenant-scoped access
+/// sessions even when no SSO provider is configured. The returned
+/// store is backed by the same HMAC key as the full signed-session
+/// login surface, so sessions minted by one path are valid for the
+/// other.
+pub fn build_access_session_service(
+    operator_secret: &SecretString,
+    tenant_id: &TenantId,
+) -> Arc<dyn AccessSessionService> {
+    Arc::new(SignedTokenSessionStore::from_operator_secret(
+        operator_secret,
+        tenant_id,
+    ))
+}
+
 /// Assemble the signed-token login surface from host config. Returns
 /// `None` when no provider is configured, in which case the caller
 /// keeps its plain env-bearer authenticator and mounts no public login
