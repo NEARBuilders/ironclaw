@@ -88,6 +88,7 @@ pub struct SignedSessionLoginConfig {
 pub struct SignedSessionLoginWiring {
     pub mount: PublicRouteMount,
     pub authenticator: Arc<dyn WebuiAuthenticator>,
+    pub access_session_service: Arc<dyn AccessSessionService>,
 }
 
 /// Assemble the signed-token login surface from host config. Returns
@@ -101,9 +102,11 @@ pub fn build_signed_session_login(
         return None;
     }
 
-    let session_store: Arc<dyn SessionStore> = Arc::new(
+    let store = Arc::new(
         SignedTokenSessionStore::from_operator_secret(&config.operator_secret, &config.tenant_id),
     );
+    let session_store: Arc<dyn SessionStore> = Arc::clone(&store);
+    let access_session_service: Arc<dyn AccessSessionService> = store;
     let session_authenticator: Arc<dyn WebuiAuthenticator> =
         Arc::new(SessionAuthenticator::new(session_store.clone()));
 
@@ -123,6 +126,7 @@ pub fn build_signed_session_login(
     Some(SignedSessionLoginWiring {
         mount,
         authenticator,
+        access_session_service,
     })
 }
 

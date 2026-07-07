@@ -109,7 +109,7 @@ async fn production_runtime_webui_serves_automations_without_local_runtime() {
         .await
         .expect("production runtime builds");
 
-    let bundle = build_webui_services(&runtime, None).expect("webui bundle builds");
+    let bundle = build_webui_services(&runtime, None, None).expect("webui bundle builds");
     let caller = WebUiAuthenticatedCaller::new(
         TenantId::new("runtime-automation-prod-tenant").unwrap(),
         UserId::new("runtime-automation-prod-owner").unwrap(),

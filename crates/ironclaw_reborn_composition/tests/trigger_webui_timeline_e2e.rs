@@ -277,7 +277,7 @@ fn make_trigger_record(
 
 fn build_timeline_app(runtime: &RebornRuntime) -> axum::Router {
     let bundle: RebornWebuiBundle =
-        build_webui_services(runtime, None).expect("build_webui_services");
+        build_webui_services(runtime, None, None).expect("build_webui_services");
 
     let tenant_id = TenantId::new(TENANT).expect("tenant id");
     let owner_user_id = UserId::new(USER).expect("owner user id");

@@ -45,6 +45,7 @@
     "auth": {
       "extends": "bos://auth.everything.near/auth.everything.dev",
       "variables": {
+        "baseUrl": "https://korea.nearbuilders.org",
         "socialProviders": {
           "github": {
             "clientId": "Ov23libvkEQgZ9KF9e9L"

@@ -15,7 +15,8 @@ use std::sync::Arc;
 use anyhow::anyhow;
 use ironclaw_reborn_composition::host_api::{AgentId, ProjectId, TenantId};
 use ironclaw_reborn_composition::{
-    LocalTriggerAccessStore, PublicRouteMount, RebornIdentityResolver, WebuiAuthenticator,
+    AccessSessionService, LocalTriggerAccessStore, PublicRouteMount, RebornIdentityResolver,
+    WebuiAuthenticator,
 };
 use ironclaw_reborn_webui_ingress::{SignedSessionLoginConfig, build_signed_session_login};
 use secrecy::SecretString;
@@ -29,6 +30,7 @@ use crate::commands::user_directory::{LocalTriggerAccessBootstrap, WebuiUserDire
 pub(crate) struct WebuiAuthSurface {
     pub(crate) authenticator: Arc<dyn WebuiAuthenticator>,
     pub(crate) public_mount: Option<PublicRouteMount>,
+    pub(crate) access_session_service: Option<Arc<dyn AccessSessionService>>,
 }
 
 /// How to seed local-dev trigger-fire access for SSO users on login.
@@ -76,6 +78,7 @@ pub(crate) async fn build_webui_auth_surface(
         return Ok(WebuiAuthSurface {
             authenticator: env_authenticator,
             public_mount: None,
+            access_session_service: None,
         });
     };
 
@@ -117,6 +120,7 @@ pub(crate) async fn build_webui_auth_surface(
     Ok(WebuiAuthSurface {
         authenticator: wiring.authenticator,
         public_mount: Some(wiring.mount),
+        access_session_service: Some(wiring.access_session_service),
     })
 }
 

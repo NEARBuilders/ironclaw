@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Cloud, Key, Loader2, Save, Terminal } from "lucide-react";
+import { Cloud, Key, Loader2, RefreshCw, Save, Terminal } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useApiClient } from "@/app";
@@ -30,7 +30,10 @@ function AdminIronclaw() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
   const [hasSettings, setHasSettings] = useState(false);
+
+  const canTest = baseUrl && (apiToken || tokenConfigured);
 
   useEffect(() => {
     apiClient.ironclaw.settings
@@ -64,6 +67,18 @@ function AdminIronclaw() {
       toast.error(err.message ?? "Failed to save settings");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    try {
+      await apiClient.ironclaw.ping();
+      toast.success("Connection successful — binary is reachable");
+    } catch {
+      toast.error("Connection failed — check your tunnel URL and API token");
+    } finally {
+      setTestingConnection(false);
     }
   };
 
@@ -203,6 +218,19 @@ function AdminIronclaw() {
                   {disconnecting ? "Disconnecting..." : "Disconnect"}
                 </Button>
               )}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={testingConnection || !canTest}
+                onClick={handleTestConnection}
+              >
+                {testingConnection ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw size={14} />
+                )}
+                {testingConnection ? "Testing..." : "Test connection"}
+              </Button>
               <Button type="submit" disabled={saving || !baseUrl}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={14} />}
                 {saving ? "Saving..." : "Save settings"}

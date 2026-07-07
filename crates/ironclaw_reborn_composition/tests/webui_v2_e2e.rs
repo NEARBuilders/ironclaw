@@ -439,7 +439,7 @@ async fn build_harness_at_with_runtime_owner_and_auth_user(
         })
         .await
         .expect("enable global auto-approve for e2e dispatch");
-    let bundle = build_webui_services(&runtime, None).expect("webui bundle");
+    let bundle = build_webui_services(&runtime, None, None).expect("webui bundle");
     let config = WebuiServeConfig::new(
         TenantId::new(TENANT).expect("tenant"),
         Arc::new(ValidTokenForUser::new(authenticated_user_id)),
@@ -1300,7 +1300,7 @@ mod operator_llm_config {
         .with_boot_config(boot);
 
         let runtime = build_reborn_runtime(input).await.expect("runtime builds");
-        let bundle = build_webui_services(&runtime, None).expect("webui bundle");
+        let bundle = build_webui_services(&runtime, None, None).expect("webui bundle");
         let config = WebuiServeConfig::new(
             TenantId::new(TENANT).expect("tenant"),
             Arc::new(OperatorToken),

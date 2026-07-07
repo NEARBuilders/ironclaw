@@ -3,9 +3,9 @@ use std::sync::Arc;
 use ironclaw_host_api::{TenantId, UserId};
 use ironclaw_product_adapters::ProjectionStream;
 use ironclaw_product_workflow::{
-    ConnectableChannelsProductFacade, RebornChannelConnectAction, RebornChannelConnectStrategy,
-    RebornConnectableChannelInfo, RebornConnectableChannelListResponse, RebornServicesError,
-    WebUiAuthenticatedCaller,
+    AccessSessionService, ConnectableChannelsProductFacade, RebornChannelConnectAction,
+    RebornChannelConnectStrategy, RebornConnectableChannelInfo,
+    RebornConnectableChannelListResponse, RebornServicesError, WebUiAuthenticatedCaller,
 };
 
 use crate::{
@@ -32,6 +32,7 @@ pub fn build_webui_services_with_slack_host_beta_mounts(
     event_stream: Option<Arc<dyn ProjectionStream>>,
     slack_mounts: Option<&SlackHostBetaMounts>,
     operator_route_visibility: SlackOperatorRouteVisibility,
+    access_session_service: Option<Arc<dyn AccessSessionService>>,
 ) -> Result<RebornWebuiBundle, RebornBuildError> {
     let visibility = match (slack_mounts.is_some(), operator_route_visibility) {
         (false, _) => SlackConnectableChannelVisibility::Hidden,
@@ -72,6 +73,7 @@ pub fn build_webui_services_with_slack_host_beta_mounts(
         connectable_channels,
         channel_connection,
         outbound_delivery_target_providers,
+        access_session_service,
     )
 }
 
@@ -91,6 +93,7 @@ fn build_webui_services_with_slack_connectable_channel(
         ),
         None,
         Vec::new(),
+        None,
     )
 }
 

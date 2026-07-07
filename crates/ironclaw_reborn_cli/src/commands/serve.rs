@@ -446,9 +446,11 @@ impl ServeCommand {
                 None,
                 slack_mounts.as_ref(),
                 operator_route_visibility,
+                access_session_service,
             )?;
             #[cfg(not(feature = "slack-v2-host-beta"))]
-            let bundle: RebornWebuiBundle = build_webui_services(&runtime, None)?;
+            let bundle: RebornWebuiBundle =
+                build_webui_services(&runtime, None, access_session_service)?;
             #[cfg(feature = "openai-compat-beta")]
             let openai_compat_mount = build_openai_compat_route_mount(
                 &runtime,
@@ -486,6 +488,7 @@ impl ServeCommand {
             let crate::commands::webui_auth::WebuiAuthSurface {
                 authenticator,
                 public_mount,
+                access_session_service,
             } = crate::commands::webui_auth::build_webui_auth_surface(
                 sso_startup,
                 identity_resolver,

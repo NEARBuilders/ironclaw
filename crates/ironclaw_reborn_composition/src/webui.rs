@@ -8,12 +8,12 @@ use ironclaw_extensions::SharedExtensionRegistry;
 use ironclaw_host_api::{EffectKind, InvocationId, ResourceScope};
 use ironclaw_product_adapters::ProjectionStream;
 use ironclaw_product_workflow::{
-    ChannelConnectionFacade, ConnectableChannelsProductFacade, OperatorStatusService,
-    RebornOperatorStatusCheck, RebornOperatorStatusResponse, RebornOperatorStatusSeverity,
-    RebornOperatorStatusState, RebornOperatorToolCatalog, RebornOperatorToolInfo,
-    RebornServices as ProductRebornServices, RebornServicesApi, RebornServicesError,
-    RebornServicesErrorCode, RebornServicesErrorKind, RebornSkillActionResponse,
-    RebornSkillContentResponse, RebornSkillInfo, RebornSkillListResponse,
+    AccessSessionService, ChannelConnectionFacade, ConnectableChannelsProductFacade,
+    OperatorStatusService, RebornOperatorStatusCheck, RebornOperatorStatusResponse,
+    RebornOperatorStatusSeverity, RebornOperatorStatusState, RebornOperatorToolCatalog,
+    RebornOperatorToolInfo, RebornServices as ProductRebornServices, RebornServicesApi,
+    RebornServicesError, RebornServicesErrorCode, RebornServicesErrorKind,
+    RebornSkillActionResponse, RebornSkillContentResponse, RebornSkillInfo, RebornSkillListResponse,
     RebornSkillSearchResponse, RebornSkillSourceKind, RebornSkillTrustLevel, SkillsProductFacade,
     WebUiAuthenticatedCaller,
 };
@@ -114,8 +114,16 @@ impl std::fmt::Debug for RebornWebuiBundle {
 pub fn build_webui_services(
     runtime: &RebornRuntime,
     event_stream: Option<Arc<dyn ProjectionStream>>,
+    access_session_service: Option<Arc<dyn AccessSessionService>>,
 ) -> Result<RebornWebuiBundle, RebornBuildError> {
-    build_webui_services_with_connectable_channels(runtime, event_stream, None, None, Vec::new())
+    build_webui_services_with_connectable_channels(
+        runtime,
+        event_stream,
+        None,
+        None,
+        Vec::new(),
+        access_session_service,
+    )
 }
 
 pub(crate) fn build_webui_services_with_connectable_channels(
@@ -124,6 +132,7 @@ pub(crate) fn build_webui_services_with_connectable_channels(
     connectable_channels: Option<Arc<dyn ConnectableChannelsProductFacade>>,
     channel_connection: Option<Arc<dyn ChannelConnectionFacade>>,
     mut outbound_delivery_target_providers: Vec<Arc<dyn OutboundDeliveryTargetProvider>>,
+    access_session_service: Option<Arc<dyn AccessSessionService>>,
 ) -> Result<RebornWebuiBundle, RebornBuildError> {
     let services = runtime.services();
     if services.local_runtime.is_some()
@@ -342,6 +351,10 @@ pub(crate) fn build_webui_services_with_connectable_channels(
     #[cfg(feature = "root-llm-provider")]
     if let Some(llm_config) = build_llm_config_service(runtime) {
         api = api.with_llm_config_service(llm_config);
+    }
+
+    if let Some(svc) = access_session_service {
+        api = api.with_access_session_service(svc);
     }
 
     Ok(RebornWebuiBundle {
@@ -1017,7 +1030,7 @@ mod tests {
         let runtime = crate::build_reborn_runtime(input)
             .await
             .expect("runtime builds");
-        let bundle = build_webui_services(&runtime, None).expect("webui services build");
+        let bundle = build_webui_services(&runtime, None, None).expect("webui services build");
 
         let error = bundle
             .api
