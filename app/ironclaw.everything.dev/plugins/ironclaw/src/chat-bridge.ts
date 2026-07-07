@@ -714,7 +714,13 @@ export function createThreadChatBridge(svc: BridgeService) {
         }
 
         if (type === "auth_required") {
-          const authPrompt = raw.authPrompt;
+          const authPrompt = { ...raw.authPrompt };
+          if (
+            (!authPrompt.challengeKind || authPrompt.challengeKind === "other") &&
+            authPrompt.provider
+          ) {
+            authPrompt.challengeKind = "manual_token";
+          }
           yield* emitRunStarted(eventRunId);
           yield emitCustom("auth-required", authPrompt, eventRunId);
           continue;

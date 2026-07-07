@@ -1,5 +1,5 @@
 import { ShieldAlert } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import type { AuthGate } from "@/hooks/conversation-chat-types";
 
 interface AuthGenericCardProps {
@@ -27,10 +27,15 @@ export function AuthGenericCard({ gate, onCancel }: AuthGenericCardProps) {
       {gate.body && <div className="mb-3 text-sm text-muted-foreground">{gate.body}</div>}
 
       <div className="mb-3 text-xs text-muted-foreground">
-        Open settings to complete this authentication step.
+        {gate.provider
+          ? `${gate.provider} needs to be configured with a credential.`
+          : "Open settings to complete this authentication step."}
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <a href="/settings" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          Configure in Settings
+        </a>
         <Button variant="secondary" size="sm" onClick={onCancel}>
           Cancel
         </Button>

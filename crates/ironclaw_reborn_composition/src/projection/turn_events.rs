@@ -405,6 +405,8 @@ async fn blocked_prompt_payload(
     let gate_ref_str = gate_ref.as_str().to_string();
     match event.status {
         TurnStatus::BlockedAuth => {
+            let credential_count = state.credential_requirements.len();
+            let has_auth_challenges = auth_challenges.is_some();
             let view = auth_prompt_view_for_blocked_auth(BlockedAuthPromptRequest {
                 fallback_owner_user_id: event.owner_user_id.as_ref().unwrap_or(caller_user_id),
                 scope: &event.scope,
@@ -419,6 +421,12 @@ async fn blocked_prompt_payload(
                 auth_challenges,
             })
             .await?;
+            tracing::debug!(
+                credential_count,
+                has_auth_challenges,
+                challenge_kind = ?view.challenge_kind,
+                "blocked_auth prompt view",
+            );
             Ok(Some(ProductOutboundPayload::AuthPrompt(view)))
         }
         TurnStatus::BlockedApproval => Ok(Some(
