@@ -105,7 +105,7 @@ pub fn build_signed_session_login(
     let store = Arc::new(
         SignedTokenSessionStore::from_operator_secret(&config.operator_secret, &config.tenant_id),
     );
-    let session_store: Arc<dyn SessionStore> = Arc::clone(&store);
+    let session_store: Arc<dyn SessionStore> = store.clone();
     let access_session_service: Arc<dyn AccessSessionService> = store;
     let session_authenticator: Arc<dyn WebuiAuthenticator> =
         Arc::new(SessionAuthenticator::new(session_store.clone()));

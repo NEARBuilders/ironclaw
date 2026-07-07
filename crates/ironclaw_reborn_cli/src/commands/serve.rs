@@ -417,6 +417,50 @@ impl ServeCommand {
             let runtime = build_reborn_runtime(runtime_input)
                 .await
                 .context("failed to assemble Reborn runtime for `serve`")?;
+
+            // Only SSO-enabled WebUI needs the canonical Reborn identity
+            // resolver: an env-bearer-only deployment resolves its single
+            // configured user without any identity store, so skip opening (and
+            // its legacy migration) when SSO is disabled. `None` also covers
+            // the case where the runtime carries no local-runtime substrate;
+            // the auth surface fails closed when SSO is configured but no
+            // resolver is available.
+            let identity_resolver = if sso_startup.is_some() {
+                match runtime.open_reborn_identity_resolver(&tenant_id).await {
+                    Some(result) => {
+                        Some(result.context("failed to initialize the Reborn identity resolver")?)
+                    }
+                    None => None,
+                }
+            } else {
+                None
+            };
+
+            // Assemble the WebChat v2 auth surface (authenticator + optional
+            // public login mount, plus the access session service). Must be
+            // built before the bundle so `access_session_service` is available
+            // for the composition call.
+            let crate::commands::webui_auth::WebuiAuthSurface {
+                authenticator,
+                public_mount,
+                access_session_service,
+            } = crate::commands::webui_auth::build_webui_auth_surface(
+                sso_startup,
+                identity_resolver,
+                tenant_id.clone(),
+                session_signing_secret,
+                env_authenticator,
+                trigger_access_store.as_ref().map(|store| {
+                    crate::commands::webui_auth::LocalTriggerAccessBootstrapConfig {
+                        store: Arc::clone(store),
+                        tenant_id: tenant_id.clone(),
+                        agent_id: default_agent_id.clone(),
+                        project_id: default_project_id.clone(),
+                    }
+                }),
+            )
+            .await?;
+
             #[cfg(feature = "slack-v2-host-beta")]
             let slack_mounts = if let Some(slack_config) = slack_host_beta_config {
                 match build_slack_host_beta_runtime_mounts(&runtime, slack_config)
@@ -439,7 +483,7 @@ impl ServeCommand {
             };
             #[cfg(feature = "slack-v2-host-beta")]
             let operator_route_visibility =
-                slack_operator_route_visibility_for_authenticator(env_authenticator.as_ref());
+                slack_operator_route_visibility_for_authenticator(authenticator.as_ref());
             #[cfg(feature = "slack-v2-host-beta")]
             let bundle: RebornWebuiBundle = build_webui_services_with_slack_host_beta_mounts(
                 &runtime,
@@ -460,51 +504,6 @@ impl ServeCommand {
             )
             .await
             .context("failed to compose OpenAI-compatible Reborn routes")?;
-
-            // Only SSO-enabled WebUI needs the canonical Reborn identity
-            // resolver: an env-bearer-only deployment resolves its single
-            // configured user without any identity store, so skip opening (and
-            // its legacy migration) when SSO is disabled. `None` also covers
-            // the case where the runtime carries no local-runtime substrate;
-            // the auth surface fails closed when SSO is configured but no
-            // resolver is available.
-            let identity_resolver = if sso_startup.is_some() {
-                match runtime.open_reborn_identity_resolver(&tenant_id).await {
-                    Some(result) => {
-                        Some(result.context("failed to initialize the Reborn identity resolver")?)
-                    }
-                    None => None,
-                }
-            } else {
-                None
-            };
-
-            // Assemble the WebChat v2 auth surface (authenticator + optional
-            // public login mount). The auth/identity module owns the
-            // signed-session wiring; `serve` supplies host config, the
-            // runtime-owned identity resolver, and the local trigger-access
-            // bootstrap that seeds an admitted SSO user's trigger access on
-            // login.
-            let crate::commands::webui_auth::WebuiAuthSurface {
-                authenticator,
-                public_mount,
-                access_session_service,
-            } = crate::commands::webui_auth::build_webui_auth_surface(
-                sso_startup,
-                identity_resolver,
-                tenant_id.clone(),
-                session_signing_secret,
-                env_authenticator,
-                trigger_access_store.as_ref().map(|store| {
-                    crate::commands::webui_auth::LocalTriggerAccessBootstrapConfig {
-                        store: Arc::clone(store),
-                        tenant_id: tenant_id.clone(),
-                        agent_id: default_agent_id.clone(),
-                        project_id: default_project_id.clone(),
-                    }
-                }),
-            )
-            .await?;
 
             let cors_origins_for_banner: Vec<String> = if allowed_origins_raw.is_empty() {
                 std::env::var("IRONCLAW_REBORN_CORS_ORIGINS")
