@@ -57,6 +57,13 @@ function extractOutgoingContent(message: Record<string, unknown>) {
   return { text, attachments };
 }
 
+const MAX_RETRIES = 3;
+const BASE_BACKOFF_MS = 1000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 export function createThreadLiveConnection({
   apiClient,
   threadId,
@@ -72,15 +79,30 @@ export function createThreadLiveConnection({
 }): SubscribeConnectionAdapter {
   return {
     async *subscribe(abortSignal?: AbortSignal) {
-      const stream = await apiClient.conversation.subscribeThread({
-        threadId,
-        afterCursor: getCursor(),
-        pluginId,
-      });
-
-      for await (const chunk of stream as AsyncIterable<StreamChunk>) {
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         if (abortSignal?.aborted) return;
-        yield chunk;
+
+        try {
+          const stream = await apiClient.conversation.subscribeThread({
+            threadId,
+            afterCursor: getCursor(),
+            pluginId,
+          });
+
+          for await (const chunk of stream as AsyncIterable<StreamChunk>) {
+            if (abortSignal?.aborted) return;
+            yield chunk;
+          }
+
+          return;
+        } catch (err) {
+          if (abortSignal?.aborted) return;
+          if (attempt >= MAX_RETRIES) throw err;
+
+          yield { type: "CUSTOM", name: "reconnecting", value: { attempt, maxRetries: MAX_RETRIES } } as StreamChunk;
+
+          await sleep(BASE_BACKOFF_MS * 2 ** (attempt - 1));
+        }
       }
     },
 

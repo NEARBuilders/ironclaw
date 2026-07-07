@@ -1,7 +1,7 @@
 import type { UIMessage } from "@tanstack/ai";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Outlet, useMatchRoute } from "@tanstack/react-router";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { ApprovalCard } from "@/components/approval-card";
 import { AuthGenericCard } from "@/components/auth-generic-card";
 import { AuthOauthCard } from "@/components/auth-oauth-card";
@@ -17,6 +17,8 @@ import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
 import { useVerboseMode } from "@/hooks/use-verbose-mode";
 import type { StagedAttachment } from "@/lib/attachments";
 import { useChatLayout } from "../chat";
+
+const PENDING_KEY = ["pending-initial-message"] as const;
 
 export const Route = createFileRoute("/_layout/_authenticated/chat/$threadId")({
   remountDeps: ({ params }) => ({ threadId: params.threadId }),
@@ -46,6 +48,17 @@ function ThreadLayout() {
   const chat = useConversationChat({ threadId, initialMessages });
   const isBusy = chat.isLoading;
   const isLogsRoute = !!matchRoute({ to: "/chat/$threadId/logs" });
+  const initialSendRef = useRef(false);
+
+  useEffect(() => {
+    if (initialSendRef.current || chat.isLoading) return;
+    const pending = queryClient.getQueryData<{ content: string; attachments?: StagedAttachment[] }>(PENDING_KEY);
+    if (!pending) return;
+    queryClient.removeQueries({ queryKey: PENDING_KEY });
+    initialSendRef.current = true;
+    chat.sendMessage(pending.content, pending.attachments);
+    queryClient.invalidateQueries({ queryKey: ["conversation", "threads"] });
+  }, [chat.sendMessage, chat.isLoading, queryClient]);
 
   const handleSend = useCallback(
     (content: string, attachments?: StagedAttachment[]) => {
@@ -105,7 +118,13 @@ function ThreadLayout() {
         onToggleVerbose={toggleVerbose}
         onCopyConversation={chat.copyConversation}
       />
-      {chat.streamInterrupted && (
+      {chat.connectionStatus === "error" && (
+        <div className="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-xs text-destructive">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-destructive" />
+          Connection error{chat.error ? `: ${chat.error}` : ""} — send a new message to retry.
+        </div>
+      )}
+      {chat.streamInterrupted && chat.connectionStatus !== "error" && (
         <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/5 px-4 py-2 text-xs text-amber-600">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
           Connection lost — messages may be incomplete. Send a new message to continue.

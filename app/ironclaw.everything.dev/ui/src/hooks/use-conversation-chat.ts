@@ -3,6 +3,7 @@ import type { StreamChunk } from "@tanstack/ai/client";
 import { useChat } from "@tanstack/ai-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useApiClient } from "@/app";
 import type { AuthGate, PendingApproval } from "@/hooks/conversation-chat-types";
 import type { StagedAttachment } from "@/lib/attachments";
@@ -39,6 +40,8 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
   const intentionalStopRef = useRef(false);
   const pendingErrorDataRef = useRef<unknown>(null);
   const prevLoadingRef = useRef(false);
+  const didSyncRef = useRef(false);
+  const hasLiveRunRef = useRef(false);
   const cursorRef = useRef<string | undefined>(cursor);
 
   useEffect(() => {
@@ -52,6 +55,7 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
     intentionalStopRef.current = false;
     pendingErrorDataRef.current = null;
     prevLoadingRef.current = false;
+    hasLiveRunRef.current = false;
     setSystemMessages([]);
     setPendingApprovals([]);
     setAuthGates([]);
@@ -100,11 +104,13 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
         runCompletedNormallyRef.current = false;
         runErroredRef.current = false;
         intentionalStopRef.current = false;
+        hasLiveRunRef.current = true;
         return;
       }
 
       if (chunk.type === "RUN_ERROR") {
         runErroredRef.current = true;
+        hasLiveRunRef.current = false;
         runIdRef.current = null;
         setRunId(null);
         setPendingApprovals([]);
@@ -133,6 +139,7 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
 
       if (chunk.type === "RUN_FINISHED") {
         runCompletedNormallyRef.current = true;
+        hasLiveRunRef.current = false;
         runIdRef.current = null;
         setRunId(null);
         setPendingApprovals([]);
@@ -231,10 +238,11 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
   });
 
   useEffect(() => {
-    if (chat.messages.length === 0 && initialMessages.length > 0) {
+    if (!didSyncRef.current && initialMessages.length > 0 && !hasLiveRunRef.current) {
       chat.setMessages(initialMessages);
+      didSyncRef.current = true;
     }
-  }, [chat.messages, chat.setMessages, initialMessages]);
+  }, [chat.setMessages, initialMessages]);
 
   const messages = useMemo(
     () => [...chat.messages, ...systemMessages],
@@ -281,12 +289,14 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
           })
           .catch((err) => {
             console.error("[ironclaw] sendMessage stream failed:", err);
+            toast.error("Failed to send message. Check your connection and try again.");
           });
         return;
       }
 
       void chat.sendMessage(content).catch((err) => {
         console.error("[ironclaw] sendMessage stream failed:", err);
+        toast.error("Failed to send message. Check your connection and try again.");
       });
     },
     [chat],

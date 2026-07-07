@@ -1,7 +1,13 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, RefreshCw, Unplug, Zap } from "lucide-react";
-import { threadListQueryOptions } from "@/hooks/use-conversation";
+import { useCallback, useState } from "react";
+import { toast } from "sonner";
+import { useApiClient } from "@/app";
+import { ChatInput } from "@/components/chat-input";
+import { KoreaPromptEmptyState } from "@/components/korea-prompt-empty-state";
 import { ironclawStatusQueryKey, useIronclawStatus } from "@/hooks/use-ironclaw-status";
+import type { StagedAttachment } from "@/lib/attachments";
 
 export const Route = createFileRoute("/_layout/_authenticated/chat/")({
   beforeLoad: async ({ context }) => {
@@ -9,97 +15,41 @@ export const Route = createFileRoute("/_layout/_authenticated/chat/")({
     if (cached && !(cached as { connected?: boolean }).connected) {
       throw redirect({ to: "/setup" });
     }
-
-    if (typeof window === "undefined") return {};
-
-    let threads: Array<{
-      threadId: string;
-      isSubagent?: boolean;
-      updatedAt?: string;
-      createdAt?: string;
-    }> = [];
-    try {
-      const data = await context.queryClient.ensureQueryData(
-        threadListQueryOptions(context.apiClient),
-      );
-      threads = (data?.threads ?? []) as typeof threads;
-    } catch {
-      return { threadsError: true };
-    }
-
-    const nonSubagent = threads.filter((t) => !t.isSubagent);
-    if (nonSubagent.length > 0) {
-      const sorted = [...nonSubagent].sort((a, b) => {
-        const at = a.updatedAt ?? a.createdAt ?? "";
-        const bt = b.updatedAt ?? b.createdAt ?? "";
-        return bt.localeCompare(at);
-      });
-      throw redirect({
-        to: "/chat/$threadId",
-        params: { threadId: sorted[0].threadId },
-      });
-    }
-
-    try {
-      const result = await context.apiClient.conversation.createThread({
-        clientActionId: `ui-${crypto.randomUUID()}`,
-      });
-      context.queryClient.invalidateQueries({ queryKey: ["conversation", "threads"] });
-      throw redirect({
-        to: "/chat/$threadId",
-        params: { threadId: result.threadId },
-      });
-    } catch (err) {
-      if (err && typeof err === "object" && "to" in err) throw err;
-      return { threadsError: true };
-    }
   },
   component: ChatIndex,
 });
 
 function ChatIndex() {
-  const { threadsError } = Route.useRouteContext();
-  const { status: connectionStatus } = useIronclawStatus();
+  const apiClient = useApiClient();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { status: connectionStatus, attachmentCapabilities } = useIronclawStatus();
+  const [isCreating, setIsCreating] = useState(false);
 
   const isDisconnected =
     connectionStatus === "disconnected" || connectionStatus === "never-connected";
 
-  if (threadsError) {
-    return (
-      <div className="flex h-full items-center justify-center px-4">
-        <div className="text-center space-y-4 max-w-xs w-full">
-          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border bg-muted mx-auto">
-            <AlertTriangle className="h-6 w-6 text-destructive" />
-          </div>
-          <div className="space-y-1.5">
-            <p className="text-sm font-semibold text-foreground">
-              Couldn't prepare your chat
-            </p>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              The IronClaw binary may not be running, or something went wrong. Try again or check
-              your setup.
-            </p>
-          </div>
-          <div className="flex items-center justify-center gap-2">
-            <Link
-              to="/chat"
-              preload="intent"
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors touch-manipulation"
-            >
-              <RefreshCw size={14} />
-              Try again
-            </Link>
-            <Link
-              to="/"
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors touch-manipulation"
-            >
-              Back home
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleSend = useCallback(
+    async (content: string, attachments?: StagedAttachment[]) => {
+      if (!content.trim() || isCreating) return;
+      setIsCreating(true);
+      try {
+        const result = await apiClient.conversation.createThread({
+          clientActionId: `ui-${crypto.randomUUID()}`,
+        });
+        queryClient.setQueryData(["pending-initial-message"], { content, attachments });
+        navigate({
+          to: "/chat/$threadId",
+          params: { threadId: result.threadId },
+        });
+      } catch {
+        toast.error("Failed to create thread");
+      } finally {
+        setIsCreating(false);
+      }
+    },
+    [apiClient, navigate, queryClient, isCreating],
+  );
 
   if (isDisconnected) {
     return (
@@ -133,11 +83,16 @@ function ChatIndex() {
   }
 
   return (
-    <div className="flex h-full items-center justify-center px-4">
-      <div className="text-center space-y-3">
-        <div className="h-8 w-8 mx-auto animate-spin rounded-full border-2 border-border border-t-foreground" />
-        <p className="text-sm text-muted-foreground">Preparing your chat...</p>
+    <div className="flex h-full flex-col min-h-0">
+      <div className="flex-1 min-h-0">
+        <KoreaPromptEmptyState onSelect={handleSend} disabled={isCreating} />
       </div>
+      <ChatInput
+        onSend={handleSend}
+        placeholder="Ask about Seoul..."
+        isSending={isCreating}
+        attachmentCapabilities={attachmentCapabilities}
+      />
     </div>
   );
 }

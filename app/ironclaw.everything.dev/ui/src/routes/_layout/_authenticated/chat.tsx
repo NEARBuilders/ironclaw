@@ -6,7 +6,6 @@ import {
   useLocation,
   useMatchRoute,
   useNavigate,
-  useRouterState,
 } from "@tanstack/react-router";
 import {
   ChevronDown,
@@ -89,8 +88,6 @@ function ChatLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const matchRoute = useMatchRoute();
-  const searchStr = useRouterState({ select: (s) => s.location.searchStr });
-  const isAdminView = new URLSearchParams(searchStr ?? "").get("admin") === "1";
   const threadMatch = matchRoute({ to: "/chat/$threadId" });
   const activeThreadId =
     threadMatch && typeof threadMatch === "object" && "params" in threadMatch
@@ -467,7 +464,6 @@ function ChatLayout() {
   return (
     <ChatLayoutCtx.Provider value={ctx}>
       <div className="flex h-full w-full overflow-hidden">
-        {isAdminView && (
           <div
             className="hidden lg:flex h-full shrink-0 flex-col border-r border-border bg-card transition-[width] duration-200 overflow-hidden relative"
             style={{ width: sidebarOpen ? sidebarWidth : SIDEBAR_COLLAPSED_WIDTH }}
@@ -519,9 +515,7 @@ function ChatLayout() {
               </div>
             )}
           </div>
-        )}
 
-        {isAdminView && (
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetContent side="left" className="flex flex-col p-0 lg:hidden w-[min(320px,85vw)]">
               <SheetHeader className="sr-only">
@@ -531,7 +525,6 @@ function ChatLayout() {
               {threadListContent}
             </SheetContent>
           </Sheet>
-        )}
 
         <div className="flex flex-1 flex-col min-w-0 h-full overflow-hidden">
           <Outlet />
