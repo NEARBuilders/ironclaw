@@ -1,7 +1,7 @@
 ---
 name: seoul-density
 version: "1.0.0"
-description: 서울 주요 121개 핫스팟의 실시간 혼잡도(여유/보통/약간 붐빔/붐빔)와 추정 인구 범위를 조회한다. KT·SKT 통신 신호 기반으로 5분 주기 갱신. k-skill-proxy 경유로 API 키 불필요.\n\nLive crowd density for 121 Seoul hotspots (calm/moderate/busy/very busy) with estimated population range. Based on KT/SKT mobile signal data, refreshed every 5 minutes. No API key needed — routed through k-skill-proxy.
+description: 서울 주요 121개 핫스팟의 실시간 혼잡도(여유/보통/약간 붐빔/붐빔)와 추정 인구 범위를 조회한다. KT·SKT 통신 신호 기반으로 5분 주기 갱신. k-skill-proxy 경유로 API 키 불필요.\n\nLive crowd density for 121 Seoul hotspots (calm/moderate/busy/very busy) with estimated population range. Based on KT/SKT mobile signal data, refreshed every 5 minutes. No token needed — routed through k-skill-proxy.
 activation:
   keywords:
     - "혼잡"

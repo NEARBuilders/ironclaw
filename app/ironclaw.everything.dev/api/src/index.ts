@@ -595,6 +595,21 @@ export default createPlugin.withPlugins<PluginsClient>()({
                 });
               return { success: true };
             }),
+
+          tools: {
+            list: builder.ironclaw.settings.tools.list
+              .use(requireAuth)
+              .use(ic.credentials)
+              .handler(h0(services, (ic) => ic.settings.tools.list)),
+            set: builder.ironclaw.settings.tools.set
+              .use(requireAuth)
+              .use(ic.credentials)
+              .handler(h1(services, (ic) => ic.settings.tools.set)),
+            setPermission: builder.ironclaw.settings.tools.setPermission
+              .use(requireAuth)
+              .use(ic.credentials)
+              .handler(h1(services, (ic) => ic.settings.tools.setPermission)),
+          },
         },
 
         threads: {

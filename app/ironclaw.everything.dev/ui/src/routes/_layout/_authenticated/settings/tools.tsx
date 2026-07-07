@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -17,6 +16,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export const Route = createFileRoute("/_layout/_authenticated/settings/tools")({
   component: ToolsSettingsPage,
@@ -62,7 +69,6 @@ function ToolsSettingsPage() {
       const result = await apiClient.ironclaw.settings.tools.list();
       return result.data;
     },
-    staleTime: 30_000,
   });
 
   const listMutation = useMutation({
@@ -76,21 +82,49 @@ function ToolsSettingsPage() {
 
   const setAutoApprove = useMutation({
     mutationFn: (enabled: boolean) => apiClient.ironclaw.settings.tools.set({ enabled }),
-    onSuccess: () => {
-      toast.success("Auto-approve setting updated");
+    onMutate: async (enabled) => {
+      await queryClient.cancelQueries({ queryKey: toolsQueryKey });
+      const previous = queryClient.getQueryData<ToolSetting[]>(toolsQueryKey);
+      queryClient.setQueryData<ToolSetting[]>(toolsQueryKey, (old) => {
+        if (!old) return old;
+        return old.map((s) =>
+          s.capabilityId === "auto_approve"
+            ? { ...s, state: (enabled ? "always_allow" : "default") as ToolSetting["state"] }
+            : s
+        );
+      });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData<ToolSetting[]>(toolsQueryKey, context.previous);
+      toast.error("Failed to update auto-approve");
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: toolsQueryKey });
     },
-    onError: () => toast.error("Failed to update auto-approve"),
   });
 
   const setPermission = useMutation({
     mutationFn: ({ capabilityId, state }: { capabilityId: string; state: ToolSetting["state"] }) =>
       apiClient.ironclaw.settings.tools.setPermission({ capabilityId, state }),
-    onSuccess: () => {
-      toast.success("Tool permission updated");
+    onMutate: async ({ capabilityId, state }) => {
+      await queryClient.cancelQueries({ queryKey: toolsQueryKey });
+      const previous = queryClient.getQueryData<ToolSetting[]>(toolsQueryKey);
+      queryClient.setQueryData<ToolSetting[]>(toolsQueryKey, (old) => {
+        if (!old) return old;
+        return old.map((s) =>
+          s.capabilityId === capabilityId ? { ...s, state } : s
+        );
+      });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData<ToolSetting[]>(toolsQueryKey, context.previous);
+      toast.error("Failed to update tool permission");
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: toolsQueryKey });
     },
-    onError: () => toast.error("Failed to update tool permission"),
   });
 
   const globalAutoApprove = settings?.find((s) => s.capabilityId === "auto_approve");
@@ -162,27 +196,37 @@ function ToolsSettingsPage() {
           </Card>
 
           {toolEntries.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">
                 Per-tool permissions ({toolEntries.length})
               </p>
-              <ScrollArea className="max-h-[400px]">
-                <div className="space-y-1 pr-3">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[40%]">Tool</TableHead>
+                    <TableHead className="w-[20%]">Capability</TableHead>
+                    <TableHead className="w-[20%]">Current</TableHead>
+                    <TableHead className="w-[20%]">Override</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {toolEntries.map((tool) => (
-                    <Card key={tool.capabilityId} className="flex items-center gap-3 p-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {tool.toolName || tool.capabilityId}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate font-mono">
+                    <TableRow key={tool.capabilityId}>
+                      <TableCell className="font-medium">
+                        {tool.toolName || tool.capabilityId}
+                      </TableCell>
+                      <TableCell>
+                        <code className="text-xs text-muted-foreground">
                           {tool.capabilityId}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                        </code>
+                      </TableCell>
+                      <TableCell>
                         <Badge variant={STATE_VARIANTS[tool.state]}>
                           <ShieldCheck size={10} className="mr-1" />
                           {STATE_LABELS[tool.state]}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
                         <Select
                           value={tool.state}
                           onValueChange={(state: ToolSetting["state"]) =>
@@ -206,11 +250,11 @@ function ToolsSettingsPage() {
                             <SelectItem value="disabled">Disabled</SelectItem>
                           </SelectContent>
                         </Select>
-                      </div>
-                    </Card>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </div>
-              </ScrollArea>
+                </TableBody>
+              </Table>
             </div>
           )}
 

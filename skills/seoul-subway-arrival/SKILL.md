@@ -1,7 +1,7 @@
 ---
 name: seoul-subway-arrival
 version: "1.0.0"
-description: 서울 지하철 실시간 도착 정보. 역 이름으로 검색하면 호선별·방향별 도착 예정 열차와 남은 시간을 표시한다. k-skill-proxy 경유로 API 키 없이 사용 가능.\n\nSeoul real-time subway arrival info. Search by station name to see upcoming trains by line and direction, with countdown times. No API key needed — routed through k-skill-proxy.
+description: 서울 지하철 실시간 도착 정보. 역 이름으로 검색하면 호선별·방향별 도착 예정 열차와 남은 시간을 표시한다. k-skill-proxy 경유로 API 키 없이 사용 가능.\n\nSeoul real-time subway arrival info. Search by station name to see upcoming trains by line and direction, with countdown times. No token needed — routed through k-skill-proxy.
 activation:
   keywords:
     - "지하철"

@@ -1,7 +1,7 @@
 ---
 name: korea-weather
 version: "1.0.0"
-description: 기상청 단기예보 기반 한국 날씨 조회. 위도/경도 또는 격자 좌표(nx/ny)로 기온, 하늘상태, 강수확률, 강수량, 습도, 풍속을 요약한다. k-skill-proxy 경유로 API 키 불필요.\n\nKorea weather via KMA short-term forecast. Temperature, sky condition, precipitation probability/amount, humidity, and wind speed by lat/lon or grid coordinates. No API key needed — routed through k-skill-proxy.
+description: 기상청 단기예보 기반 한국 날씨 조회. 위도/경도 또는 격자 좌표(nx/ny)로 기온, 하늘상태, 강수확률, 강수량, 습도, 풍속을 요약한다. k-skill-proxy 경유로 API 키 불필요.\n\nKorea weather via KMA short-term forecast. Temperature, sky condition, precipitation probability/amount, humidity, and wind speed by lat/lon or grid coordinates. No token needed — routed through k-skill-proxy.
 activation:
   keywords:
     - "날씨"

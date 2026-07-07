@@ -1,7 +1,7 @@
 ---
 name: fine-dust-location
 version: "1.0.0"
-description: 에어코리아 기반 미세먼지(PM10) 및 초미세먼지(PM2.5) 조회. 지역명·행정구역으로 검색하고, 측정소명·수치·등급·통합대기등급을 요약한다. k-skill-proxy 경유로 API 키 불필요.\n\nAirKorea-based fine dust (PM10) and ultra-fine dust (PM2.5) lookup. Search by region/district name; returns station name, numeric values, grade, and unified air quality index. No API key needed — routed through k-skill-proxy.
+description: 에어코리아 기반 미세먼지(PM10) 및 초미세먼지(PM2.5) 조회. 지역명·행정구역으로 검색하고, 측정소명·수치·등급·통합대기등급을 요약한다. k-skill-proxy 경유로 API 키 불필요.\n\nAirKorea-based fine dust (PM10) and ultra-fine dust (PM2.5) lookup. Search by region/district name; returns station name, numeric values, grade, and unified air quality index. No token needed — routed through k-skill-proxy.
 activation:
   keywords:
     - "미세먼지"

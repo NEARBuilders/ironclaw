@@ -1,7 +1,7 @@
 import { BAD_REQUEST, NOT_FOUND, UNAUTHORIZED } from "every-plugin/errors";
 import { eventIterator, oc } from "every-plugin/orpc";
 import { z } from "every-plugin/zod";
-import { contract as ironclawContract } from "../../plugins/ironclaw/src/contract";
+import { contract as ironclawContract, ToolSettingSchema } from "../../plugins/ironclaw/src/contract";
 
 const ConversationChatMessagePartSchema = z.object({
   type: z.enum(["text", "tool-call", "tool-result", "thinking", "image", "file", "document"]),
@@ -346,6 +346,42 @@ export const contract = oc.router({
         .input(z.object({ mode: IronclawModeSchema }))
         .output(z.object({ success: z.boolean() }))
         .errors({ UNAUTHORIZED }),
+
+      tools: {
+        list: oc
+          .route({
+            method: "GET",
+            path: "/ironclaw/settings/tools",
+            summary: "List tool settings for all users",
+          })
+          .output(z.object({ data: z.array(ToolSettingSchema) }))
+          .errors({ UNAUTHORIZED, NOT_FOUND }),
+
+        set: oc
+          .route({
+            method: "POST",
+            path: "/ironclaw/settings/tools",
+            summary: "Set global auto-approve toggle for all users",
+          })
+          .input(z.object({ enabled: z.boolean() }))
+          .output(z.object({ success: z.boolean() }))
+          .errors({ UNAUTHORIZED, BAD_REQUEST }),
+
+        setPermission: oc
+          .route({
+            method: "POST",
+            path: "/ironclaw/settings/tools/{capabilityId}",
+            summary: "Set per-tool permission state for all users",
+          })
+          .input(
+            z.object({
+              capabilityId: z.string(),
+              state: z.enum(["default", "always_allow", "ask_each_time", "disabled"]),
+            }),
+          )
+          .output(z.object({ success: z.boolean() }))
+          .errors({ UNAUTHORIZED, BAD_REQUEST }),
+      },
     },
   },
 

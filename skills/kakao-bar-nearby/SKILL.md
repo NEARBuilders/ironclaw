@@ -1,7 +1,7 @@
 ---
 name: kakao-bar-nearby
 version: "1.0.0"
-description: 사용자 위치 기준 근처 술집·바·이자카야를 카카오맵으로 찾는다. 위치를 먼저 질문한 뒤 키워드 검색으로 주변 술집을 조회하고, 주소·전화번호·거리 정보를 요약한다. 모든 호출은 k-skill-proxy 경유이므로 사용자 API 키는 필요 없다.\n\nFind nearby bars, pubs, and izakayas by user location via Kakao Map. Asks for location first, then keyword-searches for bars and summarizes name, address, phone, and distance. All calls go through k-skill-proxy — no user API key required.
+description: 사용자 위치 기준 근처 술집·바·이자카야를 카카오맵으로 찾는다. 위치를 먼저 질문한 뒤 키워드 검색으로 주변 술집을 조회하고, 주소·전화번호·거리 정보를 요약한다. 모든 호출은 k-skill-proxy 경유이므로 사용자 API 키는 필요 없다.\n\nFind nearby bars, pubs, and izakayas by user location via Kakao Map. Asks for location first, then keyword-searches for bars and summarizes name, address, phone, and distance. All calls go through k-skill-proxy — no user token required.
 activation:
   keywords:
     - "술집"

@@ -1,7 +1,7 @@
 ---
 name: kakao-map
 version: "1.0.0"
-description: 카카오맵 장소 검색(키워드/카테고리/좌표↔주소) 및 자동차 길찾기. 근처 식당, 카페, 관광명소, 지하철역, 주차장 등을 찾고 운전 경로·소요시간·택시요금을 조회한다. 모든 호출은 k-skill-proxy 경유이므로 사용자 API 키는 필요 없다.\n\nKakao Map place search (keyword/category/coord↔address) and car directions. Find nearby restaurants, cafes, attractions, transit stops, parking lots. Driving routes with time/fare estimates. All calls go through k-skill-proxy — no user API key required.
+description: 카카오맵 장소 검색(키워드/카테고리/좌표↔주소) 및 자동차 길찾기. 근처 식당, 카페, 관광명소, 지하철역, 주차장 등을 찾고 운전 경로·소요시간·택시요금을 조회한다. 모든 호출은 k-skill-proxy 경유이므로 사용자 API 키는 필요 없다.\n\nKakao Map place search (keyword/category/coord↔address) and car directions. Find nearby restaurants, cafes, attractions, transit stops, parking lots. Driving routes with time/fare estimates. All calls go through k-skill-proxy — no user token required.
 activation:
   keywords:
     - "근처"
