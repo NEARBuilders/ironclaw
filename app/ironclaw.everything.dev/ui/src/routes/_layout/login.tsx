@@ -21,22 +21,7 @@ export const Route = createFileRoute("/_layout/login")({
       initialSession ??
       queryClient.getQueryData(sessionQueryOptions(authClient, initialSession).queryKey);
 
-  const handleGoogle = async () => {
-    setGooglePending(true);
-    try {
-      const callbackURL =
-        typeof window !== "undefined" ? `${window.location.origin}${redirectTo}` : redirectTo;
-      await auth.signIn.social({
-        provider: "google",
-        callbackURL,
-      });
-    } catch (err) {
-      setGooglePending(false);
-      handleError(err instanceof Error ? err : new Error("Google sign-in failed"));
-    }
-  };
-
-  if (session?.user) {
+    if (session?.user) {
       const redirectTo = search.redirect?.startsWith("/") ? search.redirect : "/chat";
       throw redirect({ to: redirectTo, search: {} });
     }
@@ -106,6 +91,21 @@ function LoginPage() {
     } catch (err) {
       setGithubPending(false);
       handleError(err instanceof Error ? err : new Error("GitHub sign-in failed"));
+    }
+  };
+
+  const handleGoogle = async () => {
+    setGooglePending(true);
+    try {
+      const callbackURL =
+        typeof window !== "undefined" ? `${window.location.origin}${redirectTo}` : redirectTo;
+      await auth.signIn.social({
+        provider: "google",
+        callbackURL,
+      });
+    } catch (err) {
+      setGooglePending(false);
+      handleError(err instanceof Error ? err : new Error("Google sign-in failed"));
     }
   };
 
