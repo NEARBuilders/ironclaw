@@ -53,6 +53,7 @@ impl EventPublishingTurnRunTransitionPort {
             kind,
             blocked_gate,
             sanitized_reason,
+            failure_detail: None,
         };
         if let Err(error) = self.sink.publish(event).await {
             tracing::debug!(error = %error, "turn transition event sink publish failed");

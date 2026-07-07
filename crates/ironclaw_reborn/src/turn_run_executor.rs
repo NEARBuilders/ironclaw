@@ -157,6 +157,7 @@ impl TurnRunExecutor for RebornTurnRunExecutor {
                 }
             }
             Err(err) => {
+                let mut failure_detail: Option<String> = None;
                 let sanitized = match &err {
                     DriverInvocationError::DriverError(AgentLoopDriverError::Failed {
                         reason_kind,
@@ -174,8 +175,11 @@ impl TurnRunExecutor for RebornTurnRunExecutor {
                         ..
                     }) => sanitized_failure("driver_invalid_request"),
                     DriverInvocationError::DriverError(AgentLoopDriverError::Unavailable {
-                        ..
-                    }) => sanitized_failure("driver_unavailable"),
+                        reason,
+                    }) => {
+                        failure_detail = Some(reason.clone());
+                        sanitized_failure("driver_unavailable")
+                    }
                 };
                 // `sanitized` is always Some — sanitized_failure /
                 // sanitized_driver_failure fall back to "unknown_failure" before
@@ -184,7 +188,8 @@ impl TurnRunExecutor for RebornTurnRunExecutor {
                 let failure =
                     sanitized.unwrap_or_else(|| unknown_failure_error().failure().clone());
                 let error = TurnRunExecutorError::new(failure.category())
-                    .unwrap_or_else(|_| unknown_failure_error().clone());
+                    .unwrap_or_else(|_| unknown_failure_error().clone())
+                    .with_detail(failure_detail);
                 trace_executor_latency_error("execute_claimed_run", &claimed, started_at, &error);
                 Err(error)
             }
@@ -388,6 +393,7 @@ impl RebornTurnRunExecutor {
                         runner_id,
                         lease_token,
                         failure,
+                        failure_detail: None,
                     })
                     .await
                 {

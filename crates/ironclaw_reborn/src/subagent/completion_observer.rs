@@ -868,6 +868,7 @@ fn terminal_event_from_state(state: &TurnRunState) -> Result<TurnLifecycleEvent,
             .failure
             .as_ref()
             .map(|failure| failure.category().to_string()),
+        failure_detail: None,
     })
 }
 

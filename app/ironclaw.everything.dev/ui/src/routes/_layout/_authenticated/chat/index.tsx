@@ -10,6 +10,8 @@ export const Route = createFileRoute("/_layout/_authenticated/chat/")({
       throw redirect({ to: "/setup" });
     }
 
+    if (typeof window === "undefined") return {};
+
     let threads: Array<{
       threadId: string;
       isSubagent?: boolean;

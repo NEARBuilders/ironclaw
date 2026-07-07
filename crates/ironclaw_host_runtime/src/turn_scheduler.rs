@@ -159,11 +159,15 @@ impl TurnRunSchedulerConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TurnRunExecutorError {
     failure: SanitizedFailure,
+    failure_detail: Option<String>,
 }
 
 impl TurnRunExecutorError {
     pub fn new(failure_category: impl Into<String>) -> Result<Self, String> {
-        SanitizedFailure::new(failure_category).map(|failure| Self { failure })
+        SanitizedFailure::new(failure_category).map(|failure| Self {
+            failure,
+            failure_detail: None,
+        })
     }
 
     pub fn failure(&self) -> &SanitizedFailure {
@@ -172,6 +176,15 @@ impl TurnRunExecutorError {
 
     pub fn failure_category(&self) -> &str {
         self.failure.category()
+    }
+
+    pub fn failure_detail(&self) -> Option<&str> {
+        self.failure_detail.as_deref()
+    }
+
+    pub fn with_detail(mut self, detail: Option<String>) -> Self {
+        self.failure_detail = detail;
+        self
     }
 }
 
@@ -761,9 +774,10 @@ fn spawn_executor_task(
                         if consecutive_heartbeat_failures
                             >= task_config.max_consecutive_heartbeat_failures
                         {
-                            break ExecutorTaskOutcome::TerminalFailure(scheduler_failure(
-                                "scheduler_heartbeat_failed",
-                            ));
+                            break ExecutorTaskOutcome::TerminalFailure(
+                                scheduler_failure("scheduler_heartbeat_failed"),
+                                None,
+                            );
                         }
                     }
                 }
@@ -772,13 +786,14 @@ fn spawn_executor_task(
 
             match outcome {
                 ExecutorTaskOutcome::Completed => {}
-                ExecutorTaskOutcome::TerminalFailure(Some(failure)) => {
+                ExecutorTaskOutcome::TerminalFailure(Some(failure), failure_detail) => {
                     if let Err(error) = record_terminal_failure(
                         Arc::clone(&transitions),
                         recovery_run_id,
                         recovery_runner_id,
                         recovery_lease_token,
                         failure,
+                        failure_detail,
                         task_config.terminal_failure_record_attempts,
                         task_config.terminal_failure_record_backoff,
                     )
@@ -805,7 +820,7 @@ fn spawn_executor_task(
                         }
                     }
                 }
-                ExecutorTaskOutcome::TerminalFailure(None) => {
+                ExecutorTaskOutcome::TerminalFailure(None, _) => {
                     debug!("turn run scheduler could not sanitize terminal failure category");
                 }
             }
@@ -923,6 +938,7 @@ async fn record_terminal_failure(
     runner_id: ironclaw_turns::TurnRunnerId,
     lease_token: ironclaw_turns::TurnLeaseToken,
     failure: SanitizedFailure,
+    failure_detail: Option<String>,
     max_attempts: usize,
     retry_backoff: Duration,
 ) -> Result<(), TurnError> {
@@ -933,6 +949,7 @@ async fn record_terminal_failure(
                 runner_id,
                 lease_token,
                 failure: failure.clone(),
+                failure_detail: failure_detail.clone(),
             })
             .await;
         match result {

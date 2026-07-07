@@ -364,6 +364,7 @@ fn submit_event(request: &SubmitTurnRequest, response: &SubmitTurnResponse) -> T
         kind: TurnEventKind::Submitted,
         blocked_gate: None,
         sanitized_reason: None,
+        failure_detail: None,
     }
 }
 
@@ -387,6 +388,7 @@ fn child_submit_event(
         kind: TurnEventKind::Submitted,
         blocked_gate: None,
         sanitized_reason: None,
+        failure_detail: None,
     }
 }
 
@@ -401,6 +403,7 @@ fn resume_event(request: &ResumeTurnRequest, response: &ResumeTurnResponse) -> T
         kind: TurnEventKind::Resumed,
         blocked_gate: None,
         sanitized_reason: None,
+        failure_detail: None,
     }
 }
 
@@ -429,6 +432,7 @@ fn cancel_event(
         kind,
         blocked_gate: None,
         sanitized_reason: Some(request.reason.category().to_string()),
+        failure_detail: None,
     })
 }
 
@@ -657,12 +661,14 @@ where
         &self,
         request: RecordRunnerFailureRequest,
     ) -> Result<TurnRunState, TurnError> {
+        let failure_detail = request.failure_detail.clone();
         let state = self.inner.record_runner_failure(request).await?;
-        let event = TurnLifecycleEvent::from_run_state(
+        let mut event = TurnLifecycleEvent::from_run_state(
             &state,
             event_kind_for_state(&state),
             sanitized_reason_for_state(&state),
         );
+        event.failure_detail = failure_detail;
         self.publish_state_once(state.clone(), event).await?;
         Ok(state)
     }

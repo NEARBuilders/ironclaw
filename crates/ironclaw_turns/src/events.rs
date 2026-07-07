@@ -86,6 +86,8 @@ pub struct TurnLifecycleEvent {
     // adapters that persist `TurnLifecycleEvent` do not need a migration.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sanitized_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_detail: Option<String>,
 }
 
 impl TurnLifecycleEvent {
@@ -121,6 +123,7 @@ impl TurnLifecycleEvent {
             kind,
             blocked_gate,
             sanitized_reason,
+            failure_detail: None,
         }
     }
 
@@ -553,6 +556,7 @@ mod tests {
                 }],
             }),
             sanitized_reason: Some("approval_required".to_string()),
+            failure_detail: None,
         }
     }
 

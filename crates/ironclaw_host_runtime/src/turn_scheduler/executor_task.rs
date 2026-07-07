@@ -6,7 +6,7 @@ use super::{TurnRunExecutorError, latency, scheduler_failure};
 
 pub(super) enum ExecutorTaskOutcome {
     Completed,
-    TerminalFailure(Option<SanitizedFailure>),
+    TerminalFailure(Option<SanitizedFailure>, Option<String>),
 }
 
 pub(super) fn result_to_outcome(
@@ -28,12 +28,13 @@ pub(super) fn result_to_outcome(
                 started_at,
                 "executor_error",
             );
-            ExecutorTaskOutcome::TerminalFailure(Some(error.failure().clone()))
+            let detail = error.failure_detail().map(|d| d.to_string());
+            ExecutorTaskOutcome::TerminalFailure(Some(error.failure().clone()), detail)
         }
         Err(_) => {
             let reason = "scheduler_executor_panic";
             latency::operation_error("execute_claimed_run", scope, run_id, started_at, reason);
-            ExecutorTaskOutcome::TerminalFailure(scheduler_failure(reason))
+            ExecutorTaskOutcome::TerminalFailure(scheduler_failure(reason), None)
         }
     }
 }

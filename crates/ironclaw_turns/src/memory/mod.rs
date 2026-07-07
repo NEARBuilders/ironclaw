@@ -2092,6 +2092,7 @@ impl Inner {
             kind,
             blocked_gate,
             sanitized_reason,
+            failure_detail: None,
         });
         if self.events.len() > self.limits.max_events {
             let excess = self.events.len() - self.limits.max_events;

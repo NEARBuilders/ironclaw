@@ -671,8 +671,13 @@ pub(super) async fn build_prompt_bundle_for_surface(
         .await
         .map_err(|error| {
             debug_host_unavailable(HostStage::Prompt, &error);
-            AgentLoopExecutorError::HostUnavailable {
+            AgentLoopExecutorError::HostUnavailableWithDiagnostics {
                 stage: HostStage::Prompt,
+                kind: error.kind,
+                safe_summary: LoopSafeSummary::new(error.safe_summary.clone())
+                    .unwrap_or_else(|_| LoopSafeSummary::model_gateway_failed()),
+                reason_kind: None,
+                diagnostic_ref: error.diagnostic_ref,
             }
         })?;
     CheckpointStage

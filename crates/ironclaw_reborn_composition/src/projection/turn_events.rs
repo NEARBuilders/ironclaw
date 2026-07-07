@@ -884,6 +884,12 @@ async fn failure_details_for_turn_event(
         failure_summary_for_turn_event(failure_explainer, &category, fallback_summary).await
     })
     .await;
+    let summary = match event.failure_detail.as_deref() {
+        Some(detail) if !detail.is_empty() => {
+            format!("{}. Reason: {}", summary.trim_end_matches('.'), detail)
+        }
+        _ => summary,
+    };
     FailureProjectionDetails {
         category: SanitizedFailure::new(category).ok(),
         summary: Some(summary),

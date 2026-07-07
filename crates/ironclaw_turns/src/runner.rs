@@ -88,6 +88,8 @@ pub struct RecordRunnerFailureRequest {
     pub runner_id: TurnRunnerId,
     pub lease_token: TurnLeaseToken,
     pub failure: SanitizedFailure,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_detail: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
