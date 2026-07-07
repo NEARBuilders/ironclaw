@@ -202,12 +202,19 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
           .filter(Boolean)
           .join("\n");
         if (text) {
+          const skillParts: UIMessage["parts"] = [
+            { type: "text" as const, content: text },
+          ];
+          (skillParts as unknown[]).push({
+            type: "system-kind" as const,
+            value: "skill-activation" as const,
+          });
           setSystemMessages((prev) => [
             ...prev,
             {
               id: `skill-${(val?.id as string) ?? Date.now()}`,
               role: "system" as const,
-              parts: [{ type: "text" as const, content: text }],
+              parts: skillParts,
             },
           ]);
         }

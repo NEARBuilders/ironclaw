@@ -1,5 +1,5 @@
 import type { ToolCallPart, ToolResultPart, UIMessage } from "@tanstack/ai";
-import { AlertCircle, ChevronDown, Copy, FileIcon, Loader2 } from "lucide-react";
+import { AlertCircle, ChevronDown, Copy, FileIcon, Loader2, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useApiClient } from "@/app";
 import { ActivityRun } from "@/components/activity-run";
@@ -138,6 +138,22 @@ export function ChatMessage({ message, isOptimistic, status, verbose }: ChatMess
   const errorData = message.parts.find((p: any) => p.type === "error-data") as
     | { type: "error-data"; content: unknown }
     | undefined;
+
+  const isSkillActivation = message.parts.some(
+    (p) => (p as any).type === "system-kind" && (p as any).value === "skill-activation",
+  );
+
+  if (isSystem && isSkillActivation) {
+    return (
+      <div className="flex items-start gap-2 rounded-lg border border-border/50 bg-muted/50 px-4 py-3 max-w-[85%] sm:max-w-[78%] lg:max-w-[70%]">
+        <Sparkles size={14} className="shrink-0 text-muted-foreground mt-0.5" />
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-foreground">Skills</p>
+          <Markdown content={textContent} className="text-sm text-muted-foreground [&_p]:mb-0" />
+        </div>
+      </div>
+    );
+  }
 
   if (isSystem) {
     return (
