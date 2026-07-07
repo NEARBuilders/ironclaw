@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, RefreshCw, Unplug, Zap } from "lucide-react";
-import { useCallback, useState } from "react";
+import { Unplug, Zap } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useApiClient } from "@/app";
 import { ChatInput } from "@/components/chat-input";
@@ -25,13 +25,15 @@ function ChatIndex() {
   const queryClient = useQueryClient();
   const { status: connectionStatus, attachmentCapabilities } = useIronclawStatus();
   const [isCreating, setIsCreating] = useState(false);
+  const creatingRef = useRef(false);
 
   const isDisconnected =
     connectionStatus === "disconnected" || connectionStatus === "never-connected";
 
   const handleSend = useCallback(
     async (content: string, attachments?: StagedAttachment[]) => {
-      if (!content.trim() || isCreating) return;
+      if ((!content.trim() && (!attachments || attachments.length === 0)) || creatingRef.current) return;
+      creatingRef.current = true;
       setIsCreating(true);
       try {
         const result = await apiClient.conversation.createThread({
@@ -45,10 +47,11 @@ function ChatIndex() {
       } catch {
         toast.error("Failed to create thread");
       } finally {
+        creatingRef.current = false;
         setIsCreating(false);
       }
     },
-    [apiClient, navigate, queryClient, isCreating],
+    [apiClient, navigate, queryClient],
   );
 
   if (isDisconnected) {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { normalizeTimelineEntry } from "../src/normalize";
+import { normalizeTimelineEntry, normalizeTimelinePage } from "../src/normalize";
 import type { BridgeService } from "../src/chat-bridge";
 import { createThreadChatBridge } from "../src/chat-bridge";
 
@@ -190,6 +190,96 @@ describe("normalizeTimelineEntry", () => {
       const result = normalizeTimelineEntry(raw, "t-1");
       expect(result.role).toBe("user");
     }
+  });
+});
+
+describe("normalizeTimelinePage", () => {
+  it("filters out skill_activation entries", () => {
+    const raw = {
+      data: [
+        {
+          message_id: "msg-1",
+          thread_id: "t-1",
+          kind: "user",
+          content: "hello",
+          status: "finalized",
+          sequence: 1,
+        },
+        {
+          message_id: "skill-1",
+          thread_id: "t-1",
+          kind: "skill_activation",
+          content: JSON.stringify({ skillNames: ["git"], feedback: [] }),
+          status: "finalized",
+          sequence: 2,
+        },
+        {
+          message_id: "msg-2",
+          thread_id: "t-1",
+          kind: "assistant",
+          content: "reply",
+          status: "finalized",
+          sequence: 3,
+        },
+      ],
+      meta: { total: 3, hasMore: false, nextCursor: null },
+    };
+
+    const result = normalizeTimelinePage(raw, "t-1");
+    expect(result.messages).toHaveLength(2);
+    expect(result.messages[0]!.id).toBe("msg-1");
+    expect(result.messages[0]!.role).toBe("user");
+    expect(result.messages[1]!.id).toBe("msg-2");
+    expect(result.messages[1]!.role).toBe("assistant");
+  });
+
+  it("keeps tool_result entries", () => {
+    const raw = {
+      data: [
+        {
+          message_id: "msg-1",
+          thread_id: "t-1",
+          kind: "user",
+          content: "search web",
+          status: "finalized",
+          sequence: 1,
+        },
+        {
+          message_id: "tool-1",
+          thread_id: "t-1",
+          kind: "tool_result",
+          content: JSON.stringify({ title: "search-web", output: "results" }),
+          status: "finalized",
+          sequence: 2,
+        },
+      ],
+      meta: { total: 2, hasMore: false, nextCursor: null },
+    };
+
+    const result = normalizeTimelinePage(raw, "t-1");
+    expect(result.messages).toHaveLength(2);
+    expect(result.messages[1]!.id).toBe("tool-1");
+    expect(result.messages[1]!.role).toBe("assistant");
+  });
+
+  it("preserves entries with actorId even when kind is unknown", () => {
+    const raw = {
+      data: [
+        {
+          message_id: "custom-1",
+          thread_id: "t-1",
+          kind: "custom_event",
+          actor_id: "someone",
+          content: "custom",
+          status: "finalized",
+          sequence: 1,
+        },
+      ],
+      meta: { total: 1, hasMore: false, nextCursor: null },
+    };
+
+    const result = normalizeTimelinePage(raw, "t-1");
+    expect(result.messages).toHaveLength(1);
   });
 });
 

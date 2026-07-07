@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertCircle, ArrowLeft, Info, RefreshCw, ScrollText, XCircle } from "lucide-react";
+import { createFileRoute } from "@tanstack/react-router";
+import { AlertCircle, Info, RefreshCw, ScrollText, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useApiClient } from "@/app";
 import { Badge } from "@/components/ui/badge";
@@ -87,21 +87,7 @@ function ThreadLogsPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-3 px-6 py-3 border-b border-border shrink-0">
-        <Link
-          to="/chat/$threadId"
-          params={{ threadId }}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
-        >
-          <ArrowLeft size={14} />
-          Back
-        </Link>
-        <div className="w-px h-5 bg-border" />
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-          <ScrollText className="h-4 w-4 text-primary" />
-        </div>
-        <h1 className="text-sm font-semibold text-foreground">Thread Logs</h1>
-        <div className="w-px h-5 bg-border mx-1" />
+      <div className="flex items-center gap-3 px-6 py-2 border-b border-border shrink-0">
         <Select value={levelFilter} onValueChange={setLevelFilter}>
           <SelectTrigger className="h-8 w-[130px] text-xs">
             <SelectValue placeholder="Filter by level" />

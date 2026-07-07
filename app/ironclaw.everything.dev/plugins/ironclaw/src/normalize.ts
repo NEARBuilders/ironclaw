@@ -79,11 +79,29 @@ export function normalizeTimelineEntry(raw: any, threadId: string) {
   };
 }
 
+const MESSAGE_KINDS = new Set([
+  "user",
+  "user_message",
+  "assistant",
+  "assistant_message",
+  "tool_result",
+]);
+
+function isMessageKind(raw: any): boolean {
+  const kind = (raw.kind ?? raw.Kind ?? "").toLowerCase();
+  if (kind && MESSAGE_KINDS.has(kind)) return true;
+  if (raw.actorId ?? raw.actor_id) return true;
+  return false;
+}
+
 export function normalizeTimelinePage(raw: any, threadId: string) {
   const data: any[] = raw.data ?? [];
   const meta = raw.meta ?? {};
+  const messages = data
+    .filter(isMessageKind)
+    .map((entry: any) => normalizeTimelineEntry(entry, threadId));
   return {
-    messages: data.map((entry: any) => normalizeTimelineEntry(entry, threadId)),
+    messages,
     nextCursor: meta.nextCursor ?? meta.next_cursor ?? null,
     hasMore: meta.hasMore ?? meta.has_more ?? false,
     total: meta.total ?? data.length,

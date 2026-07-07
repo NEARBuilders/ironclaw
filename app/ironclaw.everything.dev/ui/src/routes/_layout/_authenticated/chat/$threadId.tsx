@@ -6,7 +6,6 @@ import { ApprovalCard } from "@/components/approval-card";
 import { AuthGenericCard } from "@/components/auth-generic-card";
 import { AuthOauthCard } from "@/components/auth-oauth-card";
 import { AuthTokenCard } from "@/components/auth-token-card";
-import { ChatIdentityBar } from "@/components/chat-identity-bar";
 import { ChatInput } from "@/components/chat-input";
 import { ChatMessage } from "@/components/chat-message";
 import { ChatMessageList } from "@/components/chat-message-list";
@@ -37,7 +36,7 @@ export const Route = createFileRoute("/_layout/_authenticated/chat/$threadId")({
 
 function ThreadLayout() {
   const { threadId } = Route.useParams();
-  const { onOpenMobileSidebar, onToggleDesktopSidebar } = useChatLayout();
+  const { setHeaderState } = useChatLayout();
   const { data: initialMessages = [] } = useThreadMessages(threadId);
   const threadsQuery = useConversationThreads();
   const { attachmentCapabilities } = useIronclawStatus();
@@ -47,7 +46,6 @@ function ThreadLayout() {
 
   const chat = useConversationChat({ threadId, initialMessages });
   const isBusy = chat.isLoading;
-  const isLogsRoute = !!matchRoute({ to: "/chat/$threadId/logs" });
   const initialSendRef = useRef(false);
 
   useEffect(() => {
@@ -85,6 +83,19 @@ function ThreadLayout() {
     };
   }, [threadId, threadsQuery.data]);
 
+  const isLogsRoute = !!matchRoute({ to: "/chat/$threadId/logs" });
+
+  useEffect(() => {
+    setHeaderState({
+      threadTitle: threadMeta?.title ?? `Thread ${threadId.slice(0, 8)}`,
+      threadId,
+      onCopyConversation: chat.copyConversation,
+      verbose,
+      onToggleVerbose: toggleVerbose,
+    });
+    return () => setHeaderState(null);
+  }, [threadMeta, threadId, chat.copyConversation, verbose, toggleVerbose, setHeaderState]);
+
   if (isLogsRoute) return <Outlet />;
 
   const firstPendingApproval = chat.pendingApprovals[0];
@@ -94,30 +105,6 @@ function ThreadLayout() {
 
   return (
     <>
-      <ChatIdentityBar
-        threadState={
-          threadMeta
-            ? {
-                thread: {
-                  threadId: threadMeta.threadId,
-                  title: threadMeta.title,
-                  scope: {
-                    tenantId: threadMeta.scope.tenantId,
-                    agentId: threadMeta.scope.agentId,
-                    projectId: threadMeta.scope.projectId,
-                  },
-                  createdByActorId: threadMeta.createdByActorId,
-                },
-              }
-            : null
-        }
-        onOpenMobileSidebar={onOpenMobileSidebar}
-        onToggleDesktopSidebar={onToggleDesktopSidebar}
-        activeThreadTitle={threadMeta?.title ?? `Thread ${threadId.slice(0, 8)}`}
-        verbose={verbose}
-        onToggleVerbose={toggleVerbose}
-        onCopyConversation={chat.copyConversation}
-      />
       {chat.connectionStatus === "error" && (
         <div className="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-4 py-2 text-xs text-destructive">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-destructive" />

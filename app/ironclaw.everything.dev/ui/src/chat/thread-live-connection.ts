@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import type { RunAgentInputContext, SubscribeConnectionAdapter } from "@tanstack/ai-react";
 import type { ModelMessage, StreamChunk, UIMessage } from "@tanstack/ai/client";
 import type { ApiClient } from "@/lib/api";
@@ -59,9 +60,31 @@ function extractOutgoingContent(message: Record<string, unknown>) {
 
 const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 1000;
+const SUBSCRIBE_TIMEOUT_MS = 15_000;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (signal?.aborted) { resolve(); return; }
+    const timer = setTimeout(resolve, ms);
+    if (signal) {
+      signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+    }
+  });
+}
+
+async function subscribeWithTimeout(
+  apiClient: ApiClient,
+  threadId: string,
+  afterCursor: string | undefined,
+  pluginId: string | undefined,
+): Promise<AsyncIterable<StreamChunk>> {
+  const stream = await Effect.runPromise(
+    Effect.timeout(
+      Effect.promise(() => apiClient.conversation.subscribeThread({ threadId, afterCursor, pluginId })),
+      `${SUBSCRIBE_TIMEOUT_MS} millis`,
+    ),
+  );
+  return stream as AsyncIterable<StreamChunk>;
 }
 
 export function createThreadLiveConnection({
@@ -79,15 +102,11 @@ export function createThreadLiveConnection({
 }): SubscribeConnectionAdapter {
   return {
     async *subscribe(abortSignal?: AbortSignal) {
-      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         if (abortSignal?.aborted) return;
 
         try {
-          const stream = await apiClient.conversation.subscribeThread({
-            threadId,
-            afterCursor: getCursor(),
-            pluginId,
-          });
+          const stream = await subscribeWithTimeout(apiClient, threadId, getCursor(), pluginId);
 
           for await (const chunk of stream as AsyncIterable<StreamChunk>) {
             if (abortSignal?.aborted) return;
@@ -97,11 +116,11 @@ export function createThreadLiveConnection({
           return;
         } catch (err) {
           if (abortSignal?.aborted) return;
-          if (attempt >= MAX_RETRIES) throw err;
+          if (attempt >= MAX_RETRIES - 1) throw err;
 
-          yield { type: "CUSTOM", name: "reconnecting", value: { attempt, maxRetries: MAX_RETRIES } } as StreamChunk;
+          yield { type: "CUSTOM", name: "reconnecting", value: { attempt: attempt + 1, maxRetries: MAX_RETRIES } } as StreamChunk;
 
-          await sleep(BASE_BACKOFF_MS * 2 ** (attempt - 1));
+          await sleep(BASE_BACKOFF_MS * 2 ** attempt, abortSignal);
         }
       }
     },

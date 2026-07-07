@@ -11,9 +11,14 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Copy,
   MessageSquare,
+  PanelLeft,
   Plus,
+  ScrollText,
   Search,
+  Settings,
+  SlidersHorizontal,
   Trash2,
   Unplug,
   Zap,
@@ -68,14 +73,20 @@ const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_DEFAULT_WIDTH = 272;
 const SIDEBAR_COLLAPSED_WIDTH = 40;
 
+interface ContentHeaderState {
+  threadTitle?: string;
+  threadId?: string;
+  onCopyConversation?: () => void;
+  verbose?: boolean;
+  onToggleVerbose?: () => void;
+}
+
 interface ChatLayoutContextValue {
-  onOpenMobileSidebar: () => void;
-  onToggleDesktopSidebar: () => void;
+  setHeaderState: (state: ContentHeaderState | null) => void;
 }
 
 const ChatLayoutCtx = createContext<ChatLayoutContextValue>({
-  onOpenMobileSidebar: () => {},
-  onToggleDesktopSidebar: () => {},
+  setHeaderState: () => {},
 });
 
 export function useChatLayout() {
@@ -145,6 +156,7 @@ function ChatLayout() {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [headerState, setHeaderState] = useState<ContentHeaderState | null>(null);
 
   const filteredThreads = useMemo(() => {
     if (!searchQuery.trim()) return threads;
@@ -405,44 +417,38 @@ function ChatLayout() {
 
   const desktopSidebarHeader = (
     <div className="flex items-center justify-between border-b border-border px-3 py-2.5 shrink-0">
-      <div className="flex items-center gap-1.5 min-w-0">
-        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${statusDotClass}`} />
-        {sidebarOpen && (
+      {sidebarOpen && (
+        <>
           <span className="text-xs font-medium text-muted-foreground truncate">Threads</span>
-        )}
-      </div>
-      <div className="flex items-center gap-1 shrink-0">
-        {sidebarOpen && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={createThread}
-            disabled={isDisconnected}
-            title={isDisconnected ? "Connect IronClaw first" : "New thread"}
-          >
-            <Plus size={14} />
-          </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          onClick={() => setSidebarOpen((v) => !v)}
-          title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-        >
-          {sidebarOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
-        </Button>
-      </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={createThread}
+              disabled={isDisconnected}
+              title={isDisconnected ? "Connect IronClaw first" : "New thread"}
+            >
+              <Plus size={14} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0"
+              onClick={() => setSidebarOpen((v) => !v)}
+              title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            >
+              {sidebarOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 
   const mobileSidebarHeader = (
     <div className="flex items-center justify-between border-b border-border px-3 py-2.5 shrink-0">
-      <div className="flex items-center gap-1.5">
-        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${statusDotClass}`} />
-        <span className="text-xs font-medium text-muted-foreground">Threads</span>
-      </div>
+      <span className="text-xs font-medium text-muted-foreground">Threads</span>
       <Button
         variant="ghost"
         size="icon"
@@ -456,77 +462,154 @@ function ChatLayout() {
     </div>
   );
 
+  const isOnLogsRoute = !!matchRoute({ to: "/chat/$threadId/logs" });
+
+  const contentHeader = (
+    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-card/95 px-2 sm:px-3 py-2">
+      <div className="flex items-center gap-2 min-w-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0 lg:hidden"
+          onClick={() => setSheetOpen(true)}
+          aria-label="Open threads"
+        >
+          <PanelLeft size={14} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0 hidden lg:flex"
+          onClick={() => setSidebarOpen((v) => !v)}
+          aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+        >
+          <PanelLeft size={14} />
+        </Button>
+        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${statusDotClass}`} />
+        {headerState?.threadTitle && (
+          <span className="text-xs font-medium text-muted-foreground truncate">
+            {headerState.threadTitle}
+          </span>
+        )}
+      </div>
+      {headerState && (
+        <div className="flex items-center gap-1 shrink-0">
+          {headerState.onCopyConversation && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground"
+              onClick={headerState.onCopyConversation}
+              title="Copy conversation"
+            >
+              <Copy size={12} />
+            </Button>
+          )}
+          {headerState.onToggleVerbose && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-7 w-7 transition-colors ${
+                headerState.verbose ? "text-primary bg-primary/10 hover:bg-primary/20" : "text-muted-foreground"
+              }`}
+              onClick={headerState.onToggleVerbose}
+              title={headerState.verbose ? "Verbose mode on" : "Enable verbose mode"}
+            >
+              <SlidersHorizontal size={12} />
+            </Button>
+          )}
+          {headerState.threadId && (
+            <Link
+              to={isOnLogsRoute ? "/chat/$threadId" : "/chat/$threadId/logs"}
+              params={{ threadId: headerState.threadId }}
+              className="flex items-center"
+            >
+              <Button variant="ghost" size="icon" className="h-7 w-7" title={isOnLogsRoute ? "Back to chat" : "Thread logs"}>
+                {isOnLogsRoute ? <ChevronLeft size={14} /> : <ScrollText size={12} />}
+              </Button>
+            </Link>
+          )}
+          <Link to="/setup" className="flex items-center">
+            <Button variant="ghost" size="icon" className="h-7 w-7" title="IronClaw settings">
+              <Settings size={12} />
+            </Button>
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+
   const ctx: ChatLayoutContextValue = {
-    onOpenMobileSidebar: () => setSheetOpen(true),
-    onToggleDesktopSidebar: () => setSidebarOpen((v) => !v),
+    setHeaderState,
   };
 
   return (
     <ChatLayoutCtx.Provider value={ctx}>
       <div className="flex h-full w-full overflow-hidden">
-          <div
-            className="hidden lg:flex h-full shrink-0 flex-col border-r border-border bg-card transition-[width] duration-200 overflow-hidden relative"
-            style={{ width: sidebarOpen ? sidebarWidth : SIDEBAR_COLLAPSED_WIDTH }}
-          >
-            {desktopSidebarHeader}
-            {sidebarOpen ? (
-              <>
-                {threadListContent}
+        <div
+          className="hidden lg:flex h-full shrink-0 flex-col border-r border-border bg-card transition-[width] duration-200 overflow-hidden relative"
+          style={{ width: sidebarOpen ? sidebarWidth : SIDEBAR_COLLAPSED_WIDTH }}
+        >
+          {desktopSidebarHeader}
+          {sidebarOpen ? (
+            <>
+              {threadListContent}
+              <button
+                type="button"
+                aria-label="Resize sidebar"
+                onMouseDown={handleResizeStart}
+                className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10 group p-0 border-none bg-transparent"
+                title="Drag to resize"
+              >
+                <div className="absolute right-0 top-0 bottom-0 w-3 -translate-x-1" />
+              </button>
+            </>
+          ) : (
+            <div className="flex flex-col items-center gap-1 py-2">
+              {rootThreads.slice(0, 8).map((thread) => (
+                <button
+                  key={thread.threadId}
+                  type="button"
+                  onClick={() => {
+                    navigate({ to: "/chat/$threadId", params: { threadId: thread.threadId } });
+                    setSidebarOpen(true);
+                  }}
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors touch-manipulation ${
+                    activeThreadId === thread.threadId
+                      ? "bg-primary/15 text-foreground"
+                      : "text-muted-foreground hover:bg-muted"
+                  }`}
+                  title={thread.title ?? `Thread ${thread.threadId.slice(0, 8)}`}
+                >
+                  <MessageSquare size={13} />
+                </button>
+              ))}
+              {!isDisconnected && (
                 <button
                   type="button"
-                  aria-label="Resize sidebar"
-                  onMouseDown={handleResizeStart}
-                  className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10 group p-0 border-none bg-transparent"
-                  title="Drag to resize"
+                  onClick={createThread}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors touch-manipulation mt-1"
+                  title="New thread"
                 >
-                  <div className="absolute right-0 top-0 bottom-0 w-3 -translate-x-1" />
+                  <Plus size={13} />
                 </button>
-              </>
-            ) : (
-              <div className="flex flex-col items-center gap-1 py-2">
-                {rootThreads.slice(0, 8).map((thread) => (
-                  <button
-                    key={thread.threadId}
-                    type="button"
-                    onClick={() => {
-                      navigate({ to: "/chat/$threadId", params: { threadId: thread.threadId } });
-                      setSidebarOpen(true);
-                    }}
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors touch-manipulation ${
-                      activeThreadId === thread.threadId
-                        ? "bg-primary/15 text-foreground"
-                        : "text-muted-foreground hover:bg-muted"
-                    }`}
-                    title={thread.title ?? `Thread ${thread.threadId.slice(0, 8)}`}
-                  >
-                    <MessageSquare size={13} />
-                  </button>
-                ))}
-                {!isDisconnected && (
-                  <button
-                    type="button"
-                    onClick={createThread}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors touch-manipulation mt-1"
-                    title="New thread"
-                  >
-                    <Plus size={13} />
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
+        </div>
 
-          <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-            <SheetContent side="left" className="flex flex-col p-0 lg:hidden w-[min(320px,85vw)]">
-              <SheetHeader className="sr-only">
-                <SheetTitle>Threads</SheetTitle>
-              </SheetHeader>
-              {mobileSidebarHeader}
-              {threadListContent}
-            </SheetContent>
-          </Sheet>
+        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+          <SheetContent side="left" className="flex flex-col p-0 w-[min(320px,85vw)]">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Threads</SheetTitle>
+            </SheetHeader>
+            {mobileSidebarHeader}
+            {threadListContent}
+          </SheetContent>
+        </Sheet>
 
         <div className="flex flex-1 flex-col min-w-0 h-full overflow-hidden">
+          {contentHeader}
           <Outlet />
         </div>
       </div>

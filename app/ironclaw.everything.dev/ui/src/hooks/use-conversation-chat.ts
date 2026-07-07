@@ -228,6 +228,11 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
         return;
       }
 
+      if (name === "reconnecting") {
+        setStreamInterrupted(true);
+        return;
+      }
+
       if (name === "cursor") {
         const c = (val?.cursor as string) ?? undefined;
         if (c) {
@@ -299,7 +304,7 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
         toast.error("Failed to send message. Check your connection and try again.");
       });
     },
-    [chat],
+    [chat.isLoading, chat.sendMessage],
   );
 
   const stop = useCallback(() => {
@@ -314,7 +319,7 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
     setAuthGates([]);
     setStreamInterrupted(false);
     chat.stop();
-  }, [apiClient, chat, threadId]);
+  }, [apiClient, chat.stop, threadId]);
 
   const resolveGate = useCallback(
     async (
