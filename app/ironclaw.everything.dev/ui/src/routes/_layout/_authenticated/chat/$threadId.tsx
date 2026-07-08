@@ -138,12 +138,9 @@ function ThreadLayout() {
               ) : (
                 <AuthGenericCard
                   gate={firstAuthGate}
-                  onApprove={() =>
-                    chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "approved")
-                  }
-                  onCancel={() =>
-                    chat.runId && chat.resolveGate(chat.runId, firstAuthGate.gateRef, "cancelled")
-                  }
+                  onCancelRun={() => {
+                    chat.stop();
+                  }}
                 />
               )}
             </div>

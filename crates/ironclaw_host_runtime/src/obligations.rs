@@ -1338,6 +1338,13 @@ impl BuiltinObligationHandler {
             .map_err(|error| {
                 credential_stage_error_to_obligation_error(error, Some(&obligation))
             })?;
+            tracing::warn!(
+                provider = %obligation.provider,
+                requester_extension = %obligation.requester_extension,
+                handle = %obligation.handle,
+                capability_id = %request.capability_id,
+                "inject_credential_accounts: credential staged successfully",
+            );
         }
 
         Ok(())
@@ -1865,7 +1872,14 @@ async fn stage_credential_material(
         .map_err(|e| {
             tracing::debug!(err = %e, "stage_credential_material: insert failed");
             CredentialStageError::Backend
-        })
+        })?;
+    tracing::warn!(
+        target_scope = ?target_scope,
+        capability_id = %capability_id,
+        target_handle = ?target,
+        "stage_credential_material: insert succeeded",
+    );
+    Ok(())
 }
 
 fn network_policy_obligation(

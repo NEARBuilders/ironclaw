@@ -421,10 +421,12 @@ async fn blocked_prompt_payload(
                 auth_challenges,
             })
             .await?;
-            tracing::debug!(
+            tracing::warn!(
                 credential_count,
                 has_auth_challenges,
                 challenge_kind = ?view.challenge_kind,
+                run_id = %event.run_id,
+                status = ?event.status,
                 "blocked_auth prompt view",
             );
             Ok(Some(ProductOutboundPayload::AuthPrompt(view)))

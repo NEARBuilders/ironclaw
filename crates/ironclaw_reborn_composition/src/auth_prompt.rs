@@ -168,6 +168,10 @@ fn auth_prompt_from_credential_requirement(
     credential_requirements: &[RuntimeCredentialAuthRequirement],
 ) -> AuthPromptView {
     let [requirement] = credential_requirements else {
+        tracing::warn!(
+            requirement_count = credential_requirements.len(),
+            "auth_prompt_from_credential_requirement: expected exactly 1 credential requirement, got mismatched count; challenge_kind will not be set",
+        );
         return view;
     };
     let provider = requirement.provider.as_str().to_string();

@@ -493,40 +493,38 @@ function ChatLayout() {
         )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
+        {copyHandlerRef.current && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground"
+            onClick={copyHandlerRef.current}
+            title="Copy conversation"
+          >
+            <Copy size={12} />
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-7 w-7 transition-colors ${
+            verbose ? "text-primary bg-primary/10 hover:bg-primary/20" : "text-muted-foreground"
+          }`}
+          onClick={toggleVerbose}
+          title={verbose ? "Verbose mode on" : "Enable verbose mode"}
+        >
+          <SlidersHorizontal size={12} />
+        </Button>
         {activeThreadId && (
-          <>
-            {copyHandlerRef.current && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-muted-foreground"
-                onClick={copyHandlerRef.current}
-                title="Copy conversation"
-              >
-                <Copy size={12} />
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className={`h-7 w-7 transition-colors ${
-                verbose ? "text-primary bg-primary/10 hover:bg-primary/20" : "text-muted-foreground"
-              }`}
-              onClick={toggleVerbose}
-              title={verbose ? "Verbose mode on" : "Enable verbose mode"}
-            >
-              <SlidersHorizontal size={12} />
+          <Link
+            to={isOnLogsRoute ? "/chat/$threadId" : "/chat/$threadId/logs"}
+            params={{ threadId: activeThreadId }}
+            className="flex items-center"
+          >
+            <Button variant="ghost" size="icon" className="h-7 w-7" title={isOnLogsRoute ? "Back to chat" : "Thread logs"}>
+              {isOnLogsRoute ? <ChevronLeft size={14} /> : <ScrollText size={12} />}
             </Button>
-            <Link
-              to={isOnLogsRoute ? "/chat/$threadId" : "/chat/$threadId/logs"}
-              params={{ threadId: activeThreadId }}
-              className="flex items-center"
-            >
-              <Button variant="ghost" size="icon" className="h-7 w-7" title={isOnLogsRoute ? "Back to chat" : "Thread logs"}>
-                {isOnLogsRoute ? <ChevronLeft size={14} /> : <ScrollText size={12} />}
-              </Button>
-            </Link>
-          </>
+          </Link>
         )}
         <Link to="/setup" className="flex items-center">
           <Button variant="ghost" size="icon" className="h-7 w-7" title="IronClaw settings">

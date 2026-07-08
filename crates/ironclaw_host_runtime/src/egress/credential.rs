@@ -237,14 +237,24 @@ fn staged_secret_for_injection(
     let Some(secret_injections) = secret_injections else {
         return missing_runtime_credential(injection.required);
     };
+    let scope = &request.scope;
     let material = if runtime_reuses_staged_credentials(request.runtime) {
-        secret_injections.clone_material(&request.scope, capability_id, &injection.handle)
+        secret_injections.clone_material(scope, capability_id, &injection.handle)
     } else {
-        secret_injections.take(&request.scope, capability_id, &injection.handle)
+        secret_injections.take(scope, capability_id, &injection.handle)
     };
     match material {
         Ok(Some(material)) => Ok(Some(material)),
-        Ok(None) => missing_runtime_credential(injection.required),
+        Ok(None) => {
+            tracing::warn!(
+                scope = ?scope,
+                capability_id = %capability_id,
+                handle = %injection.handle,
+                required = injection.required,
+                "staged_secret_for_injection: credential not found in injection store",
+            );
+            missing_runtime_credential(injection.required)
+        }
         Err(_) => Err(RuntimeHttpEgressError::Credential {
             reason: "runtime credential injection store unavailable".to_string(),
         }),
