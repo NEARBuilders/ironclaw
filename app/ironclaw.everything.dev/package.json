@@ -5,7 +5,8 @@
     "packages": [
       "api",
       "ui",
-      "host"
+      "host",
+      "plugins/*"
     ],
     "catalog": {
       "react": "19.2.4",
@@ -32,8 +33,8 @@
       "@better-auth/api-key": "1.6.9",
       "@better-auth/passkey": "1.6.9",
       "better-near-auth": "1.6.3",
-      "every-plugin": "^2.7.0",
-      "everything-dev": "^1.37.0",
+      "every-plugin": "^2.7.1",
+      "everything-dev": "^1.41.0",
       "typescript": "^5.9.3",
       "vitest": "^4.1.8",
       "@libsql/client": "0.17.0",
@@ -78,7 +79,7 @@
     "publish": "node_modules/.bin/bos publish",
     "bos": "node_modules/.bin/bos",
     "types:gen": "node_modules/.bin/bos types gen",
-    "typecheck": "bun run types:gen && if [ -d ui ]; then bun run --cwd ui typecheck; fi && if [ -d api ]; then bun run --cwd api typecheck; fi && if [ -d host ]; then bun run --cwd host typecheck; fi",
+    "typecheck": "bun run types:gen && if [ -d ui ]; then bun run --cwd ui typecheck; fi && if [ -d api ]; then bun run --cwd api typecheck; fi && if [ -d host ]; then bun run --cwd host typecheck; fi && if [ -d plugins ]; then for dir in plugins/*; do if [ -f \"$dir/package.json\" ]; then bun run --cwd \"$dir\" typecheck; fi; done; fi",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
@@ -93,8 +94,8 @@
     "db:generate": "bun run --cwd api drizzle-kit generate",
     "db:migrate": "bun run --cwd api drizzle-kit migrate",
     "test": "bun run test:api && bun run test:e2e",
-    "test:api": "cd api && bun run test",
-    "test:integration": "cd api && bun run test",
+    "test:api": "cd api && bun run test tests/integration/ tests/unit/",
+    "test:integration": "cd api && bun run test tests/integration/",
     "test:e2e": "bun run --cwd host test:e2e",
     "dev:postgres": "docker compose up -d --wait && bun run dev",
     "dev:postgres:down": "docker compose down",
@@ -109,7 +110,7 @@
     "dotenv": "^17.3.1",
     "tsx": "^4.21.0",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^catalog:"
+    "vitest": "catalog:"
   },
   "dependencies": {
     "@better-auth/api-key": "catalog:",

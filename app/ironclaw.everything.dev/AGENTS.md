@@ -1,17 +1,48 @@
 <!-- intent-skills:start -->
-## Skill Loading
-
-Before substantial work:
-- Skill check: run `bunx @tanstack/intent@latest list`, or use skills already listed in context.
-- Skill guidance: if one local skill clearly matches the task, run `bunx @tanstack/intent@latest load <package>#<skill>` and follow the returned `SKILL.md`.
-- Monorepos: when working across packages, run the skill check from the workspace root and prefer the local skill for the package being changed.
-- Multiple matches: prefer the most specific local skill for the package or concern you are changing; load additional skills only when the task spans multiple packages or concerns.
-
+# Skill mappings - load `use` with `npx @tanstack/intent@latest load <use>`.
 skills:
-  - task: "Building chat, tool calling, streaming, middleware, structured output, or AG-UI protocol with TanStack AI"
-    load: "node_modules/@tanstack/ai/skills/ai-core/SKILL.md"
-  - task: "Working with TanStack AI ChatClient, useChat, connection adapters, or chat state management"
-    load: "node_modules/@tanstack/ai/skills/ai-core/SKILL.md"
+  - when: "Install TanStack Devtools, pick framework adapter (React/Vue/Solid/Preact), register plugins via plugins prop, configure shell (position, hotkeys, theme, hideUntilHover, requireUrlFlag, eventBusConfig). TanStackDevtools component, defaultOpen, localStorage persistence."
+    use: "@tanstack/devtools#devtools-app-setup"
+  - when: "Publish plugin to npm and submit to TanStack Devtools Marketplace. PluginMetadata registry format, plugin-registry.ts, pluginImport (importName, type), requires (packageName, minVersion), framework tagging, multi-framework submissions, featured plugins."
+    use: "@tanstack/devtools#devtools-marketplace"
+  - when: "Build devtools panel components that display emitted event data. Listen via EventClient.on(), handle theme (light/dark), use @tanstack/devtools-ui components. Plugin registration (name, render, id, defaultOpen), lifecycle (mount, activate, destroy), max 3 active plugins. Two paths: Solid.js core with devtools-ui for multi-framework support, or framework-specific panels."
+    use: "@tanstack/devtools#devtools-plugin-panel"
+  - when: "Handle devtools in production vs development. removeDevtoolsOnBuild, devDependency vs regular dependency, conditional imports, NoOp plugin variants for tree-shaking, non-Vite production exclusion patterns."
+    use: "@tanstack/devtools#devtools-production"
+  - when: "Two-way event patterns between devtools panel and application. App-to-devtools observation, devtools-to-app commands, time-travel debugging with snapshots and revert. structuredClone for snapshot safety, distinct event suffixes for observation vs commands, serializable payloads only."
+    use: "@tanstack/devtools-event-client#devtools-bidirectional"
+  - when: "Create typed EventClient for a library. Define event maps with typed payloads, pluginId auto-prepend namespacing, emit()/on()/onAll()/onAllPluginEvents() API. Connection lifecycle (5 retries, 300ms), event queuing, enabled/disabled state, SSR fallbacks, singleton pattern. Unique pluginId requirement to avoid event collisions."
+    use: "@tanstack/devtools-event-client#devtools-event-client"
+  - when: "Analyze library codebase for critical architecture and debugging points, add strategic event emissions. Identify middleware boundaries, state transitions, lifecycle hooks. Consolidate events (1 not 15), debounce high-frequency updates, DRY shared payload fields, guard emit() for production. Transparent server/client event bridging."
+    use: "@tanstack/devtools-event-client#devtools-instrumentation"
+  - when: "TanStack Router bundler plugin for route generation and automatic code splitting. Supports Vite, Webpack, Rspack, and esbuild. Configures autoCodeSplitting, routesDirectory, target framework, and code split groupings."
+    use: "@tanstack/router-plugin#router-plugin"
+  - when: "Load environment variables from a .env file into process.env for Node.js applications. Use when configuring apps with secrets, setting up local development environments, managing API keys and database uRLs, parsing .env file contents, or populating environment variables programmatically. Always use this skill when the user mentions .env, even for simple tasks like \"set up dotenv\" — the skill contains critical gotchas (encrypted keys, variable expansion, command substitution) that prevent common production issues."
+    use: "dotenv#dotenv"
+  - when: "Use dotenvx to run commands with environment variables, manage multiple .env files, expand variables, and encrypt env files for safe commits and CI/CD."
+    use: "dotenv#dotenvx"
+  - when: "Build every-plugin modules with oRPC contracts, Effect services, and Module Federation. Use when creating or modifying plugins under plugins/ or the _template scaffold."
+    use: "every-plugin#plugin-development"
+  - when: "Test every-plugin modules with vitest and the plugin runtime. Use when writing or modifying plugin tests under plugins/*/src/__tests__/ or plugins/*/tests/."
+    use: "every-plugin#plugin-testing"
+  - when: "Development workflow for everything-dev projects using bos dev, bos start, and the Module Federation runtime. Use when starting dev servers, debugging hot reload, or understanding the service-descriptor architecture."
+    use: "everything-dev#dev-workflow"
+  - when: "How bos.config.json extends chains work, deep merge semantics, resolved config lifecycle, env-specific parents, tenant runtime inheritance, or debugging config merge behavior."
+    use: "everything-dev#extends-config"
+  - when: "Scaffold a new project, extend an existing project from a parent runtime, sync upstream files, upgrade framework packages, or choose local override sections for ui/api/host/plugins."
+    use: "everything-dev#init-upgrade"
+  - when: "Build a super app with a shared host and shared API, set up fixed-core tenant mode, reason about extends-based runtime lineage, configure tenant UI overrides, or create custom tenant apps that extend a base runtime."
+    use: "everything-dev#super-app"
+  - when: "Publish bos.config.json to the FastKV registry, sync from upstream, and upgrade workspace packages. Use when deploying, syncing, or managing runtime configuration across projects."
+    use: "everything-dev#publish-sync"
+  - when: "API architecture with oRPC contracts, route implementation, auth middleware patterns (requireAuth, requireRole, requireOrganization), error handling with ORPCError, plugin-client in-process composition, session middleware flow, and client-side auth integration."
+    use: "everything-dev#api-and-auth"
+  - when: "Build and register plugins within everything.dev using the _template scaffold, contract/service/index pattern, Drizzle database setup, bos.config.json registration, plugin UI and sidebar configuration, or deploying plugins to Zephyr CDN."
+    use: "everything-dev#plugin-development"
+  - when: "Create UI routes with TanStack Router, fetch data from API using useApiClient/useOrpc, implement auth flows with useAuthClient/sessionQueryOptions, configure the sidebar, understand SSR hydration, or use the @/app module surface."
+    use: "everything-dev#ui-integration"
+  - when: "Code style conventions — component file naming (kebab-case, lowercase), semantic Tailwind CSS (no hardcoded colors), no comments in implementation, import/export patterns, file/directory naming, and following neighboring file conventions."
+    use: "everything-dev#code-style"
 <!-- intent-skills:end -->
 
 # Agent Instructions
@@ -40,6 +71,7 @@ This is an everything.dev child project. Depending on your overrides, it may inc
 - **UI** — React 19 + TanStack Router frontend, loaded via Module Federation
 - **API** — Hono.js + oRPC backend with Effect services
 - **Host** — Server-side runtime with Module Federation orchestration
+- **Plugins** — Self-contained business logic modules with oRPC contracts
 
 The parent runtime provides the shared framework; your project provides custom overrides.
 
@@ -84,6 +116,25 @@ The parent runtime provides the shared framework; your project provides custom o
 1. Define in `api/src/contract.ts` — the oRPC route definitions and Zod schemas
 2. Implement in `api/src/index.ts` — the `createRouter` function
 3. Use in UI via `apiClient` from `useApiClient()` in `@/app`
+
+### Plugin Architecture
+
+Business logic is organized into independent plugins loaded via Module Federation:
+- Each plugin has its own `contract.ts` — oRPC route definitions and Zod schemas
+- Each plugin has its own `index.ts` — `createPlugin` with variables, secrets, context, router
+- Each plugin has its own rspack config for independent deployment
+
+The UI accesses plugin routes via namespaced clients: `apiClient.<plugin>.<method>()`.
+
+### Plugin Client (pluginsClient)
+
+The API plugin receives typed client factories for all other plugins via `createPlugin.withPlugins<PluginsClient>()`, enabling in-process composition without HTTP roundtrips.
+
+### Generated Types
+
+`api/src/lib/plugins-types.gen.ts`, `api/src/lib/auth-types.gen.ts`, `ui/src/lib/api-types.gen.ts`, and `ui/src/lib/auth-types.gen.ts` are generated by `bos types gen` from `bos.config.json`. These files are gitignored and auto-regenerated on `bun install`, `typecheck`, `bos dev`, `bos build`, and bos plugin management commands.
+
+If you hand-edit `bos.config.json`, run `bos types gen` or restart `bos dev` to regenerate.
 
 ## Testing & Quality
 
