@@ -38,16 +38,6 @@ const SUGGESTIONS: PromptSuggestion[] = [
     label: "Bars to meet up",
     prompt: "Find bars nearby where I can meet other ICML researchers",
   },
-  {
-    emoji: "🌃",
-    label: "Busy tonight?",
-    prompt: "Which neighborhoods in Seoul are busy tonight?",
-  },
-  {
-    emoji: "🎌",
-    label: "Attractions",
-    prompt: "What attractions are near the ICML venue?",
-  },
 ];
 
 interface KoreaPromptEmptyStateProps {
