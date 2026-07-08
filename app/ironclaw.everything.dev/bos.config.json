@@ -23,15 +23,15 @@
         "ALLOW_UNTRUSTED_SSR",
         "CSP_STRICT"
       ],
-      "production": "https://elliot-braem-5322-host-ironclaw-nearbuilders-8b305cf0f-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-5340-host-ironclaw-nearbuilders-dc6d3bd43-ze.zephyrcloud.app",
       "integrity": "sha384-uzbBU2DfN9ozBwVXUPjGyv+w29xMfBYmNTYnKuQLsxvzNTufAO6PWH6QrpPa51bB"
     },
     "ui": {
       "development": "local:ui",
-      "ssr": "https://elliot-braem-5319-ui-ironclaw-nearbuilders-12ba9d2dd-ze.zephyrcloud.app",
-      "ssrIntegrity": "sha384-yqXHggD9FmNz+Pm9yIM0cBlHa7bdnPXYQOtSMiSgvjKvcIvnFNXM/8g3DAtYxOuK",
-      "production": "https://elliot-braem-5318-ui-ironclaw-nearbuilders-cbb632914-ze.zephyrcloud.app",
-      "integrity": "sha384-1AWnORXUvmT6P5mY+ZD6IX9c/XmFKMISnww+eKjOoBqw9ZIO0evWjEiIM/r0AmFl"
+      "ssr": "https://elliot-braem-5337-ui-ironclaw-nearbuilders-a9626b76f-ze.zephyrcloud.app",
+      "ssrIntegrity": "sha384-X3d2Vn/y+ZV0ISFZQXjwfhXLPHSutBppCCLo1cYIQKo/v94Phij43gtu8pJoWAhi",
+      "production": "https://elliot-braem-5336-ui-ironclaw-nearbuilders-308732929-ze.zephyrcloud.app",
+      "integrity": "sha384-75liMvH5Jtpxvkz2WjRcarqK+wZzEsxNQPAkn+1r+rF89q5g1u0ggOu8uhsrTtZE"
     },
     "api": {
       "development": "local:api",
@@ -39,7 +39,7 @@
         "API_DATABASE_URL",
         "BETTER_AUTH_SECRET"
       ],
-      "production": "https://elliot-braem-5320-api-ironclaw-nearbuilders-0b7f60750-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-5338-api-ironclaw-nearbuilders-9ac0d47c3-ze.zephyrcloud.app",
       "integrity": "sha384-DPT54Ky/d2jzWH1g48qKT7NXAjl42DuduDwnge7VKjN2RmjslXHCSsNZxTSdfqqz"
     },
     "auth": {
@@ -64,7 +64,7 @@
     "ironclaw": {
       "development": "local:plugins/ironclaw",
       "secrets": [],
-      "production": "https://elliot-braem-5321-every-plugin-ironclaw-ironclaw--f682c1f4c-ze.zephyrcloud.app",
+      "production": "https://elliot-braem-5339-every-plugin-ironclaw-ironclaw--a7be67460-ze.zephyrcloud.app",
       "integrity": "sha384-cuSSb26K510x4VN47d7b1fAjJITqOcEKYWPju4p/miUmjXlaNkTm+hoR0DvMQC5R"
     }
   }

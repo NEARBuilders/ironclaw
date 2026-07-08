@@ -205,16 +205,29 @@ export function useConversationChat({ threadId, initialMessages }: UseConversati
       if (name === "skill-activation") {
         const skillNames: string[] = (val?.skillNames ?? []) as string[];
         const feedback: string[] = (val?.feedback ?? []) as string[];
-        const text = [...skillNames.map((n) => `Skill activated: ${n}`), ...feedback]
-          .filter(Boolean)
-          .join("\n");
-        if (text) {
+        const detailBySkill = new Map<string, string>();
+        for (const f of feedback) {
+          const colonIdx = f.indexOf(": ");
+          if (colonIdx > 0) {
+            const skill = f.slice(0, colonIdx);
+            const msg = f.slice(colonIdx + 2);
+            if (skillNames.includes(skill)) {
+              detailBySkill.set(skill, msg);
+            }
+          }
+        }
+        const skills = skillNames.map((name) => ({
+          name,
+          detail: detailBySkill.get(name),
+        }));
+        if (skills.length > 0) {
           const skillParts: UIMessage["parts"] = [
-            { type: "text" as const, content: text },
+            { type: "text" as const, content: "" },
           ];
           (skillParts as unknown[]).push({
             type: "system-kind" as const,
             value: "skill-activation" as const,
+            skillData: skills,
           });
           setSystemMessages((prev) => [
             ...prev,

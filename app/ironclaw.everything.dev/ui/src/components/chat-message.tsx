@@ -1,8 +1,9 @@
 import type { ToolCallPart, ToolResultPart, UIMessage } from "@tanstack/ai";
-import { AlertCircle, ChevronDown, Copy, FileIcon, Loader2, Sparkles } from "lucide-react";
+import { AlertCircle, ChevronDown, Copy, FileIcon, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useApiClient } from "@/app";
 import { ActivityRun } from "@/components/activity-run";
+import { type SkillItem, SkillRun } from "@/components/skill-run";
 import { Markdown } from "@/components/ui/markdown";
 import { cn } from "@/lib/utils";
 
@@ -139,17 +140,18 @@ export function ChatMessage({ message, isOptimistic, status, verbose }: ChatMess
     | { type: "error-data"; content: unknown }
     | undefined;
 
-  const isSkillActivation = message.parts.some(
+  const skillActivationData = message.parts.find(
     (p) => (p as any).type === "system-kind" && (p as any).value === "skill-activation",
-  );
+  ) as { type: string; value: string; skillData: SkillItem[] } | undefined;
 
-  if (isSystem && isSkillActivation) {
+  if (isSystem && skillActivationData) {
     return (
-      <div className="flex items-start gap-2 rounded-lg border border-border/50 bg-muted/50 px-4 py-3 max-w-[85%] sm:max-w-[78%] lg:max-w-[70%]">
-        <Sparkles size={14} className="shrink-0 text-muted-foreground mt-0.5" />
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-foreground">Skills</p>
-          <Markdown content={textContent} className="text-sm text-muted-foreground [&_p]:mb-0" />
+      <div
+        data-role={message.role}
+        className="flex w-full justify-start items-end"
+      >
+        <div className="bg-muted px-4 py-2.5 rounded-2xl rounded-bl-sm">
+          <SkillRun skills={skillActivationData.skillData ?? []} />
         </div>
       </div>
     );

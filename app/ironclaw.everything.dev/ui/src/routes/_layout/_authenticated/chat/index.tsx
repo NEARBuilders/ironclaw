@@ -1,5 +1,8 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, RefreshCw, Unplug, Zap } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useApiClient } from "@/app";
 import { ironclawStatusQueryKey, useIronclawStatus } from "@/hooks/use-ironclaw-status";
 
 export const Route = createFileRoute("/_layout/_authenticated/chat/")({
@@ -8,34 +11,52 @@ export const Route = createFileRoute("/_layout/_authenticated/chat/")({
     if (cached && !(cached as { connected?: boolean }).connected) {
       throw redirect({ to: "/setup" });
     }
-
-    if (typeof window === "undefined") return {};
-
-    try {
-      const result = await context.apiClient.conversation.createThread({
-        clientActionId: `ui-${crypto.randomUUID()}`,
-      });
-      context.queryClient.invalidateQueries({ queryKey: ["conversation", "threads"] });
-      throw redirect({
-        to: "/chat/$threadId",
-        params: { threadId: result.threadId },
-      });
-    } catch (err) {
-      if (err && typeof err === "object" && "to" in err) throw err;
-      return { threadsError: true };
-    }
   },
   component: ChatIndex,
 });
 
 function ChatIndex() {
-  const { threadsError } = Route.useRouteContext();
+  const apiClient = useApiClient();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { status: connectionStatus } = useIronclawStatus();
+  const [error, setError] = useState(false);
+  const creatingRef = useRef(false);
+  const attemptRef = useRef(0);
 
   const isDisconnected =
     connectionStatus === "disconnected" || connectionStatus === "never-connected";
 
-  if (threadsError) {
+  const createAndEnter = useCallback(() => {
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    setError(false);
+    const attempt = ++attemptRef.current;
+
+    apiClient.conversation
+      .createThread({
+        clientActionId: `ui-${crypto.randomUUID()}`,
+      })
+      .then((result) => {
+        queryClient.invalidateQueries({ queryKey: ["conversation", "threads"] });
+        navigate({
+          to: "/chat/$threadId",
+          params: { threadId: result.threadId },
+        });
+      })
+      .catch(() => {
+        if (attempt !== attemptRef.current) return;
+        creatingRef.current = false;
+        setError(true);
+      });
+  }, [apiClient, navigate, queryClient]);
+
+  useEffect(() => {
+    if (isDisconnected) return;
+    createAndEnter();
+  }, [isDisconnected, createAndEnter]);
+
+  if (error) {
     return (
       <div className="flex h-full items-center justify-center px-4">
         <div className="text-center space-y-4 max-w-xs w-full">
@@ -52,14 +73,14 @@ function ChatIndex() {
             </p>
           </div>
           <div className="flex items-center justify-center gap-2">
-            <Link
-              to="/chat"
-              preload="intent"
+            <button
+              type="button"
+              onClick={createAndEnter}
               className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted transition-colors touch-manipulation"
             >
               <RefreshCw size={14} />
               Try again
-            </Link>
+            </button>
             <Link
               to="/"
               className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors touch-manipulation"

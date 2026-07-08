@@ -49,6 +49,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { type ConversationThread, useConversationThreads } from "@/hooks/use-conversation";
 import { ironclawStatusQueryKey, useIronclawStatus } from "@/hooks/use-ironclaw-status";
+import { useVerboseMode } from "@/hooks/use-verbose-mode";
 
 export const Route = createFileRoute("/_layout/_authenticated/chat")({
   beforeLoad: async ({ context }) => {
@@ -73,20 +74,12 @@ const SIDEBAR_MAX_WIDTH = 480;
 const SIDEBAR_DEFAULT_WIDTH = 272;
 const SIDEBAR_COLLAPSED_WIDTH = 40;
 
-interface ContentHeaderState {
-  threadTitle?: string;
-  threadId?: string;
-  onCopyConversation?: () => void;
-  verbose?: boolean;
-  onToggleVerbose?: () => void;
-}
-
 interface ChatLayoutContextValue {
-  setHeaderState: (state: ContentHeaderState | null) => void;
+  registerCopyHandler: (fn: (() => void) | null) => void;
 }
 
 const ChatLayoutCtx = createContext<ChatLayoutContextValue>({
-  setHeaderState: () => {},
+  registerCopyHandler: () => {},
 });
 
 export function useChatLayout() {
@@ -156,7 +149,14 @@ function ChatLayout() {
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [headerState, setHeaderState] = useState<ContentHeaderState | null>(null);
+  const copyHandlerRef = useRef<(() => void) | undefined>(undefined);
+  const { verbose, toggle: toggleVerbose } = useVerboseMode();
+
+  const currentThreadTitle = useMemo(() => {
+    if (!activeThreadId) return null;
+    const found = threads.find((t) => t.threadId === activeThreadId);
+    return found?.title ?? `Thread ${activeThreadId.slice(0, 8)}`;
+  }, [activeThreadId, threads]);
 
   const filteredThreads = useMemo(() => {
     if (!searchQuery.trim()) return threads;
@@ -486,62 +486,62 @@ function ChatLayout() {
           <PanelLeft size={14} />
         </Button>
         <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${statusDotClass}`} />
-        {headerState?.threadTitle && (
+        {currentThreadTitle && (
           <span className="text-xs font-medium text-muted-foreground truncate">
-            {headerState.threadTitle}
+            {currentThreadTitle}
           </span>
         )}
       </div>
-      {headerState && (
-        <div className="flex items-center gap-1 shrink-0">
-          {headerState.onCopyConversation && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground"
-              onClick={headerState.onCopyConversation}
-              title="Copy conversation"
-            >
-              <Copy size={12} />
-            </Button>
-          )}
-          {headerState.onToggleVerbose && (
+      <div className="flex items-center gap-1 shrink-0">
+        {activeThreadId && (
+          <>
+            {copyHandlerRef.current && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground"
+                onClick={copyHandlerRef.current}
+                title="Copy conversation"
+              >
+                <Copy size={12} />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
               className={`h-7 w-7 transition-colors ${
-                headerState.verbose ? "text-primary bg-primary/10 hover:bg-primary/20" : "text-muted-foreground"
+                verbose ? "text-primary bg-primary/10 hover:bg-primary/20" : "text-muted-foreground"
               }`}
-              onClick={headerState.onToggleVerbose}
-              title={headerState.verbose ? "Verbose mode on" : "Enable verbose mode"}
+              onClick={toggleVerbose}
+              title={verbose ? "Verbose mode on" : "Enable verbose mode"}
             >
               <SlidersHorizontal size={12} />
             </Button>
-          )}
-          {headerState.threadId && (
             <Link
               to={isOnLogsRoute ? "/chat/$threadId" : "/chat/$threadId/logs"}
-              params={{ threadId: headerState.threadId }}
+              params={{ threadId: activeThreadId }}
               className="flex items-center"
             >
               <Button variant="ghost" size="icon" className="h-7 w-7" title={isOnLogsRoute ? "Back to chat" : "Thread logs"}>
                 {isOnLogsRoute ? <ChevronLeft size={14} /> : <ScrollText size={12} />}
               </Button>
             </Link>
-          )}
-          <Link to="/setup" className="flex items-center">
-            <Button variant="ghost" size="icon" className="h-7 w-7" title="IronClaw settings">
-              <Settings size={12} />
-            </Button>
-          </Link>
-        </div>
-      )}
+          </>
+        )}
+        <Link to="/setup" className="flex items-center">
+          <Button variant="ghost" size="icon" className="h-7 w-7" title="IronClaw settings">
+            <Settings size={12} />
+          </Button>
+        </Link>
+      </div>
     </div>
   );
 
-  const ctx: ChatLayoutContextValue = {
-    setHeaderState,
-  };
+  const registerCopyHandler = useCallback((fn: (() => void) | null) => {
+    copyHandlerRef.current = fn ?? undefined;
+  }, []);
+
+  const ctx = useMemo(() => ({ registerCopyHandler }), [registerCopyHandler]);
 
   return (
     <ChatLayoutCtx.Provider value={ctx}>

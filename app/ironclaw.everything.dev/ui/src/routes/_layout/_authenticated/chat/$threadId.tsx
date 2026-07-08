@@ -1,7 +1,7 @@
 import type { UIMessage } from "@tanstack/ai";
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Outlet, useMatchRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { ApprovalCard } from "@/components/approval-card";
 import { AuthGenericCard } from "@/components/auth-generic-card";
 import { AuthOauthCard } from "@/components/auth-oauth-card";
@@ -10,7 +10,7 @@ import { ChatInput } from "@/components/chat-input";
 import { ChatMessage } from "@/components/chat-message";
 import { ChatMessageList } from "@/components/chat-message-list";
 import { KoreaPromptEmptyState } from "@/components/korea-prompt-empty-state";
-import { useConversationThreads, useThreadMessages } from "@/hooks/use-conversation";
+import { useThreadMessages } from "@/hooks/use-conversation";
 import { useConversationChat } from "@/hooks/use-conversation-chat";
 import { useIronclawStatus } from "@/hooks/use-ironclaw-status";
 import { useVerboseMode } from "@/hooks/use-verbose-mode";
@@ -36,11 +36,10 @@ export const Route = createFileRoute("/_layout/_authenticated/chat/$threadId")({
 
 function ThreadLayout() {
   const { threadId } = Route.useParams();
-  const { setHeaderState } = useChatLayout();
+  const { registerCopyHandler } = useChatLayout();
   const { data: initialMessages = [] } = useThreadMessages(threadId);
-  const threadsQuery = useConversationThreads();
   const { attachmentCapabilities } = useIronclawStatus();
-  const { verbose, toggle: toggleVerbose } = useVerboseMode();
+  const { verbose } = useVerboseMode();
   const queryClient = useQueryClient();
   const matchRoute = useMatchRoute();
 
@@ -67,34 +66,12 @@ function ThreadLayout() {
     [chat.sendMessage, isBusy, queryClient],
   );
 
-  const threadMeta = useMemo(() => {
-    const threads = threadsQuery.data?.threads ?? [];
-    const found = threads.find((t) => t.threadId === threadId);
-    if (!found) return null;
-    return {
-      threadId: found.threadId,
-      title: found.title,
-      scope: {
-        tenantId: found.tenantId,
-        agentId: found.agentId,
-        projectId: found.projectId ?? undefined,
-      },
-      createdByActorId: found.createdByActorId,
-    };
-  }, [threadId, threadsQuery.data]);
-
   const isLogsRoute = !!matchRoute({ to: "/chat/$threadId/logs" });
 
   useEffect(() => {
-    setHeaderState({
-      threadTitle: threadMeta?.title ?? `Thread ${threadId.slice(0, 8)}`,
-      threadId,
-      onCopyConversation: chat.copyConversation,
-      verbose,
-      onToggleVerbose: toggleVerbose,
-    });
-    return () => setHeaderState(null);
-  }, [threadMeta, threadId, chat.copyConversation, verbose, toggleVerbose, setHeaderState]);
+    registerCopyHandler(chat.copyConversation);
+    return () => registerCopyHandler(null);
+  }, [registerCopyHandler, chat.copyConversation]);
 
   if (isLogsRoute) return <Outlet />;
 
