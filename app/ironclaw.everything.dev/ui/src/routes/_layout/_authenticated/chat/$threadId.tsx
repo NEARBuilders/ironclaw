@@ -94,7 +94,7 @@ function ThreadLayout() {
           Connection lost — messages may be incomplete. Send a new message to continue.
         </div>
       )}
-      {messagesWithContent.length === 0 && !isBusy ? (
+      {messagesWithContent.length === 0 ? (
         <KoreaPromptEmptyState onSelect={handleSend} disabled={isBusy} />
       ) : (
         <ChatMessageList

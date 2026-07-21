@@ -9,11 +9,6 @@ interface PromptSuggestion {
 
 const SUGGESTIONS: PromptSuggestion[] = [
   {
-    emoji: "🍜",
-    label: "Restaurants nearby",
-    prompt: "Find good restaurants near the ICML venue in Seoul",
-  },
-  {
     emoji: "🚇",
     label: "Subway arrival",
     prompt: "When is the next subway arriving at Gangnam Station?",
@@ -37,6 +32,11 @@ const SUGGESTIONS: PromptSuggestion[] = [
     emoji: "🍻",
     label: "Bars to meet up",
     prompt: "Find bars nearby where I can meet other ICML researchers",
+  },
+  {
+    emoji: "🍜",
+    label: "Restaurants nearby",
+    prompt: "Find good restaurants near the ICML venue in Seoul",
   },
 ];
 

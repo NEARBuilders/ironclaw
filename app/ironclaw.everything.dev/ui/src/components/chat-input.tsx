@@ -1,10 +1,12 @@
-import { Paperclip, Send, Square, X } from "lucide-react";
+import { Mic, MicOff, Paperclip, Send, Square, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { type AttachmentLimits, type StagedAttachment, stageFiles } from "@/lib/attachments";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/draft-store";
+import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
 
 interface ChatInputProps {
   onSend: (content: string, attachments?: StagedAttachment[]) => void;
@@ -28,14 +30,38 @@ export function ChatInput({
   const [value, setValue] = useState(() => (threadId ? loadDraft(threadId) : ""));
   const [staged, setStaged] = useState<StagedAttachment[]>([]);
   const [focused, setFocused] = useState(false);
+  const [displayedValue, setDisplayedValue] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const activeValue = displayedValue ?? value;
+  const setActiveValue = useCallback((v: string) => {
+    setDisplayedValue(null);
+    setValue(v);
+  }, []);
+
+  const speechRec = useSpeechRecognition({
+    language: "en-US",
+    continuous: true,
+    interimResults: true,
+    onResult: (_transcript: string, _isFinal: boolean) => {
+      const base = displayTextRef.current;
+      setDisplayedValue(base ? `${base} ${_transcript}` : _transcript);
+    },
+    onError: (_err: string) => {
+      toast.error(`Speech recognition: ${_err}`);
+    },
+    onEnd: () => {},
+  });
+
+  const displayTextRef = useRef("");
 
   useEffect(() => {
     if (!threadId) return;
     setValue(loadDraft(threadId));
     setStaged([]);
+    setDisplayedValue(null);
   }, [threadId]);
 
   useEffect(() => {
@@ -43,27 +69,30 @@ export function ChatInput({
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [value]);
+  }, [activeValue]);
 
   useEffect(() => {
     if (!threadId) return;
     if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
     draftTimerRef.current = setTimeout(() => {
-      saveDraft(threadId, value);
+      saveDraft(threadId, displayedValue ?? value);
     }, 500);
     return () => {
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
     };
-  }, [threadId, value]);
+  }, [threadId, value, displayedValue]);
 
   const handleSend = useCallback(() => {
-    const trimmed = value.trim();
+    if (speechRec.isListening) speechRec.stop();
+    const trimmed = activeValue.trim();
     if (!trimmed || disabled || isSending) return;
     onSend(trimmed, staged.length > 0 ? staged : undefined);
     setValue("");
     setStaged([]);
+    setDisplayedValue(null);
+    displayTextRef.current = "";
     if (threadId) clearDraft(threadId);
-  }, [value, disabled, isSending, onSend, staged, threadId]);
+  }, [activeValue, disabled, isSending, onSend, staged, threadId, speechRec]);
 
   const handleStaging = useCallback(
     async (files: File[]) => {
@@ -119,6 +148,25 @@ export function ChatInput({
     setStaged((prev) => prev.filter((a) => a.id !== id));
   };
 
+  const handleMicClick = useCallback(() => {
+    if (speechRec.isListening) {
+      speechRec.stop();
+      if (speechRec.finalTranscript) {
+        setActiveValue(
+          displayTextRef.current
+            ? `${displayTextRef.current} ${speechRec.finalTranscript}`
+            : speechRec.finalTranscript,
+        );
+      }
+      displayTextRef.current = "";
+    } else {
+      displayTextRef.current = value;
+      setDisplayedValue(value);
+      speechRec.reset();
+      speechRec.start();
+    }
+  }, [speechRec, value, setActiveValue]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -172,11 +220,43 @@ export function ChatInput({
             accept={attachmentCapabilities?.accept?.join(",") ?? "*/*"}
             onChange={handleFilePick}
           />
+          {speechRec.isSupported ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant={speechRec.isListening ? "secondary" : "ghost"}
+                    className={`shrink-0 h-10 w-10 sm:h-9 sm:w-9 ${
+                      speechRec.isListening
+                        ? "text-destructive animate-pulse"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    onClick={handleMicClick}
+                    disabled={disabled || isSending}
+                    title={speechRec.isListening ? "Stop recording" : "Voice input"}
+                  >
+                    {speechRec.isListening ? <MicOff size={14} /> : <Mic size={14} />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  {speechRec.isListening ? "Stop recording" : "Voice input"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : null}
           <Textarea
             ref={textareaRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={focused && !value ? "Enter to send, Shift+Enter for newline" : placeholder}
+            value={activeValue}
+            onChange={(e) => setActiveValue(e.target.value)}
+            placeholder={
+              speechRec.isListening
+                ? "Listening..."
+                : focused && !activeValue
+                  ? "Enter to send, Shift+Enter for newline"
+                  : placeholder
+            }
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             onFocus={() => setFocused(true)}
@@ -199,7 +279,7 @@ export function ChatInput({
             <Button
               size="icon"
               onClick={handleSend}
-              disabled={!value.trim() || isSending || disabled}
+              disabled={!activeValue.trim() || isSending || disabled}
               className="h-10 w-10 sm:h-9 sm:w-9"
             >
               <Send size={14} />
