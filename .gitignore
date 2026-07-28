@@ -105,3 +105,6 @@ node_modules/
 # It is a regenerable build artifact of a local audit, never source.
 mutants.out/
 mutants.out.old/
+
+# this is where elliot keeps his custom gateway app (and you can too, if you want to work with typescript instead)
+app/ 
