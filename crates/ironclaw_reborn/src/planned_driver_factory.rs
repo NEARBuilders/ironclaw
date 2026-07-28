@@ -21,6 +21,7 @@ use crate::{
         DriverKind, DriverRegistry, DriverRegistryError, DriverRequirements, LoopDriverRegistryKey,
         RequirementLevel,
     },
+    hermes_driver::{HermesLoopDriver, HermesLoopDriverConfig},
     planned_driver::PlannedDriver,
     text_loop_driver::{TextOnlyModelReplyDriver, TextOnlyModelReplyDriverConfig},
 };
@@ -210,6 +211,25 @@ pub fn register_default_text_only_driver(
     registry.register_driver(
         Arc::new(TextOnlyModelReplyDriver::new(config)),
         DriverRequirements::all_optional(),
+        DriverKind::Production,
+    )
+}
+
+pub fn register_hermes_driver(
+    registry: &mut DriverRegistry,
+    config: HermesLoopDriverConfig,
+) -> Result<LoopDriverRegistryKey, DriverRegistryError> {
+    registry.register_driver(
+        Arc::new(HermesLoopDriver::new(config)),
+        DriverRequirements {
+            model: RequirementLevel::Required,
+            prompt: RequirementLevel::Required,
+            transcript: RequirementLevel::Required,
+            checkpoint: RequirementLevel::Optional,
+            input_polling: RequirementLevel::Optional,
+            capabilities: RequirementLevel::Required,
+            progress_events: RequirementLevel::Optional,
+        },
         DriverKind::Production,
     )
 }

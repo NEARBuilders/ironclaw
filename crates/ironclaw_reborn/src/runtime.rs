@@ -33,6 +33,7 @@ use ironclaw_turns::{
 use crate::{
     app_loop_family::build_loop_family_registry,
     driver_registry::{DriverRegistry, DriverRegistryError},
+    hermes_driver::HermesLoopDriverConfig,
     loop_driver_host::{
         HookDispatcherBuilderFactory, RebornLoopDriverHostFactory, TextOnlyLoopHostConfig,
     },
@@ -41,7 +42,7 @@ use crate::{
     planned_driver_factory::{
         DefaultPlannedDriverRegistrationError, default_planned_run_profile_resolver,
         register_default_planned_driver, register_default_text_only_driver,
-        register_subagent_planned_driver,
+        register_hermes_driver, register_subagent_planned_driver,
     },
     subagent::{
         capability_surface::SubagentCapabilitySurfaceResolver,
@@ -375,6 +376,7 @@ where
 {
     let mut registry = DriverRegistry::new();
     register_default_text_only_driver(&mut registry, parts.config.text_only_driver)?;
+    register_hermes_driver(&mut registry, HermesLoopDriverConfig::default())?;
     let family_registry = build_loop_family_registry().map_err(|error| {
         DefaultPlannedRuntimeBuildError::PlannedDriver(
             DefaultPlannedDriverRegistrationError::DriverBuild(
