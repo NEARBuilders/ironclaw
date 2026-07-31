@@ -1,0 +1,33 @@
+[package]
+name = "ironclaw_acp"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+description = "Agent Client Protocol (ACP) stdio server for IronClaw"
+authors = ["NEAR AI <support@near.ai>"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/nearai/ironclaw"
+repository = "https://github.com/nearai/ironclaw"
+publish = false
+
+[package.metadata.ironclaw]
+layer = "products"
+
+[dependencies]
+agent-client-protocol = "2.0"
+agent-client-protocol-schema = "1.5"
+ironclaw_common = { path = "../ironclaw_common", version = "0.4.2" }
+ironclaw_host_api = { path = "../ironclaw_host_api", version = "0.1.0" }
+ironclaw_product = { path = "../ironclaw_product", version = "0.1.0" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["sync", "time", "io-std", "io-util", "rt"] }
+tracing = "0.1"
+uuid = { version = "1", features = ["v4", "v5"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
+
+[lints]
+workspace = true
