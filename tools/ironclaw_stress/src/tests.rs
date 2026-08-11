@@ -148,6 +148,188 @@ fn chat_turn_rejects_multi_process_runs() {
     assert!(error.contains("--scenario chat-turn requires --processes 1"));
 }
 
+fn scripted_api_args() -> Args {
+    let mut args = test_args();
+    args.scenario = Scenario::ApiUserCapacity;
+    args.api_base_url = Some("http://127.0.0.1:4216".to_string());
+    args.api_scripted_tool = Some(scripted::ScriptKey::MemoryRoundtrip);
+    args.mock_llm_bind = Some("127.0.0.1:19090".parse().expect("bind address parses"));
+    args
+}
+
+#[test]
+fn scripted_api_requires_api_scenario() {
+    let mut args = scripted_api_args();
+    args.scenario = Scenario::ChatTurn;
+
+    let error = validate_args(&args).expect_err("scripted mode needs the api scenario");
+
+    assert!(error.contains("--api-scripted-tool requires --scenario api-user-capacity"));
+}
+
+#[test]
+fn scripted_api_requires_mock_llm_bind() {
+    let mut args = scripted_api_args();
+    args.mock_llm_bind = None;
+
+    let error = validate_args(&args).expect_err("scripted mode needs the mock sidecar");
+
+    assert!(error.contains("--api-scripted-tool requires --mock-llm-bind"));
+}
+
+#[test]
+fn scripted_api_requires_wait_for_assistant() {
+    let mut args = scripted_api_args();
+    args.api_wait_for_assistant = false;
+
+    let error = validate_args(&args).expect_err("scripted mode needs verdict polling");
+
+    assert!(error.contains("--api-scripted-tool requires --api-wait-for-assistant"));
+}
+
+#[test]
+fn scripted_api_rejects_out_of_range_doc_sizes() {
+    let mut args = scripted_api_args();
+
+    // Below the floor: 1024 bytes cannot survive the /4 memory-grow split
+    // and stay above the read-back token, so the recorded size bucket would
+    // not describe the bytes actually written.
+    args.api_scripted_doc_sizes = vec![1024];
+    let error = validate_args(&args).expect_err("sub-4KiB documents are meaningless");
+    assert!(error.contains("--api-scripted-doc-sizes values must be between 4096 and"));
+
+    // Above the ceiling: stops an operator from requesting a multi-gigabyte
+    // durable write against the hosted Postgres target.
+    args.api_scripted_doc_sizes = vec![scripted::MAX_SCRIPTED_DOC_SIZE_BYTES + 1];
+    let error = validate_args(&args).expect_err("oversized documents are rejected");
+    assert!(error.contains("--api-scripted-doc-sizes values must be between"));
+
+    args.api_scripted_doc_sizes = Vec::new();
+    let error = validate_args(&args).expect_err("an empty size list is rejected");
+    assert!(error.contains("--api-scripted-doc-sizes must not be empty"));
+}
+
+#[test]
+fn scripted_api_hot_writers_reject_file_roundtrip_script() {
+    let mut args = scripted_api_args();
+    args.api_scripted_tool = Some(scripted::ScriptKey::WriteFileRoundtrip);
+    args.api_hot_writers = 2;
+
+    let error = validate_args(&args)
+        .expect_err("hot writers need a shared document; write_file_roundtrip uses per-op paths");
+
+    assert!(error.contains("--api-hot-writers requires a memory script"));
+}
+
+#[test]
+fn scripted_cli_flag_combination_parses_and_gates_execution() {
+    // Drive the scripted flag combination through the CLI parser (clap
+    // typing and default resolution) and then through the validation gate
+    // that runs before any workload starts.
+    let args = Args::try_parse_from([
+        "ironclaw_stress",
+        "--backend",
+        "libsql",
+        "--scenario",
+        "api-user-capacity",
+        "--api-base-url",
+        "http://127.0.0.1:4216",
+        "--api-scripted-tool",
+        "memory_roundtrip",
+        "--mock-llm-bind",
+        "127.0.0.1:19090",
+    ])
+    .expect("scripted flag combination parses");
+    assert_eq!(
+        args.api_scripted_tool,
+        Some(scripted::ScriptKey::MemoryRoundtrip)
+    );
+    assert_eq!(
+        args.api_scripted_doc_sizes,
+        vec![4096, 32768, 131072, 1048576]
+    );
+    validate_args(&args).expect("valid scripted configuration passes the startup gate");
+
+    // An unknown script key is rejected by clap itself before validation.
+    let parse_error = Args::try_parse_from([
+        "ironclaw_stress",
+        "--backend",
+        "libsql",
+        "--scenario",
+        "api-user-capacity",
+        "--api-base-url",
+        "http://127.0.0.1:4216",
+        "--api-scripted-tool",
+        "not_a_script",
+        "--mock-llm-bind",
+        "127.0.0.1:19090",
+    ])
+    .expect_err("unknown script key is rejected at parse time");
+    assert!(parse_error.to_string().contains("possible values"));
+
+    // A valid key without the required sidecar is rejected by validation
+    // before any workload starts.
+    let mut missing_sidecar = args;
+    missing_sidecar.mock_llm_bind = None;
+    let error = validate_args(&missing_sidecar).expect_err("sidecar is required");
+    assert!(error.contains("--api-scripted-tool requires --mock-llm-bind"));
+
+    // Scripted verdicts are read from the timeline, so assistant polling is
+    // required for the flow to complete.
+    let mut no_polling = scripted_api_args();
+    no_polling.api_wait_for_assistant = false;
+    let error = validate_args(&no_polling).expect_err("assistant polling is required");
+    assert!(error.contains("--api-scripted-tool requires --api-wait-for-assistant"));
+}
+
+#[test]
+fn scripted_api_hot_writers_require_script_key() {
+    let mut args = test_args();
+    args.scenario = Scenario::ApiUserCapacity;
+    args.api_base_url = Some("http://127.0.0.1:4216".to_string());
+    args.api_hot_writers = 2;
+
+    let error = validate_args(&args).expect_err("hot writers need a script");
+
+    assert!(error.contains("--api-hot-writers requires --api-scripted-tool"));
+}
+
+#[test]
+fn scripted_api_accepts_valid_configuration() {
+    let args = scripted_api_args();
+    validate_args(&args).expect("valid scripted api configuration should pass validation");
+}
+
+#[test]
+fn prewarm_dispatches_secret_and_process_local_scenarios() {
+    assert_eq!(
+        Scenario::SecretConsume.prewarm_target(),
+        PrewarmTarget::SecretControlPlane
+    );
+    assert_eq!(Scenario::CpuBurn.prewarm_target(), PrewarmTarget::None);
+    assert_eq!(Scenario::MemoryChurn.prewarm_target(), PrewarmTarget::None);
+    assert_eq!(
+        Scenario::ReserveRelease.prewarm_target(),
+        PrewarmTarget::ResourceGovernor
+    );
+    assert_eq!(Scenario::ChatTurn.prewarm_target(), PrewarmTarget::UserTurn);
+}
+
+#[test]
+fn turn_lifecycle_churn_is_a_user_turn_scenario() {
+    let mut args = test_args();
+    args.scenario = Scenario::TurnLifecycleChurn;
+    args.users = args.concurrency;
+    args.processes = 1;
+
+    validate_args(&args).expect("turn lifecycle churn should use user-turn validation");
+    assert_eq!(args.scenario.as_str(), "turn-lifecycle-churn");
+
+    args.processes = 2;
+    let error = validate_args(&args).expect_err("turn lifecycle churn is single-process only");
+    assert!(error.contains("--scenario turn-lifecycle-churn requires --processes 1"));
+}
+
 #[test]
 fn mixed_user_session_rejects_multi_process_runs() {
     let mut args = test_args();
@@ -216,6 +398,154 @@ fn bottleneck_finder_suite_includes_core_pressure_cases() {
     assert!(labels.contains("model-tail"));
     assert!(labels.contains("cpu-burn"));
     assert!(labels.contains("memory-churn"));
+}
+
+/// The suite regression fix depends on every non-API libSQL case getting its
+/// own database path: sharing the parent's path is what let earlier cases'
+/// still-running pollers contend on the file and invalidate the benchmark.
+/// Existing suite tests only assert case labels, so a regression here would be
+/// silent.
+#[test]
+fn libsql_cases_use_distinct_generated_database_paths() {
+    let mut base = test_args();
+    base.backend = crate::Backend::Libsql;
+    base.libsql_path = None;
+    let cases = suite::build_cases(StressSuite::BottleneckFinder);
+    let mut seen = std::collections::BTreeSet::new();
+    for case in &cases {
+        let mut case_args = base.clone();
+        suite::apply_case(&base, case, &mut case_args, "run-id");
+        if case_args.scenario.is_api_capacity() {
+            continue;
+        }
+        let path = case_args
+            .libsql_path
+            .clone()
+            .expect("every non-API libSQL case gets a generated database path");
+        assert!(
+            seen.insert(path.clone()),
+            "case {} reused database path {}",
+            case.label,
+            path.display()
+        );
+    }
+    assert!(
+        seen.len() > 1,
+        "the suite must exercise more than one isolated libSQL case"
+    );
+}
+
+/// An explicit `--libsql-path` is honoured and still isolates every case.
+///
+/// Two properties at once, because they trade off against each other: the
+/// operator's directory and extension survive (the path is not silently
+/// replaced with a temporary file), and no two cases land on the same file.
+/// Keying the suffix on the scenario satisfies only the first — `tool-heavy`,
+/// `tool-wait`, and `tool-failure` are all `ToolSession` and would share one
+/// database, which is the cross-runtime lock contention the split exists to
+/// prevent.
+#[test]
+fn explicit_libsql_path_is_preserved_and_still_isolates_each_case() {
+    let mut base = test_args();
+    base.backend = crate::Backend::Libsql;
+    base.libsql_path = Some(std::path::PathBuf::from(
+        "/tmp/operator-choice/bench.sqlite",
+    ));
+    let cases = suite::build_cases(StressSuite::BottleneckFinder);
+    let mut seen = std::collections::BTreeSet::new();
+    let mut checked = 0;
+    for case in &cases {
+        let mut case_args = base.clone();
+        suite::apply_case(&base, case, &mut case_args, "run-id");
+        if case_args.scenario.is_api_capacity() {
+            continue;
+        }
+        let path = case_args
+            .libsql_path
+            .clone()
+            .expect("every non-API libSQL case gets a database path");
+        assert_eq!(
+            path.parent(),
+            Some(std::path::Path::new("/tmp/operator-choice")),
+            "case {} moved off the operator's directory to {}",
+            case.label,
+            path.display()
+        );
+        assert_eq!(
+            path.extension().and_then(|extension| extension.to_str()),
+            Some("sqlite"),
+            "case {} dropped the operator's extension: {}",
+            case.label,
+            path.display()
+        );
+        assert!(
+            seen.insert(path.clone()),
+            "case {} reused database path {}",
+            case.label,
+            path.display()
+        );
+        checked += 1;
+    }
+    assert!(
+        checked > 1,
+        "the suite must exercise more than one explicit-path libSQL case"
+    );
+}
+
+/// Teardown removes the database and both SQLite sidecars it created.
+///
+/// Drives the real side effect against real files rather than asserting on a
+/// derived string: the previous derivation used `Path::with_extension`, which
+/// only lined up for `.db`, and a string-shaped assertion would have agreed
+/// with it. The path here carries a non-`.db` extension for that reason, which
+/// is also the shape an explicit `--libsql-path` now produces.
+#[tokio::test]
+async fn cleanup_removes_the_database_and_its_sqlite_sidecars() {
+    let dir = std::env::temp_dir().join(format!("ironclaw-stress-cleanup-{}", std::process::id()));
+    tokio::fs::create_dir_all(&dir)
+        .await
+        .expect("create temp dir");
+    // A non-UTF-8 byte in the name is what pins the `OsString` derivation: an
+    // ASCII name survives a `to_string_lossy` round trip unchanged, so on the
+    // ASCII path this case still only covers the extension half of the defect.
+    //
+    // Linux only. macOS rejects a non-UTF-8 filename at creation with EILSEQ
+    // ("Illegal byte sequence"), so seeding the file is impossible there —
+    // gating keeps the byte-preservation pin on the CI runners while leaving
+    // the case runnable for developers on macOS.
+    #[cfg(target_os = "linux")]
+    let database = {
+        use std::os::unix::ffi::OsStringExt;
+        let mut name = b"bench-tool-heavy-".to_vec();
+        name.push(0xff);
+        name.extend_from_slice(b".sqlite");
+        dir.join(std::ffi::OsString::from_vec(name))
+    };
+    #[cfg(not(target_os = "linux"))]
+    let database = dir.join("bench-tool-heavy.sqlite");
+    let mut created = vec![database.clone()];
+    for suffix in ["-wal", "-shm"] {
+        let mut sidecar = database.clone().into_os_string();
+        sidecar.push(suffix);
+        created.push(std::path::PathBuf::from(sidecar));
+    }
+    for path in &created {
+        tokio::fs::write(path, b"x").await.expect("seed file");
+    }
+
+    crate::cleanup_generated_libsql_path(&database).await;
+
+    for path in &created {
+        assert!(
+            !path.exists(),
+            "{} survived cleanup; SQLite appends -wal/-shm to the whole file \
+             name, so deriving them by extension misses any non-.db path",
+            path.display()
+        );
+    }
+    tokio::fs::remove_dir_all(&dir)
+        .await
+        .expect("remove temp dir");
 }
 
 #[test]
@@ -755,6 +1085,9 @@ fn operation_attribution_groups_user_turn_stage_durations() {
             accept_inbound: Some(Duration::from_micros(2)),
             submit_turn: Some(Duration::from_micros(3)),
             claim_run: Some(Duration::from_micros(4)),
+            block_run: Some(Duration::from_micros(17)),
+            resume_turn: Some(Duration::from_micros(18)),
+            reclaim_run: Some(Duration::from_micros(19)),
             complete_run: Some(Duration::from_micros(5)),
             load_context: Some(Duration::from_micros(6)),
             resource_reserve: Some(Duration::from_micros(7)),
@@ -776,7 +1109,7 @@ fn operation_attribution_groups_user_turn_stage_durations() {
 
     assert_eq!(attribution.thread_store_writes.count, 1);
     assert_eq!(attribution.thread_store_writes.latency.p95_us, 73);
-    assert_eq!(attribution.turn_store.latency.p95_us, 12);
+    assert_eq!(attribution.turn_store.latency.p95_us, 66);
     assert_eq!(attribution.context_reads.latency.p95_us, 6);
     assert_eq!(attribution.resource_governor.latency.p95_us, 24);
     assert_eq!(attribution.synthetic_wait.latency.p95_us, 21);
@@ -838,7 +1171,6 @@ fn human_summary_places_db_probe_errors_in_matching_columns() {
     );
 }
 
-#[cfg(feature = "postgres")]
 #[test]
 fn postgres_probe_error_redacts_resolved_url() {
     let url = "postgresql://postgres:secret@localhost:5432/app";
@@ -865,6 +1197,24 @@ fn bottleneck_report_identifies_failure_stage_and_db_growth() {
     assert!(rendered.contains("model_tool_wait"));
     assert!(rendered.contains("model_wait"));
     assert!(rendered.contains("libsql_growth"));
+}
+
+#[test]
+fn bottleneck_report_includes_thread_list_stage_latency() {
+    let args = test_args();
+    let mut summary = run_summary_with_bottlenecks();
+    let stages = summary
+        .stage_latency
+        .as_mut()
+        .expect("test summary has stage latency");
+    stages.list_threads_cold = stage(1, 2_000_000);
+    stages.model_wait = stage(1, 1_000);
+    let captured = capture::CapturedRun::Single(Box::new(summary));
+
+    let rendered = analysis::render_bottleneck_report(&args, "run", &captured);
+
+    assert!(rendered.contains("list_threads_cold"));
+    assert!(rendered.contains("larger --thread-list-threads"));
 }
 
 #[test]
@@ -1061,7 +1411,7 @@ fn run_summary_with_bottlenecks() -> RunSummary {
         users: 1,
         active_thread_count: 1,
         threads_per_owner: 1,
-        turn_state_backend: TurnStateBackend::Filesystem,
+        process_journal_backend: ProcessJournalBackend::FilesystemJournal,
         gate_blocked_every: 0,
         tenants: 1,
         prefill_threads: 1,
@@ -1078,6 +1428,9 @@ fn run_summary_with_bottlenecks() -> RunSummary {
         user_message_bytes: 0,
         assistant_message_bytes: 0,
         context_max_messages: 20,
+        thread_list_threads: 1000,
+        thread_list_users: 1,
+        thread_list_page_size: 50,
         context_growth_turns_per_operation: 4,
         tool_calls_per_turn: 2,
         tool_latency_ms: 0,
@@ -1105,7 +1458,12 @@ fn run_summary_with_bottlenecks() -> RunSummary {
             submit_turn: stage(1, 2_000),
             mark_submitted: empty_stage(),
             mark_rejected_busy: empty_stage(),
+            list_threads_cold: empty_stage(),
+            list_threads_warm: empty_stage(),
             claim_run: empty_stage(),
+            block_run: empty_stage(),
+            resume_turn: empty_stage(),
+            reclaim_run: empty_stage(),
             append_assistant: empty_stage(),
             finalize_assistant: empty_stage(),
             complete_run: empty_stage(),
@@ -1119,6 +1477,7 @@ fn run_summary_with_bottlenecks() -> RunSummary {
             resource_reconcile: empty_stage(),
             resource_release: empty_stage(),
         }),
+        api_capacity: None,
         errors,
         failure_causes,
     }
@@ -1137,7 +1496,7 @@ fn test_args() -> Args {
         users: 4,
         active_thread_count: 0,
         threads_per_owner: 1,
-        turn_state_backend: TurnStateBackend::Filesystem,
+        process_journal_backend: ProcessJournalBackend::FilesystemJournal,
         gate_blocked_every: 0,
         tenants: 2,
         prefill_threads: 0,
@@ -1148,6 +1507,37 @@ fn test_args() -> Args {
         libsql_path: None,
         postgres_url: None,
         postgres_pool_size: 4,
+        api_base_url: None,
+        api_users_jsonl: None,
+        api_bearer_token: None,
+        api_admin_bearer_token: None,
+        api_admin_provisioners: 1,
+        api_read_qps_per_user: 0.0,
+        api_read_workers: 0,
+        api_read_mix: crate::api_capacity::default_read_mix(),
+        api_page_size: 50,
+        api_message_interval_ms: 0,
+        api_wait_for_assistant: true,
+        api_terminal_timeout_ms: 30_000,
+        api_poll_interval_ms: 250,
+        api_request_timeout_ms: 10_000,
+        api_setup_concurrency: 16,
+        api_scripted_tool: None,
+        api_scripted_doc_sizes: vec![4096, 32768, 131072, 1048576],
+        api_hot_writers: 0,
+        api_threads_per_user: 1,
+        thread_list_untitled: false,
+        api_background_users: 0,
+        api_background_concurrency: 0,
+        api_background_operations: 1,
+        api_background_start_delay_ms: 250,
+        mock_llm_bind: None,
+        mock_llm_model: "stress-mock".to_string(),
+        mock_llm_latency_ms: 0,
+        mock_llm_background_latency_ms: 0,
+        mock_llm_jitter_ms: 0,
+        mock_llm_output_bytes: 128,
+        mock_llm_failure_rate: 0.0,
         progress_interval_seconds: 0,
         human_read: false,
         bottleneck_report: false,
@@ -1185,6 +1575,9 @@ fn test_args() -> Args {
         user_message_bytes: 0,
         assistant_message_bytes: 0,
         context_max_messages: 20,
+        thread_list_threads: 1000,
+        thread_list_users: 1,
+        thread_list_page_size: 50,
         context_growth_turns_per_operation: 4,
         tool_calls_per_turn: 2,
         tool_latency_ms: 0,

@@ -17,13 +17,79 @@
 // Module-level allow matches `builder.rs`/`reply.rs`/`http_matcher.rs`.
 #![allow(dead_code)]
 
-use ironclaw_reborn_config::BudgetDefaults;
-use ironclaw_resources::ResourceGovernor;
+use ironclaw_config::BudgetDefaults;
+use ironclaw_event_log::{SecurityBoundary, SecurityDecision};
+use ironclaw_host_api::ids::ProcessId;
+use ironclaw_loop_contracts::{BatchPolicyKind, LoopHostMilestoneKind, LoopRecoveryClass};
+use ironclaw_processes::ProcessKind;
+use ironclaw_resources::{ResourceAccount, ResourceGovernor, ResourceTally};
+use ironclaw_threads::SessionThreadService as _;
+use ironclaw_turns::{TurnEventKind, TurnRunId, TurnRunState};
 use rust_decimal::Decimal;
 
 use super::builder::RebornIntegrationHarness;
+use super::doubles::TRANSCRIPT_FAILURE_SECRET;
 
 type HarnessResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+fn summary_contents_lack(contents: &[&str], needle: &str) -> HarnessResult<()> {
+    if contents.is_empty() {
+        return Err("vacuous exclusion: zero durable summary artifacts persisted".into());
+    }
+    if contents.iter().all(|content| !content.contains(needle)) {
+        return Ok(());
+    }
+    Err("durable summary artifact contained forbidden content".into())
+}
+
+pub(crate) fn validate_process_ownership(
+    processes: &[(ProcessId, ProcessKind, Option<ProcessId>)],
+    expected_process_ids: &[ProcessId],
+) -> HarnessResult<()> {
+    for (process_id, _, _) in processes
+        .iter()
+        .filter(|(_, process_kind, _)| process_kind == &ProcessKind::AgentTurn)
+    {
+        if !expected_process_ids.contains(process_id) {
+            return Err(format!(
+                "orphan agent-turn process {process_id}; expected only {expected_process_ids:?}"
+            )
+            .into());
+        }
+    }
+
+    for expected in expected_process_ids {
+        let Some((_, process_kind, _)) = processes
+            .iter()
+            .find(|(process_id, _, _)| process_id == expected)
+        else {
+            return Err(format!(
+                "expected agent-turn process {expected} is missing from the process journal"
+            )
+            .into());
+        };
+        if process_kind != &ProcessKind::AgentTurn {
+            return Err(format!(
+                "expected process {expected} has kind {process_kind:?}, not AgentTurn"
+            )
+            .into());
+        }
+    }
+
+    for (process_id, _, parent_process_id) in processes {
+        if let Some(parent_process_id) = parent_process_id
+            && !processes
+                .iter()
+                .any(|(candidate_id, _, _)| candidate_id == parent_process_id)
+        {
+            return Err(format!(
+                "orphan process {process_id} names missing parent {parent_process_id}"
+            )
+            .into());
+        }
+    }
+    Ok(())
+}
 
 /// The two model-visible tool-error outcome classes a capability can surface
 /// (`CapabilityOutcome::Failed` vs `Denied`). A `Failed` and a `Denied` outcome
@@ -41,7 +107,7 @@ pub enum ToolErrorClass {
 impl ToolErrorClass {
     /// The `safe_summary` prefix the executor writes for this class — see
     /// `capability_{failed,denied}_summary` in
-    /// `crates/ironclaw_agent_loop/src/executor/capabilities.rs`.
+    /// `crates/loop/ironclaw_agent_loop/src/executor/capabilities.rs`.
     fn summary_prefix(self) -> &'static str {
         match self {
             Self::Failed => "capability failed with ",
@@ -51,6 +117,127 @@ impl ToolErrorClass {
 }
 
 impl RebornIntegrationHarness {
+    /// Assert the complete fail-closed outcome shared by assistant and tool
+    /// transcript-write failures.
+    pub async fn assert_transcript_failure_terminal(
+        &self,
+        state: &TurnRunState,
+        forbidden_content: &str,
+        expected_interactive_model_calls: usize,
+    ) -> HarnessResult<()> {
+        let failure = state
+            .failure
+            .as_ref()
+            .ok_or("failed transcript persistence must carry a durable failure")?;
+        if failure.category() != "transcript_write_failed" {
+            return Err(format!(
+                "expected transcript_write_failed, saw {:?}",
+                failure.category()
+            )
+            .into());
+        }
+        if failure.detail() != Some("assistant transcript write failed") {
+            return Err(format!(
+                "expected only the fixed transcript cause, saw {:?}",
+                failure.detail()
+            )
+            .into());
+        }
+        let durable_failure = format!("{failure:?}");
+        for forbidden in [TRANSCRIPT_FAILURE_SECRET, forbidden_content] {
+            if durable_failure.contains(forbidden) {
+                return Err(
+                    format!("durable transcript failure must not contain {forbidden:?}").into(),
+                );
+            }
+            self.assert_conversation_history_lacks(forbidden).await?;
+        }
+        self.assert_interactive_model_provider_call_count(expected_interactive_model_calls)
+            .await?;
+        self.assert_text_model_provider_call_count(0).await?;
+        self.assert_tool_invocation_count("builtin.http", 1).await?;
+        self.assert_capability_result_count("builtin.http", 1)
+            .await?;
+        self.assert_egress_count(1).await?;
+        self.assert_model_message_content_occurrences("model error observation", 0)
+            .await?;
+        self.assert_turn_event_recorded(TurnEventKind::Failed).await
+    }
+
+    /// Assert every agent-turn process belongs to `expected_run_ids` and every
+    /// process parent is present.
+    ///
+    /// Since #6696, admission/active-lock state is updated atomically with the
+    /// process snapshot rather than stored as a second reservation record.
+    /// Exact process ownership replaces the retired dual-store orphan check.
+    pub async fn assert_process_ownership(
+        &self,
+        expected_run_ids: &[TurnRunId],
+    ) -> HarnessResult<()> {
+        let snapshots = self
+            ._shared
+            .process_system
+            .runtime()
+            .process_snapshots(&self.turn_scope.to_resource_scope())
+            .await
+            .map_err(|err| format!("read process journal snapshots: {err}"))?;
+        let expected_process_ids: Vec<_> = expected_run_ids
+            .iter()
+            .copied()
+            .map(ironclaw_turns::process_projection::process_id_from_turn_run_id)
+            .collect();
+        let process_ownership: Vec<_> = snapshots
+            .iter()
+            .map(|process| {
+                (
+                    process.process_id,
+                    process.process_kind.clone(),
+                    process.parent_process_id,
+                )
+            })
+            .collect();
+        validate_process_ownership(&process_ownership, &expected_process_ids)
+    }
+
+    /// Assert the production-composed capability governor has no live holds.
+    ///
+    /// This deliberately reads the production-composed governor rather than a
+    /// test-owned imitation. A harness that cannot expose that authority fails
+    /// loudly instead of silently weakening the invariant.
+    pub fn assert_no_capability_resource_reservations(&self) -> HarnessResult<()> {
+        let governor = self.capability_recorder.resource_governor().ok_or(
+            "harness does not expose its production-composed capability resource governor",
+        )?;
+        let tenant_account = ResourceAccount::tenant(self.binding.tenant_id.clone());
+        if let Some(account) = governor
+            .account_snapshot(&tenant_account)
+            .map_err(|err| format!("read capability resource account: {err}"))?
+            && account.ledger.reserved != ResourceTally::default()
+        {
+            return Err(format!(
+                "orphan capability resource reservation remains for {tenant_account:?}: {:?}",
+                account.ledger.reserved
+            )
+            .into());
+        }
+
+        Ok(())
+    }
+
+    /// Assert process ownership and zero capability holds at a quiescent
+    /// blocked or terminal boundary.
+    ///
+    /// Call [`Self::assert_process_ownership`] alone while a run is actively
+    /// executing: an in-flight capability reservation is legitimate until the
+    /// transition settles and must not be mislabeled as an orphan.
+    pub async fn assert_no_orphan_runs_or_reservations(
+        &self,
+        expected_run_ids: &[TurnRunId],
+    ) -> HarnessResult<()> {
+        self.assert_process_ownership(expected_run_ids).await?;
+        self.assert_no_capability_resource_reservations()
+    }
+
     /// Assert exactly `expected` Tier-2 HTTP egress requests were captured.
     pub async fn assert_egress_count(&self, expected: usize) -> HarnessResult<()> {
         let actual = self.captured_egress_requests().len();
@@ -73,6 +260,19 @@ impl RebornIntegrationHarness {
             return Ok(());
         }
         Err(format!("expected {expected} captured network egress request(s), saw {actual}").into())
+    }
+
+    /// S1 seam: assert exactly `expected` requests reached the
+    /// real-egress-pipeline's wire-level transport recorder
+    /// (`.with_real_egress_pipeline()`) — the true edge below real
+    /// network-policy enforcement and leak scan. `0` proves policy denied the
+    /// call before the transport; `>0` proves the request cleared policy.
+    pub async fn assert_real_egress_transport_count(&self, expected: usize) -> HarnessResult<()> {
+        let actual = self.real_egress_transport_requests().len();
+        if actual == expected {
+            return Ok(());
+        }
+        Err(format!("expected {expected} real-egress transport request(s), saw {actual}").into())
     }
 
     /// Assert the captured egress URLs, IN CALL ORDER, each contain the matching
@@ -193,11 +393,77 @@ impl RebornIntegrationHarness {
         .into())
     }
 
+    /// A tool with this model-facing wire name (e.g. `ironclaw__memory__search`)
+    /// was offered to the model on at least one captured request.
+    pub fn assert_model_tool_offered(&self, tool_name: &str) -> HarnessResult<()> {
+        let names = self.captured_model_tool_names();
+        if names.contains(tool_name) {
+            return Ok(());
+        }
+        Err(format!("tool {tool_name:?} was not offered to the model; offered: {names:?}").into())
+    }
+
+    /// No captured request offered a tool with this model-facing wire name.
+    pub fn assert_model_tool_not_offered(&self, tool_name: &str) -> HarnessResult<()> {
+        let names = self.captured_model_tool_names();
+        if names.contains(tool_name) {
+            return Err(format!(
+                "tool {tool_name:?} must NOT be offered to the model; offered: {names:?}"
+            )
+            .into());
+        }
+        Ok(())
+    }
+
     /// Assert some model-visible `System`-role prompt captured across all
     /// requests captured by the harness so far contains `text`. Reads the
     /// scripted `TraceLlm` retained before the `dyn LlmProvider` upcast —
     /// proves prompt-injected content (safety banners, skill instructions,
     /// profile lines) actually reached the model.
+    /// Assert that some captured model request carried a User-role message
+    /// containing `text` — the end-to-end proof that a queued steering message
+    /// actually reached the model (through the real transcript rebuild), not
+    /// merely that its transcript status flipped.
+    pub async fn assert_model_saw_user_message(&self, text: &str) -> HarnessResult<()> {
+        let messages = self.captured_model_user_messages();
+        if messages.iter().any(|message| message.contains(text)) {
+            return Ok(());
+        }
+        Err(format!(
+            "no captured model request carried a user message containing {text:?}; saw {messages:?}"
+        )
+        .into())
+    }
+
+    /// This thread's transcript row for the (first) user message whose content
+    /// contains `text`. Reads through the same `SessionThreadService` the run
+    /// persisted through.
+    pub async fn user_message_record(
+        &self,
+        text: &str,
+    ) -> HarnessResult<ironclaw_threads::ThreadMessageRecord> {
+        let history = self
+            .thread_harness
+            .service
+            .list_thread_history(ironclaw_threads::ThreadHistoryRequest {
+                scope: self.thread_harness.scope.clone(),
+                thread_id: self.binding.thread_id.clone(),
+            })
+            .await?;
+        history
+            .messages
+            .iter()
+            .find(|message| {
+                message.kind == ironclaw_threads::MessageKind::User
+                    && message
+                        .content
+                        .as_deref()
+                        .is_some_and(|content| content.contains(text))
+            })
+            .cloned()
+            .ok_or_else(|| format!("no user message containing {text:?} in thread history").into())
+    }
+
     pub async fn assert_system_prompt_contains(&self, text: &str) -> HarnessResult<()> {
         let prompts = self.captured_system_prompts();
         if prompts.iter().any(|prompt| prompt.contains(text)) {
@@ -215,6 +481,23 @@ impl RebornIntegrationHarness {
             prompts.len()
         )
         .into())
+    }
+
+    /// Inverse of [`assert_system_prompt_contains`]: assert no captured
+    /// model-visible `System`-role prompt contains `text`. Fails rather than
+    /// passing vacuously when no system prompts were captured.
+    pub async fn assert_system_prompt_excludes(&self, text: &str) -> HarnessResult<()> {
+        let prompts = self.captured_system_prompts();
+        if prompts.is_empty() {
+            return Err(format!(
+                "vacuous exclusion: no system prompts were captured; cannot prove {text:?} was omitted"
+            )
+            .into());
+        }
+        if prompts.iter().any(|prompt| prompt.contains(text)) {
+            return Err(format!("captured system prompt unexpectedly contained {text:?}").into());
+        }
+        Ok(())
     }
 
     /// Assert that some model request this thread sent to the scripted provider
@@ -236,6 +519,232 @@ impl RebornIntegrationHarness {
             requests.len()
         )
         .into())
+    }
+
+    /// Assert that the textual `content` of some message sent to the model
+    /// contains `needle`. Unlike [`assert_model_request_contains`], this does
+    /// not serialize the request a second time, so JSON embedded in a tool
+    /// result is matched exactly as the model receives it rather than through
+    /// an additional layer of escape characters.
+    pub async fn assert_model_message_content_contains(&self, needle: &str) -> HarnessResult<()> {
+        let requests = self.scripted_llm.captured_requests();
+        if requests
+            .iter()
+            .flatten()
+            .any(|message| message.content.contains(needle))
+        {
+            return Ok(());
+        }
+        Err(format!(
+            "no model message content contained {needle:?}; captured {} request(s)",
+            requests.len()
+        )
+        .into())
+    }
+
+    /// Assert that one model-visible message contains every `needle` in the
+    /// supplied order. Other content may appear between needles.
+    pub async fn assert_model_message_content_in_order(
+        &self,
+        needles: &[&str],
+    ) -> HarnessResult<()> {
+        if needles.is_empty() {
+            return Err("ordered model-message assertion needs at least one needle".into());
+        }
+        let requests = self.scripted_llm.captured_requests();
+        'message: for message in requests.iter().flatten() {
+            let mut remaining = message.content.as_str();
+            for needle in needles {
+                let Some(position) = remaining.find(needle) else {
+                    continue 'message;
+                };
+                remaining = &remaining[position + needle.len()..];
+            }
+            return Ok(());
+        }
+        Err(format!(
+            "no model message content contained {needles:?} in order; captured {} request(s)",
+            requests.len()
+        )
+        .into())
+    }
+
+    /// Assert the exact number of interactive, tool-capable calls observed by
+    /// the recoverable-failure provider wrapper. Text-only system-inference
+    /// calls used for compaction are intentionally excluded.
+    pub async fn assert_interactive_model_provider_call_count(
+        &self,
+        expected: usize,
+    ) -> HarnessResult<()> {
+        let probe = self
+            .model_provider_call_probe
+            .as_ref()
+            .ok_or("model provider call probe is not enabled for this harness")?;
+        let actual = probe.interactive_calls();
+        if actual == expected {
+            return Ok(());
+        }
+        Err(
+            format!("expected {expected} interactive model provider call(s), observed {actual}")
+                .into(),
+        )
+    }
+
+    /// Assert the exact ordered vendor-seam calls made by explicit fallback
+    /// routing. Reaching the distinct fallback vendor and completing the turn
+    /// proves the gateway's index-1 evidence survived the loop-host check.
+    pub async fn assert_ordered_fallback_vendor_calls(&self) -> HarnessResult<()> {
+        let probe = self
+            .fallback_provider_call_probe
+            .as_ref()
+            .ok_or("fallback provider call probe is not enabled for this harness")?;
+        let primary = probe.primary_calls();
+        let fallback = probe.fallback_calls();
+        if primary == 1 && fallback == 1 {
+            return Ok(());
+        }
+        Err(format!(
+            "expected one primary route-0 call and one fallback route-1 call; \
+             observed primary={primary}, fallback={fallback}"
+        )
+        .into())
+    }
+
+    /// Assert the exact number of times `needle` occurs across every request
+    /// seen by the recoverable-failure provider, including injected failures
+    /// that never reach the delegated `TraceLlm`.
+    pub async fn assert_model_message_content_occurrences(
+        &self,
+        needle: &str,
+        expected: usize,
+    ) -> HarnessResult<()> {
+        let probe = self
+            .model_provider_call_probe
+            .as_ref()
+            .ok_or("model provider call probe is not enabled for this harness")?;
+        let actual = probe.message_content_occurrences(needle);
+        if actual == expected {
+            return Ok(());
+        }
+        Err(format!(
+            "expected model message content to contain {needle:?} {expected} time(s), observed {actual}"
+        )
+        .into())
+    }
+
+    /// Assert that at least `minimum` text-only provider calls occurred. These
+    /// are system-inference calls in the recovery scenarios, including context
+    /// compaction.
+    pub async fn assert_text_model_provider_call_count_at_least(
+        &self,
+        minimum: usize,
+    ) -> HarnessResult<()> {
+        let probe = self
+            .model_provider_call_probe
+            .as_ref()
+            .ok_or("model provider call probe is not enabled for this harness")?;
+        let actual = probe.text_calls();
+        if actual >= minimum {
+            return Ok(());
+        }
+        Err(format!(
+            "expected at least {minimum} text-only model provider call(s), observed {actual}"
+        )
+        .into())
+    }
+
+    /// Assert the exact number of text-only system-inference provider calls.
+    pub async fn assert_text_model_provider_call_count(
+        &self,
+        expected: usize,
+    ) -> HarnessResult<()> {
+        let probe = self
+            .model_provider_call_probe
+            .as_ref()
+            .ok_or("model provider call probe is not enabled for this harness")?;
+        let actual = probe.text_calls();
+        if actual == expected {
+            return Ok(());
+        }
+        Err(
+            format!("expected {expected} text-only model provider call(s), observed {actual}")
+                .into(),
+        )
+    }
+
+    /// Assert no request seen by the recoverable-failure provider contains
+    /// `needle`, including requests rejected before `TraceLlm` delegation.
+    pub async fn assert_model_message_content_not_contains(
+        &self,
+        needle: &str,
+    ) -> HarnessResult<()> {
+        let probe = self
+            .model_provider_call_probe
+            .as_ref()
+            .ok_or("model provider call probe is not enabled for this harness")?;
+        if !probe.message_content_contains(needle) {
+            return Ok(());
+        }
+        Err(format!("model message content unexpectedly contained {needle:?}").into())
+    }
+
+    /// Assert text-only system inference never received `needle`. This is the
+    /// compaction-input trust-boundary assertion; interactive requests are
+    /// intentionally excluded because an original user turn may legitimately
+    /// have carried the value before compaction.
+    pub async fn assert_text_model_message_content_not_contains(
+        &self,
+        needle: &str,
+    ) -> HarnessResult<()> {
+        let probe = self
+            .model_provider_call_probe
+            .as_ref()
+            .ok_or("model provider call probe is not enabled for this harness")?;
+        match probe.text_message_content_contains(needle) {
+            Some(false) => Ok(()),
+            Some(true) => Err("text-only model message content contained forbidden content".into()),
+            None => Err("no text-only model request was captured".into()),
+        }
+    }
+
+    /// Assert a text-only system-inference request received expected safe
+    /// content such as a redaction marker.
+    pub async fn assert_text_model_message_content_contains(
+        &self,
+        needle: &str,
+    ) -> HarnessResult<()> {
+        let probe = self
+            .model_provider_call_probe
+            .as_ref()
+            .ok_or("model provider call probe is not enabled for this harness")?;
+        match probe.text_message_content_contains(needle) {
+            Some(true) => Ok(()),
+            Some(false) => {
+                Err("text-only model message content omitted expected safe content".into())
+            }
+            None => Err("no text-only model request was captured".into()),
+        }
+    }
+
+    /// Assert every interactive request after the final text-only compaction
+    /// inference omits a secret from the persisted summary.
+    pub async fn assert_post_compaction_interactive_model_message_content_not_contains(
+        &self,
+        needle: &str,
+    ) -> HarnessResult<()> {
+        let probe = self
+            .model_provider_call_probe
+            .as_ref()
+            .ok_or("model provider call probe is not enabled for this harness")?;
+        match probe.post_text_interactive_message_content_contains(needle) {
+            Some(false) => Ok(()),
+            Some(true) => {
+                Err("post-compaction interactive model message contained forbidden content".into())
+            }
+            None => {
+                Err("no interactive model request was captured after compaction inference".into())
+            }
+        }
     }
 
     /// Assert some SINGLE model request contains EVERY needle in `needles`
@@ -266,10 +775,8 @@ impl RebornIntegrationHarness {
     /// `TraceLlm::captured_tool_definitions`) contains a definition named
     /// `name`, across every request this thread has sent so far (C-TOOLDISCLOSURE).
     /// This is the channel `ToolDisclosureMode::Bridged` rewrites: bridged runs
-    /// replace the flat per-capability tool list with the bridge meta tools.
-    /// Only `tool_search` is ever ADVERTISED to the model; `tool_describe`/
-    /// `tool_call` are retained internally for describe-first routing and
-    /// never appear in the captured tool definitions.
+    /// replace a wide flat per-capability tool list with the complete discovery
+    /// bridge set.
     pub async fn assert_model_tools_contains(&self, name: &str) -> HarnessResult<()> {
         let definitions = self.scripted_llm.captured_tool_definitions();
         if definitions
@@ -285,6 +792,110 @@ impl RebornIntegrationHarness {
             .map(|definition| definition.name.clone())
             .collect();
         Err(format!("no captured tool definition named {name:?}; saw {seen:?}").into())
+    }
+
+    /// Assert that at least one model request was captured and every captured
+    /// `tools` argument was empty. This is the positive boundary assertion for
+    /// an effective empty capability allow-set; unlike `assert_model_tools_excludes`,
+    /// an empty surface is the expected signal rather than a vacuous failure.
+    pub async fn assert_model_tools_empty(&self) -> HarnessResult<()> {
+        let definitions = self.scripted_llm.captured_tool_definitions();
+        if definitions.is_empty() {
+            return Err(
+                "no model requests captured; cannot prove the tool surface was empty".into(),
+            );
+        }
+        let seen: Vec<String> = definitions
+            .iter()
+            .flatten()
+            .map(|definition| definition.name.clone())
+            .collect();
+        if seen.is_empty() {
+            return Ok(());
+        }
+        Err(format!("expected an empty model tool surface; saw {seen:?}").into())
+    }
+
+    /// Assert the captured `tools` argument's definition named `name` has a
+    /// `description` field that does NOT contain `needle`, on every request
+    /// where that definition appears. Complements
+    /// [`assert_model_tools_contains`]/[`assert_model_tools_excludes`] (which
+    /// only ever check tool *names*): the bridge tool_search's own advertised
+    /// description doubles as an always-on catalog index of discoverable tool
+    /// names (see `catalog_index_tool_search_description`), so under a
+    /// narrowed capability allow-set that index text — not just tool_search's
+    /// RESULTS — must not leak a non-allowlisted tool's name.
+    ///
+    /// Errors if `name` is never found (nothing to assert the exclusion
+    /// against) — callers should pair this with `assert_model_tools_contains`.
+    pub async fn assert_model_tool_description_excludes(
+        &self,
+        name: &str,
+        needle: &str,
+    ) -> HarnessResult<()> {
+        let definitions = self.scripted_llm.captured_tool_definitions();
+        let mut found = false;
+        for definition in definitions.iter().flatten() {
+            if definition.name != name {
+                continue;
+            }
+            found = true;
+            if definition.description.contains(needle) {
+                return Err(format!(
+                    "tool {name:?} description unexpectedly contains {needle:?}: {}",
+                    definition.description
+                )
+                .into());
+            }
+        }
+        if !found {
+            let seen: Vec<String> = definitions
+                .iter()
+                .flatten()
+                .map(|definition| definition.name.clone())
+                .collect();
+            return Err(format!("no captured tool definition named {name:?}; saw {seen:?}").into());
+        }
+        Ok(())
+    }
+
+    /// Inverse of [`assert_model_tool_description_excludes`]: assert the
+    /// captured `tools` argument's definition named `name` has a
+    /// `description` field that DOES contain `needle`, on the last request
+    /// where that definition appears. Paired with the exclusion assertion so
+    /// a narrowed allow-set test proves the description index positively
+    /// includes the allowlisted tool — not merely that an empty/degenerate
+    /// index vacuously excludes the denied one.
+    ///
+    /// Errors if `name` is never found.
+    pub async fn assert_model_tool_description_contains(
+        &self,
+        name: &str,
+        needle: &str,
+    ) -> HarnessResult<()> {
+        let definitions = self.scripted_llm.captured_tool_definitions();
+        let mut last_description: Option<String> = None;
+        for definition in definitions.iter().flatten() {
+            if definition.name != name {
+                continue;
+            }
+            last_description = Some(definition.description.clone());
+        }
+        match last_description {
+            Some(description) if description.contains(needle) => Ok(()),
+            Some(description) => Err(format!(
+                "tool {name:?} description does not contain {needle:?}: {description}"
+            )
+            .into()),
+            None => {
+                let seen: Vec<String> = definitions
+                    .iter()
+                    .flatten()
+                    .map(|definition| definition.name.clone())
+                    .collect();
+                Err(format!("no captured tool definition named {name:?}; saw {seen:?}").into())
+            }
+        }
     }
 
     /// Inverse of [`assert_model_tools_contains`]: assert NO captured `tools`
@@ -315,14 +926,19 @@ impl RebornIntegrationHarness {
         Ok(())
     }
 
-    /// Collects the persisted `safe_summary` field of every `ToolResultReference`
-    /// message on this thread's FULL history (not baseline-sliced — safe only
-    /// for single-turn harnesses today). Shared collector for
-    /// [`assert_tool_error`], [`assert_no_tool_error`], and
-    /// [`assert_tool_error_summary_contains`]. Fail loud (never silently skip):
-    /// missing or undecodable `content` is an `Err`, not an omission that would
-    /// degrade into a misleading "not found" for the caller.
-    async fn persisted_tool_error_summaries(&self) -> HarnessResult<Vec<String>> {
+    /// Collects the fully-decoded `ToolResultReferenceEnvelope` of every
+    /// `ToolResultReference` message on this thread's FULL history (not
+    /// baseline-sliced — safe only for single-turn harnesses today), in
+    /// thread order. Shared decoder for [`persisted_tool_error_summaries`]
+    /// and callers that need more than the summary text (e.g. comparing the
+    /// full envelope — `model_observation` included — across two calls, to
+    /// prove an "unknown target" outcome carries no existence-oracle signal
+    /// beyond a genuinely run-scoped id). Fail loud (never silently skip):
+    /// missing or undecodable `content` is an `Err`, not an omission that
+    /// would degrade into a misleading "not found" for the caller.
+    pub async fn persisted_tool_result_envelopes(
+        &self,
+    ) -> HarnessResult<Vec<ironclaw_threads::ToolResultReferenceEnvelope>> {
         let history = self
             .thread_harness
             .history(self.binding.thread_id.clone())
@@ -337,7 +953,6 @@ impl RebornIntegrationHarness {
                     return Err("ToolResultReference message missing content".into());
                 };
                 serde_json::from_str::<ironclaw_threads::ToolResultReferenceEnvelope>(content)
-                    .map(|envelope| envelope.safe_summary.as_str().to_string())
                     .map_err(|err| {
                         // Truncate the raw payload before interpolating it into
                         // the error: `content` can carry a `model_observation`
@@ -357,6 +972,19 @@ impl RebornIntegrationHarness {
             .collect()
     }
 
+    /// Collects the persisted `safe_summary` field of every `ToolResultReference`
+    /// message on this thread's FULL history. Shared collector for
+    /// [`assert_tool_error`], [`assert_no_tool_error`], and
+    /// [`assert_tool_error_summary_contains`].
+    async fn persisted_tool_error_summaries(&self) -> HarnessResult<Vec<String>> {
+        Ok(self
+            .persisted_tool_result_envelopes()
+            .await?
+            .into_iter()
+            .map(|envelope| envelope.safe_summary.as_str().to_string())
+            .collect())
+    }
+
     /// Assert the in-memory `TurnEventSink` installed via `.with_turn_event_sink()`
     /// (C-TRACECAP) recorded at least one event of `kind`. Proves
     /// `subscribe_best_effort` actually fired the sink for a real turn, not just
@@ -365,12 +993,220 @@ impl RebornIntegrationHarness {
         &self,
         kind: ironclaw_turns::TurnEventKind,
     ) -> HarnessResult<()> {
+        // Lifecycle events publish best-effort AFTER the status transition the
+        // caller waited on (`wait_for_status` reads the store's hot-cache
+        // status, which the transition sets synchronously; the sink publish
+        // runs just after that transition returns). So a just-completed turn's
+        // terminal event can land a moment after its status is observable —
+        // poll briefly rather than checking exactly once, which otherwise races
+        // the publish.
+        for _ in 0..100 {
+            if self
+                .recorded_turn_events()
+                .iter()
+                .any(|event| event.kind == kind)
+            {
+                return Ok(());
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
         let events = self.recorded_turn_events();
-        if events.iter().any(|event| event.kind == kind) {
+        let seen: Vec<_> = events.iter().map(|event| &event.kind).collect();
+        Err(format!("no recorded turn event of kind {kind:?} after waiting; saw {seen:?}").into())
+    }
+
+    /// Assert no terminal lifecycle event of `kind` was emitted for this
+    /// harness after a different terminal event has already been observed.
+    pub async fn assert_no_turn_event_recorded(
+        &self,
+        kind: ironclaw_turns::TurnEventKind,
+    ) -> HarnessResult<()> {
+        let events = self.recorded_turn_events();
+        if events.iter().all(|event| event.kind != kind) {
             return Ok(());
         }
         let seen: Vec<_> = events.iter().map(|event| &event.kind).collect();
-        Err(format!("no recorded turn event of kind {kind:?}; saw {seen:?}").into())
+        Err(format!("unexpected recorded turn event of kind {kind:?}; saw {seen:?}").into())
+    }
+
+    /// Assert the durable failed lifecycle event carries the expected stable
+    /// category and scrubbed provider-cause detail.
+    pub async fn assert_failed_turn_event(
+        &self,
+        expected_reason: &str,
+        expected_detail: &str,
+    ) -> HarnessResult<()> {
+        for _ in 0..100 {
+            if self.recorded_turn_events().iter().any(|event| {
+                event.kind == ironclaw_turns::TurnEventKind::Failed
+                    && event.sanitized_reason.as_deref() == Some(expected_reason)
+                    && event
+                        .detail
+                        .as_deref()
+                        .is_some_and(|detail| detail.contains(expected_detail))
+            }) {
+                return Ok(());
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        let events = self.recorded_turn_events();
+        Err(format!(
+            "no failed turn event with reason {expected_reason:?} and detail containing \
+             {expected_detail:?}; saw {events:?}"
+        )
+        .into())
+    }
+
+    /// Assert model recovery used `expected` and never entered `forbidden`.
+    pub async fn assert_model_recovery_class(
+        &self,
+        expected: LoopRecoveryClass,
+        forbidden: LoopRecoveryClass,
+    ) -> HarnessResult<()> {
+        let classes = self
+            .loop_milestones()
+            .into_iter()
+            .filter_map(|milestone| match milestone.kind {
+                LoopHostMilestoneKind::FailureRecovered { class, .. } => Some(class),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        if classes.contains(&expected) && !classes.contains(&forbidden) {
+            return Ok(());
+        }
+        Err(format!(
+            "expected model recovery class {expected:?} and no {forbidden:?}; saw {classes:?}"
+        )
+        .into())
+    }
+
+    /// Assert the loop's caller-visible policy for a capability batch of the
+    /// specified size. The policy controls whether execution may proceed in
+    /// parallel and whether a suspension stops the remaining batch.
+    pub async fn assert_capability_batch_policy(
+        &self,
+        call_count: u32,
+        expected: BatchPolicyKind,
+    ) -> HarnessResult<()> {
+        let policies = self
+            .loop_milestones()
+            .into_iter()
+            .filter_map(|milestone| match milestone.kind {
+                LoopHostMilestoneKind::CapabilityBatchStarted {
+                    call_count: actual_count,
+                    policy,
+                    ..
+                } if actual_count == call_count => Some(policy),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        if policies.contains(&expected) {
+            return Ok(());
+        }
+        Err(format!(
+            "no CapabilityBatchStarted milestone for a {call_count}-call batch classified \
+             {expected:?}; saw {policies:?}"
+        )
+        .into())
+    }
+
+    /// Assert the always-wired security-audit recorder captured an event with
+    /// the expected stable boundary/decision/code tuple.
+    pub async fn assert_security_audit_event_recorded(
+        &self,
+        boundary: SecurityBoundary,
+        decision: SecurityDecision,
+        code: &'static str,
+    ) -> HarnessResult<()> {
+        let events = self.recorded_security_audit_events();
+        if events.iter().any(|event| {
+            event.boundary == boundary && event.decision == decision && event.code == code
+        }) {
+            return Ok(());
+        }
+        let seen: Vec<_> = events
+            .iter()
+            .map(|event| (event.boundary.as_str(), event.decision.as_str(), event.code))
+            .collect();
+        Err(format!(
+            "no recorded security-audit event ({}, {}, {code}); saw {seen:?}",
+            boundary.as_str(),
+            decision.as_str()
+        )
+        .into())
+    }
+
+    /// Assert a `LoopHostMilestoneKind::CompactionFailed` milestone was
+    /// recorded whose `reason_kind` equals `reason_kind`, scoped to the
+    /// milestones recorded SINCE `baseline` (a value from
+    /// [`RebornIntegrationHarness::milestone_len`] captured at the start of
+    /// the turn under test) — proves forced compaction failed safety
+    /// validation for that turn specifically, not a stale milestone from an
+    /// earlier turn on a multi-turn harness (mirrors the `_since` pattern
+    /// used by the tool-error and history assertions).
+    pub async fn assert_compaction_failed_since(
+        &self,
+        baseline: usize,
+        reason_kind: &str,
+    ) -> HarnessResult<()> {
+        let milestones = self.loop_milestones();
+        let Some(since) = milestones.get(baseline..) else {
+            return Err(format!(
+                "milestone baseline {baseline} exceeds current milestone count {} — stale baseline",
+                milestones.len()
+            )
+            .into());
+        };
+        if since.iter().any(|milestone| {
+            matches!(
+                &milestone.kind,
+                LoopHostMilestoneKind::CompactionFailed { reason_kind: actual, .. }
+                    if actual.as_str() == reason_kind
+            )
+        }) {
+            return Ok(());
+        }
+        let seen: Vec<_> = since.iter().map(|milestone| &milestone.kind).collect();
+        Err(format!(
+            "no CompactionFailed milestone with reason_kind {reason_kind:?} since baseline {baseline}; saw {seen:?}"
+        )
+        .into())
+    }
+
+    /// Assert exactly one typed redaction milestone was emitted for the applied
+    /// compaction since `baseline`, carrying `expected_redactions`.
+    pub async fn assert_compaction_redacted_once_since(
+        &self,
+        baseline: usize,
+        expected_redactions: u32,
+    ) -> HarnessResult<()> {
+        let milestones = self.loop_milestones();
+        let Some(since) = milestones.get(baseline..) else {
+            return Err(format!(
+                "milestone baseline {baseline} exceeds current milestone count {} — stale baseline",
+                milestones.len()
+            )
+            .into());
+        };
+        let redacted_counts: Vec<_> = since
+            .iter()
+            .filter_map(|milestone| match &milestone.kind {
+                LoopHostMilestoneKind::CompactionLeakDetected {
+                    reason_kind,
+                    redacted_leak_count,
+                    ..
+                } if reason_kind.as_str() == "redacted" => Some(*redacted_leak_count),
+                _ => None,
+            })
+            .collect();
+        if redacted_counts.as_slice() == [expected_redactions] {
+            return Ok(());
+        }
+        let seen: Vec<_> = since.iter().map(|milestone| &milestone.kind).collect();
+        Err(format!(
+            "expected exactly one redacted compaction milestone carrying redacted_leak_count={expected_redactions} since baseline {baseline}, saw counts {redacted_counts:?}: {seen:?}"
+        )
+        .into())
     }
 
     /// Assert a captured model request carried a multimodal `data:` image part
@@ -487,6 +1323,153 @@ impl RebornIntegrationHarness {
         )
     }
 
+    /// Assert the most recent persisted denial tells the model what would
+    /// unlock the call.
+    ///
+    /// Reads the recovery hint off the persisted `ToolResultReference`
+    /// envelope — the same bytes the model is handed on the next turn — so it
+    /// pins the whole path: denial -> `DenyReason` -> recovery observation ->
+    /// persistence. Denials carried `model_observation: None` before #6792,
+    /// so this asserted nothing that existed.
+    pub async fn assert_denial_recovery_hint(&self, expected: &str) -> HarnessResult<()> {
+        let hints = self.persisted_tool_recovery_hints().await?;
+        if hints.iter().any(|hint| hint.as_deref() == Some(expected)) {
+            return Ok(());
+        }
+        Err(
+            format!("no persisted tool result carried recovery hint {expected:?}; saw {hints:?}")
+                .into(),
+        )
+    }
+
+    /// Every persisted `ToolResultReference`'s `model_observation.recovery
+    /// .recovery_hint`, in thread order. `None` where an observation or its
+    /// recovery block is absent.
+    async fn persisted_tool_recovery_hints(&self) -> HarnessResult<Vec<Option<String>>> {
+        let history = self
+            .thread_harness
+            .history(self.binding.thread_id.clone())
+            .await?;
+        Ok(history
+            .iter()
+            .filter(|message| message.kind == ironclaw_threads::MessageKind::ToolResultReference)
+            .filter_map(|message| message.content.as_deref())
+            .filter_map(|content| {
+                serde_json::from_str::<ironclaw_threads::ToolResultReferenceEnvelope>(content).ok()
+            })
+            .map(|envelope| {
+                envelope
+                    .model_observation
+                    .as_ref()
+                    .and_then(|observation| observation.get("recovery"))
+                    .and_then(|recovery| recovery.get("recovery_hint"))
+                    .and_then(|hint| hint.as_str())
+                    .map(str::to_string)
+            })
+            .collect())
+    }
+
+    /// Every persisted `ToolResultReference`'s `(safe_summary,
+    /// observation_status)` pair, where `observation_status` is the envelope's
+    /// parsed `model_observation.status` (`"success"` / `"error"`) when an
+    /// observation is present. Shared collector for the error-SHAPE negative
+    /// assertions below; same fail-loud decode contract as
+    /// `persisted_tool_error_summaries`.
+    async fn persisted_tool_result_reference_shapes(
+        &self,
+    ) -> HarnessResult<Vec<(String, Option<String>)>> {
+        let history = self
+            .thread_harness
+            .history(self.binding.thread_id.clone())
+            .await?;
+        history
+            .iter()
+            .filter(|message| message.kind == ironclaw_threads::MessageKind::ToolResultReference)
+            .map(|message| {
+                let Some(content) = message.content.as_deref() else {
+                    return Err("ToolResultReference message missing content".into());
+                };
+                serde_json::from_str::<ironclaw_threads::ToolResultReferenceEnvelope>(content)
+                    .map(|envelope| {
+                        let status = envelope
+                            .model_observation
+                            .as_ref()
+                            .and_then(|observation| observation.get("status"))
+                            .and_then(|status| status.as_str())
+                            .map(str::to_string);
+                        (envelope.safe_summary.as_str().to_string(), status)
+                    })
+                    .map_err(|err| {
+                        let truncated = match content.char_indices().nth(200) {
+                            Some((cutoff, _)) => format!("{}...[truncated]", &content[..cutoff]),
+                            None => content.to_string(),
+                        };
+                        format!(
+                            "failed to decode ToolResultReferenceEnvelope: {err}; raw: {truncated}"
+                        )
+                        .into()
+                    })
+            })
+            .collect()
+    }
+
+    /// Assert NO persisted `ToolResultReference` is ERROR-SHAPED — where
+    /// error-shaped means EITHER the envelope's `model_observation.status` is
+    /// `"error"` (the structural marker
+    /// `model_visible_capability_failure_observation` attaches to Failed and
+    /// Denied outcomes) OR its `safe_summary` starts with a
+    /// [`ToolErrorClass`] prefix.
+    ///
+    /// Strictly stronger than `assert_no_tool_error(class, "")` for a
+    /// "surfaced EXCLUSIVELY as the gate" pin (#5878/#6105 T2): that prefix
+    /// filter is blind to the OTHER class's prefix and to executor-synthesized
+    /// raw planner summaries (e.g. the gate-declined "auth gate denied by
+    /// user"), which persist with no class prefix — the bypass
+    /// `short_circuit_denied_resume`'s own test documents. Residual gap
+    /// (accepted): an error persisted with no observation AND a novel
+    /// unprefixed summary evades both arms.
+    ///
+    /// Scans the full thread history (not baseline-sliced) — single-turn
+    /// threads only, like [`assert_tool_error`].
+    ///
+    /// [`assert_tool_error`]: Self::assert_tool_error
+    pub async fn assert_no_error_shaped_tool_result(&self) -> HarnessResult<()> {
+        self.assert_no_error_shaped_tool_result_except(&[]).await
+    }
+
+    /// [`Self::assert_no_error_shaped_tool_result`], allowing error-shaped
+    /// references whose summary contains one of `allowed_substrings` — for
+    /// post-resume checks where one deliberate error IS the contract (a
+    /// denied gate persists its planner summary) but nothing else
+    /// error-shaped may exist.
+    pub async fn assert_no_error_shaped_tool_result_except(
+        &self,
+        allowed_substrings: &[&str],
+    ) -> HarnessResult<()> {
+        let shapes = self.persisted_tool_result_reference_shapes().await?;
+        let offending: Vec<&(String, Option<String>)> = shapes
+            .iter()
+            .filter(|(summary, status)| {
+                status.as_deref() == Some("error")
+                    || summary.starts_with(ToolErrorClass::Failed.summary_prefix())
+                    || summary.starts_with(ToolErrorClass::Denied.summary_prefix())
+            })
+            .filter(|(summary, _)| {
+                !allowed_substrings
+                    .iter()
+                    .any(|allowed| summary.contains(allowed))
+            })
+            .collect();
+        if offending.is_empty() {
+            return Ok(());
+        }
+        Err(format!(
+            "expected no error-shaped ToolResultReference beyond {allowed_substrings:?}; \
+             found (summary, observation-status) pairs {offending:?}"
+        )
+        .into())
+    }
+
     /// Assert that any captured **network** egress request whose URL
     /// contains `url_substr` carried a header named `header_name`
     /// (case-insensitive) whose value contains `value_substr` — the
@@ -579,6 +1562,36 @@ impl RebornIntegrationHarness {
         Err(format!(
             "expected seeded user daily cap {expected:?} (compiled default), saw {:?}",
             limits.max_usd
+        )
+        .into())
+    }
+
+    /// Assert provider-reported token usage was durably reconciled by the
+    /// production budget accountant.
+    pub async fn assert_budget_spent_tokens(
+        &self,
+        expected_input: u64,
+        expected_output: u64,
+    ) -> HarnessResult<()> {
+        let governor = self._shared.budget_governor.as_ref().ok_or(
+            "harness was not built with budget accounting wired (call with_budget_accounting)",
+        )?;
+        let account = self
+            ._shared
+            .budget_account
+            .as_ref()
+            .ok_or("budget-accounting harness is missing its run-owner account")?;
+        let snapshot = governor
+            .account_snapshot(account)
+            .map_err(|e| format!("budget account snapshot failed: {e}"))?
+            .ok_or("budget accountant never recorded model usage")?;
+        let spent = snapshot.ledger.spent;
+        if spent.input_tokens == expected_input && spent.output_tokens == expected_output {
+            return Ok(());
+        }
+        Err(format!(
+            "expected spent tokens ({expected_input}, {expected_output}), saw ({}, {})",
+            spent.input_tokens, spent.output_tokens
         )
         .into())
     }
@@ -687,6 +1700,39 @@ impl RebornIntegrationHarness {
             .await?)
     }
 
+    /// Assert a durable compaction summary contains expected safe content.
+    pub async fn assert_summary_artifact_contains(&self, needle: &str) -> HarnessResult<()> {
+        let summaries = self
+            .thread_harness
+            .summary_artifacts(self.binding.thread_id.clone())
+            .await?;
+        if summaries
+            .iter()
+            .any(|summary| summary.content.contains(needle))
+        {
+            return Ok(());
+        }
+        Err(format!(
+            "no durable summary artifact contained expected safe content; saw {} artifact(s)",
+            summaries.len()
+        )
+        .into())
+    }
+
+    /// Assert no durable compaction summary contains forbidden content. The
+    /// diagnostic deliberately omits `needle` and summary bodies.
+    pub async fn assert_summary_artifacts_lack(&self, needle: &str) -> HarnessResult<()> {
+        let summaries = self
+            .thread_harness
+            .summary_artifacts(self.binding.thread_id.clone())
+            .await?;
+        let contents: Vec<_> = summaries
+            .iter()
+            .map(|summary| summary.content.as_str())
+            .collect();
+        summary_contents_lack(&contents, needle)
+    }
+
     /// Number of persisted thread-history messages right now. Capture this at
     /// the START of a turn to scope a subsequent `*_since` assertion to only the
     /// messages that turn appends — the thread-history analogue of the
@@ -695,6 +1741,57 @@ impl RebornIntegrationHarness {
     /// multi-turn harness.
     pub async fn history_len(&self) -> HarnessResult<usize> {
         Ok(self.persisted_history().await?.len())
+    }
+
+    /// The MOST RECENT persisted `ToolResultReference` message (highest
+    /// `sequence`), for durable tool-result projection scenarios (issue
+    /// #5838) that need to script a dependent `result_read` call with a
+    /// server-minted value (`result_ref`, `next_offset`) `push_script`
+    /// couldn't know ahead of time. Errors when no such message exists.
+    async fn latest_tool_result_reference_message(
+        &self,
+    ) -> HarnessResult<ironclaw_threads::ThreadMessageRecord> {
+        let history = self.persisted_history().await?;
+        history
+            .into_iter()
+            .filter(|message| message.kind == ironclaw_threads::MessageKind::ToolResultReference)
+            .max_by_key(|message| message.sequence)
+            .ok_or_else(|| "no persisted ToolResultReference message".into())
+    }
+
+    /// The `result_ref` of the most recent persisted `ToolResultReference`
+    /// message. See [`latest_tool_result_reference_message`].
+    ///
+    /// [`latest_tool_result_reference_message`]: Self::latest_tool_result_reference_message
+    pub async fn latest_tool_result_ref(&self) -> HarnessResult<String> {
+        self.latest_tool_result_reference_message()
+            .await?
+            .tool_result_ref
+            .ok_or_else(|| "latest ToolResultReference message has no result_ref".into())
+    }
+
+    /// The `model_observation.detail.next_offset` of the most recent
+    /// persisted `ToolResultReference` message's `ResultReference`
+    /// observation — the server-computed continuation offset a `result_read`
+    /// script must use, since the preview's char-boundary floor can move it
+    /// off a fixed byte constant when the payload contains multi-byte UTF-8.
+    /// Errors when the message has no observation or no `next_offset` (i.e.
+    /// the preview already covered the whole payload).
+    pub async fn latest_tool_result_next_offset(&self) -> HarnessResult<u64> {
+        let message = self.latest_tool_result_reference_message().await?;
+        let content = message
+            .content
+            .ok_or("latest ToolResultReference message has no content")?;
+        let envelope: serde_json::Value = serde_json::from_str(&content).map_err(|error| {
+            format!("latest ToolResultReference content is not valid JSON: {error}")
+        })?;
+        envelope["model_observation"]["detail"]["next_offset"]
+            .as_u64()
+            .ok_or_else(|| {
+                "latest ToolResultReference observation has no next_offset (preview may cover \
+                 the whole payload)"
+                    .into()
+            })
     }
 
     /// Slice `history[baseline..]`, failing loud on an out-of-range `baseline` —
@@ -873,6 +1970,46 @@ impl RebornIntegrationHarness {
             .await
     }
 
+    /// Assert NO persisted thread-history message's `content` contains
+    /// `needle`, across the FULL history and ANY role.
+    ///
+    /// The counterpart to [`assert_conversation_history_contains`], and the one
+    /// that catches DEGRADATION rather than error: a host-authored remediation
+    /// that collapsed to the safe-summary placeholder still produces a
+    /// completed run and a plausible-looking error message, so a test that only
+    /// asserts "something was surfaced" stays green while the UX is dead. Pair
+    /// the two — assert the expected step is present AND the placeholder is
+    /// absent.
+    pub async fn assert_conversation_history_lacks(&self, needle: &str) -> HarnessResult<()> {
+        let history = self.persisted_history().await?;
+        let slice = Self::history_slice(&history, 0)?;
+        let offending: Vec<String> = slice
+            .iter()
+            .filter(|message| {
+                message
+                    .content
+                    .as_deref()
+                    .is_some_and(|content| content.contains(needle))
+            })
+            .map(|message| {
+                let body = message.content.as_deref().unwrap_or("<no-content>");
+                let body = match body.char_indices().nth(160) {
+                    Some((cutoff, _)) => format!("{}...", &body[..cutoff]), // safety: `cutoff` from `char_indices`, always a valid UTF-8 boundary.
+                    None => body.to_string(),
+                };
+                format!("{:?}:{body:?}", message.kind)
+            })
+            .collect();
+        if offending.is_empty() {
+            return Ok(());
+        }
+        Err(format!(
+            "conversation history must NOT contain {needle:?}, but {} message(s) did: {offending:?}",
+            offending.len()
+        )
+        .into())
+    }
+
     /// [`assert_conversation_history_contains`], scoped to the `[baseline..]`
     /// slice (a [`history_len`] value from the start of the turn under test) —
     /// the multi-turn variant.
@@ -895,6 +2032,20 @@ impl RebornIntegrationHarness {
         needle: &str,
     ) -> HarnessResult<()> {
         self.conversation_history_contains_impl(0, Some(kind), needle)
+            .await
+    }
+
+    /// [`assert_conversation_history_role_contains`], scoped to the
+    /// `[baseline..]` slice (a [`history_len`] value from the start of the
+    /// turn under test) — the multi-turn variant, mirroring
+    /// [`assert_conversation_history_contains_since`].
+    pub async fn assert_conversation_history_role_contains_since(
+        &self,
+        baseline: usize,
+        kind: ironclaw_threads::MessageKind,
+        needle: &str,
+    ) -> HarnessResult<()> {
+        self.conversation_history_contains_impl(baseline, Some(kind), needle)
             .await
     }
 }

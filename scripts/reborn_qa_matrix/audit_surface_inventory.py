@@ -15,6 +15,25 @@ import report_coverage
 
 ROOT = Path(__file__).resolve().parents[2]
 
+# WebUI and OpenAI-compat descriptor sources are resolved by crate NAME
+# through the shared inventory (scripts/ci/lib/crate_tree.py), not literal
+# `crates/ironclaw_webui` / `crates/ironclaw_openai_compat` paths, so
+# the target-architecture family move (crates/<family>/ironclaw_*,
+# PROPOSAL §5) cannot make this audit silently extract zero surfaces.
+# See docs/reborn/target-architecture/CHECKLIST.md WS10.
+sys.path.insert(0, str(ROOT / "scripts" / "ci" / "lib"))
+from crate_tree import CrateTreeError, crate_directory  # noqa: E402
+
+
+def _crate_dir(name: str, repo_root: Path) -> Path:
+    try:
+        return Path(crate_directory(name, repo_root))
+    except CrateTreeError as error:
+        raise RuntimeError(
+            f"audit_surface_inventory: cannot resolve the {name} crate under "
+            f"{repo_root}: {error}"
+        ) from error
+
 
 @dataclass(frozen=True)
 class Surface:
@@ -58,8 +77,12 @@ def _route_keywords(path: str) -> tuple[str, ...]:
 
 
 def browser_routes(repo_root: Path) -> list[Surface]:
-    app_js = repo_root / "crates/ironclaw_webui_v2_static/static/js/app/app.js"
-    route_re = re.compile(r"<\$\{Route\}\s+path=\"([^\"]+)\"")
+    app_js = (
+        repo_root
+        / _crate_dir("ironclaw_webui", repo_root)
+        / "frontend/src/app/app.tsx"
+    )
+    route_re = re.compile(r"<Route\s+path=\"([^\"]+)\"")
     surfaces: list[Surface] = []
     for route in route_re.findall(_read(app_js)):
         if route in {"*", "/"}:
@@ -67,7 +90,7 @@ def browser_routes(repo_root: Path) -> list[Surface]:
         surfaces.append(
             Surface(
                 kind="webui_browser_route",
-                identifier=f"/v2/{route.lstrip('/')}",
+                identifier=f"/{route.lstrip('/')}",
                 source=str(app_js.relative_to(repo_root)),
                 keywords=_route_keywords(route),
             )
@@ -143,12 +166,16 @@ def _api_keywords(name: str, pattern: str) -> tuple[str, ...]:
 def api_surfaces(repo_root: Path) -> list[Surface]:
     return [
         *_descriptor_patterns(
-            repo_root / "crates/ironclaw_webui_v2/src/descriptors.rs",
+            repo_root
+            / _crate_dir("ironclaw_webui", repo_root)
+            / "src/webui_v2/descriptors.rs",
             kind="webui_api_pattern",
             repo_root=repo_root,
         ),
         *_descriptor_patterns(
-            repo_root / "crates/ironclaw_reborn_openai_compat/src/descriptors.rs",
+            repo_root
+            / _crate_dir("ironclaw_openai_compat", repo_root)
+            / "src/descriptors.rs",
             kind="openai_compat_api_pattern",
             repo_root=repo_root,
         ),

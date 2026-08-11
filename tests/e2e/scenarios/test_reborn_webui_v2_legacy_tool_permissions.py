@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
 import httpx
@@ -46,7 +45,13 @@ def _tool_entry(
     }
 
 
-async def _open_mocked_tools_page(reborn_v2_server, reborn_v2_browser):
+async def _open_mocked_tools_page(
+    reborn_v2_server,
+    reborn_v2_browser,
+    *,
+    fail_permission_saves: bool = False,
+    delay_permission_saves: bool = False,
+):
     context = await reborn_v2_browser.new_context(viewport={"width": 1280, "height": 720})
     page = await context.new_page()
     auto_approve = {"enabled": False}
@@ -68,6 +73,8 @@ async def _open_mocked_tools_page(reborn_v2_server, reborn_v2_browser):
     }
     auto_approve_requests: list[dict] = []
     permission_requests: list[dict] = []
+    permission_save_started = asyncio.Event()
+    permission_save_release = asyncio.Event()
 
     def entries():
         return [
@@ -130,6 +137,17 @@ async def _open_mocked_tools_page(reborn_v2_server, reborn_v2_browser):
             name = unquote(path.removeprefix("/api/webchat/v2/settings/tools/"))
             body = json.loads(request.post_data or "{}")
             permission_requests.append({"name": name, "body": body})
+            permission_save_started.set()
+            if delay_permission_saves:
+                await permission_save_release.wait()
+            if fail_permission_saves:
+                await fulfill_json(
+                    route,
+                    {"kind": "permission_denied", "error": "permission_denied"},
+                    status=403,
+                )
+                return
+
             tool = tool_states[name]
             if not tool["mutable"]:
                 await fulfill_json(
@@ -165,7 +183,7 @@ async def _open_mocked_tools_page(reborn_v2_server, reborn_v2_browser):
         await route.continue_()
 
     await page.route("**/api/webchat/v2/settings/tools**", handle_settings_tools)
-    await page.goto(f"{reborn_v2_server}/v2/settings/tools?token={REBORN_V2_AUTH_TOKEN}")
+    await page.goto(f"{reborn_v2_server}/settings/tools?token={REBORN_V2_AUTH_TOKEN}")
     await expect(
         page.get_by_placeholder(SEL_V2["settings_search_placeholder"])
     ).to_be_visible(timeout=15000)
@@ -176,6 +194,8 @@ async def _open_mocked_tools_page(reborn_v2_server, reborn_v2_browser):
         "page": page,
         "auto_approve_requests": auto_approve_requests,
         "permission_requests": permission_requests,
+        "permission_save_started": permission_save_started,
+        "permission_save_release": permission_save_release,
     }
 
 
@@ -183,11 +203,19 @@ def _tool_row(page, name: str):
     return page.locator(SEL_V2["settings_tool_row_for"].format(name=name))
 
 
-@pytest.fixture
-def reborn_approval_artifact_cleanup():
-    yield
-    for label in ("first", "second"):
-        Path(f"reborn-approval-{label}.txt").unlink(missing_ok=True)
+def _permission_button(page, name: str):
+    return _tool_row(page, name).locator(SEL_V2["settings_tool_permission"])
+
+
+async def _choose_permission(page, name: str, label: str):
+    button = _permission_button(page, name)
+    await button.click()
+    listbox_id = await button.get_attribute("aria-controls")
+    assert listbox_id
+    listbox = page.locator(f"#{listbox_id}")
+    await expect(listbox).to_be_visible(timeout=5000)
+    await listbox.get_by_role("option", name=label).click()
+    return button
 
 
 async def _set_real_auto_approve(reborn_v2_server: str, enabled: bool):
@@ -264,17 +292,20 @@ async def test_reborn_legacy_tool_permissions_tab_visible(
         await harness["context"].close()
 
 
-async def test_reborn_legacy_tool_permission_select_persists_after_reload(
+async def test_reborn_legacy_tool_permission_menu_persists_after_reload(
     reborn_v2_server, reborn_v2_browser
 ):
     harness = await _open_mocked_tools_page(reborn_v2_server, reborn_v2_browser)
     try:
         page = harness["page"]
-        select = page.get_by_label("Permission for echo")
-        await expect(select).to_have_value("always_allow", timeout=5000)
+        row = _tool_row(page, "echo")
+        await expect(row.locator("select")).to_have_count(0)
 
-        await select.select_option("ask_each_time")
-        await expect(select).to_have_value("ask_each_time")
+        button = _permission_button(page, "echo")
+        await expect(button).to_contain_text("Always allow", timeout=5000)
+
+        await _choose_permission(page, "echo", "Ask each time")
+        await expect(button).to_contain_text("Ask each time")
         await expect(_tool_row(page, "echo").get_by_text("saved")).to_be_visible(timeout=5000)
         assert harness["permission_requests"][-1] == {
             "name": "echo",
@@ -285,16 +316,79 @@ async def test_reborn_legacy_tool_permission_select_persists_after_reload(
         await expect(
             page.get_by_placeholder(SEL_V2["settings_search_placeholder"])
         ).to_be_visible(timeout=15000)
-        await expect(page.get_by_label("Permission for echo")).to_have_value(
-            "ask_each_time",
+        await expect(_permission_button(page, "echo")).to_contain_text(
+            "Ask each time",
             timeout=5000,
         )
 
-        await page.get_by_label("Permission for echo").select_option("default")
-        await expect(page.get_by_label("Permission for echo")).to_have_value("default")
+        await _choose_permission(page, "echo", "Follow global")
+        await expect(_permission_button(page, "echo")).to_contain_text("Follow global")
         assert harness["permission_requests"][-1] == {
             "name": "echo",
             "body": {"state": "default"},
+        }
+    finally:
+        await harness["context"].close()
+
+
+async def test_reborn_legacy_tool_permission_retains_selection_while_saving(
+    reborn_v2_server, reborn_v2_browser
+):
+    harness = await _open_mocked_tools_page(
+        reborn_v2_server,
+        reborn_v2_browser,
+        delay_permission_saves=True,
+    )
+    try:
+        page = harness["page"]
+        button = _permission_button(page, "echo")
+        await expect(button).to_contain_text("Always allow", timeout=5000)
+
+        await _choose_permission(page, "echo", "Ask each time")
+        await asyncio.wait_for(harness["permission_save_started"].wait(), timeout=5)
+
+        select = _tool_row(page, "echo").locator(
+            SEL_V2["settings_tool_permission_select"]
+        )
+        await expect(select).to_have_attribute("aria-busy", "true")
+        await expect(button).to_contain_text("Ask each time")
+        assert harness["permission_requests"][-1] == {
+            "name": "echo",
+            "body": {"state": "ask_each_time"},
+        }
+
+        harness["permission_save_release"].set()
+        await expect(_tool_row(page, "echo").get_by_text("saved")).to_be_visible(
+            timeout=5000
+        )
+    finally:
+        harness["permission_save_release"].set()
+        await harness["context"].close()
+
+
+async def test_reborn_legacy_tool_permission_save_failure_shows_error(
+    reborn_v2_server, reborn_v2_browser
+):
+    harness = await _open_mocked_tools_page(
+        reborn_v2_server,
+        reborn_v2_browser,
+        fail_permission_saves=True,
+    )
+    try:
+        page = harness["page"]
+        button = _permission_button(page, "echo")
+        await expect(button).to_contain_text("Always allow", timeout=5000)
+
+        await _choose_permission(page, "echo", "Ask each time")
+
+        await expect(page.get_by_role("alert")).to_contain_text(
+            "Save failed: Permission denied",
+            timeout=5000,
+        )
+        await expect(button).to_contain_text("Always allow", timeout=5000)
+        assert harness["permission_requests"][-1] == {
+            "name": "echo",
+            "body": {"state": "ask_each_time"},
         }
     finally:
         await harness["context"].close()
@@ -309,9 +403,8 @@ async def test_reborn_legacy_locked_tool_shows_badge_without_select(
         locked = _tool_row(page, "tool.financial")
         await expect(locked).to_be_visible(timeout=5000)
         await expect(locked.locator(SEL_V2["settings_tool_lock"])).to_be_visible()
-        await expect(
-            locked.get_by_label("Permission for tool.financial")
-        ).to_have_count(0)
+        await expect(locked.locator(SEL_V2["settings_tool_permission"])).to_have_count(0)
+        await expect(locked.locator("select")).to_have_count(0)
         await expect(locked.get_by_text("Ask each time")).to_be_visible()
     finally:
         await harness["context"].close()
@@ -346,7 +439,7 @@ async def test_reborn_legacy_auto_approve_real_api_persists_across_browser_conte
         assert update["entry"]["value"] is True
 
         await page.goto(
-            f"{reborn_v2_server}/v2/settings/tools?token={REBORN_V2_AUTH_TOKEN}"
+            f"{reborn_v2_server}/settings/tools?token={REBORN_V2_AUTH_TOKEN}"
         )
         await expect(
             page.get_by_placeholder(SEL_V2["settings_search_placeholder"])
@@ -407,19 +500,24 @@ async def test_reborn_legacy_tool_permission_real_api_persists_and_rejects_locke
 
 async def test_reborn_legacy_always_approve_survives_reborn_restart(
     reborn_v2_restartable_server,
-    reborn_approval_artifact_cleanup,
 ):
     state, start_server, stop_server = reborn_v2_restartable_server
     capability_id = "builtin.write_file"
 
     async with httpx.AsyncClient(headers=reborn_bearer_headers()) as client:
         base_url = state["base_url"]
-        reset = await client.post(
+        force_first_prompt = await client.post(
             f"{base_url}/api/webchat/v2/settings/tools/{capability_id}",
-            json={"state": "default"},
+            # The profile default is allowed to evolve. This scenario needs a
+            # deterministic first gate before it can prove that "always allow"
+            # survives restart, so pin that precondition explicitly.
+            json={"state": "ask_each_time"},
             timeout=15,
         )
-        reset.raise_for_status()
+        force_first_prompt.raise_for_status()
+        assert (
+            force_first_prompt.json()["entry"]["value"]["state"] == "ask_each_time"
+        )
         thread_id = await create_thread(client, base_url)
 
     first_prompt = await _wait_for_gate_prompt_after_send(

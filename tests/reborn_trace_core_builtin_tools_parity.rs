@@ -16,14 +16,15 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use ironclaw_host_api::CapabilityId;
-use ironclaw_host_api::{NetworkPolicy, NetworkScheme, NetworkTargetPattern};
+use ironclaw_host_api::action::{NetworkPolicy, NetworkScheme, NetworkTargetPattern};
+use ironclaw_host_api::ids::CapabilityId;
 use ironclaw_host_runtime::{
     APPLY_PATCH_CAPABILITY_ID, HTTP_CAPABILITY_ID, JSON_CAPABILITY_ID, READ_FILE_CAPABILITY_ID,
     TIME_CAPABILITY_ID,
 };
-use ironclaw_loop_support::{HostManagedModelMessageRole, HostManagedModelResponse};
-use ironclaw_turns::{TurnStatus, run_profile::LoopHostMilestoneKind};
+use ironclaw_loop_contracts::LoopHostMilestoneKind;
+use ironclaw_loop_host::{HostManagedModelMessageRole, HostManagedModelResponse};
+use ironclaw_turns::TurnStatus;
 use parity_qa_support::{
     binary_e2e::{HarnessWaitConfig, RebornBinaryE2EHarness, assert_milestone_order},
     model_replay::{
@@ -194,7 +195,7 @@ fn seed_workspace(harness: &RebornBinaryE2EHarness) {
     .expect("write patch target");
 }
 
-fn tool_result_count(request: &ironclaw_loop_support::HostManagedModelRequest) -> usize {
+fn tool_result_count(request: &ironclaw_loop_host::HostManagedModelRequest) -> usize {
     request
         .messages
         .iter()

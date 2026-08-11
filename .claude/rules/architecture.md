@@ -1,19 +1,17 @@
 ---
 paths:
   - "crates/**/*.rs"
-  - "src/**/*.rs"
 ---
 # Architecture Discipline — Stop the Sprawl Before It Ships
 
-This rule exists because the engine refactor of 2026-05 found a class
+This rule exists because architecture reviews found a class
 of slow-burn architectural decay that no existing rule catches. The
 individual symptoms look reasonable in isolation (one extra Arc, one
 extra method arg, one `with_*` builder, one `#[allow(...)]`). The
 class is recognizable only when you grep for the smoke alarms across
-the crate: 11 `#[allow(clippy::too_many_arguments)]` annotations in
-`crates/ironclaw_engine/`, a 7,933-line `runtime/mission.rs`, two
-parallel action-dispatch pipelines, and the same six Arcs threaded
-through three layers without ever being given a name.
+the crate: repeated `#[allow(clippy::too_many_arguments)]` annotations,
+oversized runtime modules, parallel dispatch pipelines, and the same service
+handles threaded through several layers without being given a name.
 
 The rule is: **listen to the language. When the compiler or clippy
 complains, the answer is almost never `#[allow]`.**
@@ -24,8 +22,9 @@ complains, the answer is almost never `#[allow]`.**
 
 clippy's default is 7 args. Reaching it means the function has more
 inputs than a reader can hold in their head. Allowing it once is a
-trade — allowing it eleven times is a refactor someone declined to
-do.
+trade — allowing it 38 times across 26 files (measured on this tree with
+`rg -c '#\[allow\(clippy::too_many_arguments\)\]' crates/`) is a refactor
+someone declined to do.
 
 **Required pattern** when introducing the allow:
 
@@ -114,9 +113,8 @@ places that each implement their own pre-checks (lease, policy,
 sanitization), they are one pipeline written twice. Every
 safety/policy change must then land in both — and one always lags.
 
-This mirrors the rule in `tools.md` ("Everything Goes Through Tools")
-and `safety-and-sandbox.md` ("Every New Ingress Scans Before Storage
-or LLM"). The pattern: identify the converging downstream call,
+This mirrors the boundary in `safety-and-sandbox.md` ("Mediation is the
+boundary"). The pattern: identify the converging downstream call,
 extract a single gateway, route both sides through it.
 
 **Review flag:** a new call site to a registry/executor/dispatcher
@@ -169,7 +167,7 @@ because each layer catches a different failure mode.
   to name the aggregation that is missing — reviewers reject
   exempts without a plan link.
 - **This rule file is the agent-facing summary.** Loaded into context
-  whenever an agent edits `crates/**/*.rs` or `src/**/*.rs`. The
+  whenever an agent edits `crates/**/*.rs`. The
   agent's job: *don't be the one who adds the twelfth `#[allow]`.*
 
 ## Annotation format (consistent with other rules)
@@ -202,13 +200,22 @@ exempt without a plan link is a violation, not an exception.
 - **One-off scripts under `scripts/`.** Architectural sprawl in a
   shell script or migration helper is a different conversation.
 
+## Direction: the consolidation plan for this debt
+
+The smells above are symptoms of duplicated ownership, optional production
+dependencies, and parallel execution paths. When an exemption is necessary,
+name the missing owner or aggregation in the `arch-exempt` comment and link the
+current issue or contract that governs the follow-up. Do not cite deleted plan
+documents as architectural authority.
+
 ## References
 
-- The diagnosis that motivated this rule:
-  `docs/plans/2026-05-02-engine-architecture-simplification.md`.
 - Adjacent rules with the same shape (extract a single gateway,
-  route everything through it): `tools.md`, `safety-and-sandbox.md`,
+  route everything through it): `safety-and-sandbox.md`,
   `gateway-events.md`.
-- Annotation discipline reference: `gateway-events.md` —
-  `// projection-exempt: <category>, <detail>` is the canonical
-  shape this rule borrows.
+- Type location/multiplicity (mirror DTOs, `host_api` ownership):
+  `type-placement.md` — the rule the capability-path collapse applies.
+- Annotation discipline: the canonical shape is this rule's own
+  `// arch-exempt: <category>, <detail>, plan #NNNN`, enforced by the
+  `ARCH-SPRAWL` checks in `scripts/pre-commit-safety.sh`. (`gateway-events.md`
+  carries no `projection-exempt` convention; that cross-reference was wrong.)

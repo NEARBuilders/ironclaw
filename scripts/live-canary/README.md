@@ -37,7 +37,6 @@ Run commands from the repository root.
 - `public-smoke`
 - `persona-rotating`
 - `private-oauth`
-- `provider-matrix`
 - `release-public-full`
 - `upgrade-canary`
 
@@ -53,22 +52,17 @@ Run commands from the repository root.
 
 - `reborn-webui-v2-live-qa`
 
+PR-targeted runs execute the reviewed PR binary with live integration secrets.
+They must pass the `reborn-live-canary-pr` GitHub environment gate and have an
+approving review for the exact PR head commit from a collaborator with write
+access. Scheduled and manual default-branch runs do not require this PR gate.
+
 ## Local Commands
 
 Run the public live smoke lane:
 
 ```bash
 LANE=public-smoke scripts/live-canary/run.sh
-```
-
-Run the provider matrix lane:
-
-```bash
-LANE=provider-matrix \
-PROVIDER=openai-compatible \
-PROVIDER_TEST_TARGET=e2e_live_mission \
-SCENARIO=mission_daily_news_digest_with_followup \
-scripts/live-canary/run.sh
 ```
 
 Run the auth smoke lane:
@@ -112,6 +106,23 @@ Run the full QA-sheet-backed Reborn suite:
 LANE=reborn-webui-v2-live-qa CASES=all scripts/live-canary/run.sh
 ```
 
+The Reborn WebUI v2 runner preserves every case attempt in `results.json`. A
+case that fails and then succeeds is reported with `retry_outcome: "flake"` and
+remains counted separately in `green-run-explanation.json`; it is not presented
+as an ordinary first-pass success. Cases that create routines, trigger or
+verify external deliveries, assert exactly-once behavior, or guard
+security-sensitive output declare `retry_policy: "never"` in
+`case-manifest.json`, so a retry cannot duplicate a side effect or mask a
+deterministic failure.
+
+Model-driving cases also publish privacy-safe scalar `details.metrics` in
+`results.json`: model/tool call counts, input/output/cache-read/uncached-input
+tokens, and USD cost when provider pricing is available. Counts come from the
+complete per-case LLM trace before that raw trace is excluded from uploaded
+artifacts; prompt, response, tool argument, and tool output content are never
+copied into the metrics. Legacy or interrupted traces report unavailable cache
+or cost values as `null` rather than zero.
+
 Use CI-style browser installation for auth browser lanes:
 
 ```bash
@@ -138,6 +149,18 @@ Artifacts are written under:
 ```text
 artifacts/live-canary/<lane>/<provider>/<timestamp>/
 ```
+
+Before upload, strict scrubbing removes only bundled system-skill copies whose
+managed marker, stable content hash, file set, and bytes match the
+source-controlled bundle from the tested commit. Unverified or unmanaged system
+skills and all other run-specific artifacts remain present and are scanned for
+secret material. Non-strict scrubbing is report-only and does not prune them.
+Strict scrubbing also removes source-byte-verified first-party extension
+manifests, whose static credential schema fields otherwise look like live
+secrets. The dynamically rendered NEAR AI manifest is instead verified against
+a trusted runtime template after normalizing only the repository-owned
+`cloud-api.near.ai` and `private.near.ai` MCP endpoints. Changed or unrecognized
+manifests remain subject to the fail-closed scanner.
 
 ## Secrets And Account Material
 

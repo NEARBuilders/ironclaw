@@ -10,7 +10,7 @@ IronClaw now has two complementary regression systems:
 
 The implementation lives in:
 
-- `.github/workflows/test.yml` for the normal blocking test lanes;
+- `.github/workflows/reborn-tests.yml` / `.github/workflows/reborn-e2e.yml` for the normal blocking test lanes (the v1 `test.yml` was removed under Tier B);
 - `.github/workflows/live-canary.yml` for scheduled and manual live lanes;
 - `scripts/live-canary/run.sh` for lane dispatch;
 - `scripts/live-canary/scrub-artifacts.sh` for artifact scanning;
@@ -35,11 +35,10 @@ account guide rather than introducing another bespoke runner layout.
 
 | Lane | Scope | Runner | Trigger | Blocking |
 | --- | --- | --- | --- | --- |
-| `deterministic-replay` | Replays `tests/e2e_live*.rs` fixtures without live LLM calls | GitHub-hosted | PR/staging via `test.yml`; manual via `live-canary.yml` | Yes in `test.yml` |
-| `public-smoke` | Real LLM plus public tools such as `zizmor_scan` and mission digest | GitHub-hosted | Daily and manual | Opens issue on scheduled failure |
+| `deterministic-replay` | Retired under Tier B — its `tests/e2e_live*.rs` fixtures and the `test.yml` workflow were deleted with the v1 monolith. Reborn recorded-fixture replay is the `Reborn QA recorded fixtures` gate in `reborn-tests.yml`. (Live-canary lane rewire tracked in #6369.) | — | — | — |
+| `public-smoke` | Real LLM plus public tools and mission digest | GitHub-hosted | Daily and manual | Opens issue on scheduled failure |
 | `persona-rotating` | Real LLM multi-turn persona workflow, one persona per day | GitHub-hosted | Daily and manual | Opens issue on scheduled failure |
 | `private-oauth` | Google Drive auth gate and transparent refresh against a dedicated test account | Self-hosted `ironclaw-live` runner | Manual; scheduled only when enabled | Opens issue on scheduled failure |
-| `provider-matrix` | Same live behavior against multiple provider adapters | GitHub-hosted | Weekly and manual | Opens issue on scheduled failure |
 | `release-public-full` | Full public live suite for release candidates | GitHub-hosted | Manual | Release checklist gate |
 | `upgrade-canary` | Previous release DB opened by current checkout | GitHub-hosted | Manual | Release checklist gate |
 | `auth-smoke` | Fresh-machine mock-backed auth smoke: hosted OAuth, MCP OAuth, and multi-user MCP isolation | GitHub-hosted | Hourly and manual | No |
@@ -47,6 +46,7 @@ account guide rather than introducing another bespoke runner layout.
 | `auth-channels` | WASM channel auth diagnostic lane | GitHub-hosted | Manual | No |
 | `auth-live-seeded` | Real-provider runtime checks using seeded tokens against a clean DB | GitHub-hosted | Hourly and manual | No |
 | `auth-browser-consent` | Real browser-consent OAuth using Playwright against provider login UIs | GitHub-hosted | Nightly and manual | No |
+| `reborn-webui-v2-live-qa` | Full implemented non-Telegram QA matrix against real model and provider surfaces | GitHub-hosted | Every 3 hours and manual | Opens issue on scheduled failure |
 
 ## Required Repository Configuration
 
@@ -85,6 +85,41 @@ Current provider material includes:
 - Google OAuth app credentials plus browser storage state
 - GitHub OAuth app credentials plus browser storage state and issue fixture
 - Notion browser storage state
+
+### Reborn WebUI v2 Slack lane
+
+The Reborn WebUI v2 live QA runner does not write the retired `[slack]`
+configuration section. Slack cases are gated on the required live credentials
+below and their `auth.test` preflight.
+
+Bot installation setup is applied headlessly after `ironclaw serve`
+boots by saving the manifest-declared `extension.slack` group through the
+operator extension-configuration API with the WebUI operator bearer token.
+Required repository variables:
+
+- `REBORN_WEBUI_V2_LIVE_QA_SLACK_INSTALLATION_ID`
+- `REBORN_WEBUI_V2_LIVE_QA_SLACK_TEAM_ID`
+- `REBORN_WEBUI_V2_LIVE_QA_SLACK_API_APP_ID`
+- `REBORN_WEBUI_V2_LIVE_QA_SLACK_ROUTE_USER_ID`
+
+Required secrets:
+
+- `IRONCLAW_REBORN_SLACK_SIGNING_SECRET`
+- `IRONCLAW_REBORN_SLACK_BOT_TOKEN`
+
+Required for `qa_3a_slack_connect`, `qa_5a_slack_connect`, and
+`qa_8a_slack_connect`, which assert both sides of the personal OAuth path:
+the Slack OAuth start URL is generated from client credentials, and a real
+live Slack user account is already bound in Reborn product-auth state:
+
+- variable `REBORN_WEBUI_V2_LIVE_QA_SLACK_OAUTH_CLIENT_ID`
+- secret `REBORN_WEBUI_V2_LIVE_QA_SLACK_OAUTH_CLIENT_SECRET`
+- secret `AUTH_LIVE_SLACK_ACCESS_TOKEN`
+
+`AUTH_LIVE_SLACK_ACCESS_TOKEN` must be a real Slack user token for the live QA
+Slack user. The harness validates it with Slack `auth.test`, then seeds the
+generated Reborn home with an encrypted manifest-provider `slack` product-auth
+account.
 
 ## Commands
 
@@ -129,9 +164,37 @@ LANE=auth-live-seeded CASES=gmail,github scripts/live-canary/run.sh
 LANE=auth-browser-consent CASES=google,github scripts/live-canary/run.sh
 ```
 
+## Slack Delivery Verification (two-lane model)
+
+Since the explicit channel delivery tool landed (#7157), a triggered fire's
+result is never pushed by the completion driver: the fire itself calls
+`builtin.outbound_deliver`, and the background-run notifier's
+`triggered-run-delivery` record describes notice delivery only — `skipped`
+is the healthy record for a cleanly completed fire. The
+`reborn-webui-v2-live-qa` delivery cases therefore verify:
+
+- the durable `outbound/deliveries/` model-delivery record for the exact
+  fire run (`status == "delivered"`, target = the expected DM), and
+- the delivery marker in an independent Slack `conversations.history`
+  read-back (bot-authored, exactly once for one-shot routines).
+
+Only `failed`/`denied` notifier records fail a delivery case. Case prompts
+bind the marker to the **delivered Slack message** (the fire composes the
+message separately from its final answer, so a final-answer-only phrasing
+produces marker-less deliveries).
+
 ## Artifact Policy
 
 Artifacts are written under `artifacts/live-canary/`.
+
+For the Reborn WebUI v2 lane, `results.json` records an `attempt_history` for
+each executed case. A successful retry is explicitly classified as a flake and
+is surfaced separately in `green-run-explanation.json`. Deterministic,
+security-sensitive, idempotency, routine, trigger, and delivery checks are
+no-retry cases and map to `CaseSpec.retry_policy = "never"`. The canonical case
+manifest is generated by `write_case_manifest` from `CASES`, and publishes that
+typed retry policy in `case-manifest.json`. Do not enable retries for those
+cases to make a scheduled lane green.
 
 Before upload, the workflow runs `scripts/live-canary/scrub-artifacts.sh`.
 That script is a guardrail against uploading obvious token-shaped strings from

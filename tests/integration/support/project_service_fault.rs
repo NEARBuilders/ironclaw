@@ -5,7 +5,7 @@
 //!
 //! Deliberately forces `ProjectServiceError::Denied`, not
 //! `Unavailable`/`Internal`: those retry via `DefaultRecoveryStrategy` and hit
-//! a real `LocalDevCapabilityIo` input-ref restaging bug (issue #5608),
+//! a real `StagedCapabilityIo` input-ref restaging bug (issue #5608),
 //! collapsing the retry contract into an immediate `driver_unavailable`.
 //! `Denied` surfaces to the model on the first attempt, avoiding the bug.
 
@@ -14,13 +14,14 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use ironclaw_product_workflow::{
-    ProjectCaller, ProjectService, ProjectServiceError, RebornAddMemberRequest,
-    RebornCreateProjectRequest, RebornDeleteProjectRequest, RebornGetProjectRequest,
-    RebornListMembersRequest, RebornListMembersResponse, RebornListProjectsRequest,
-    RebornListProjectsResponse, RebornProjectMemberInfo, RebornProjectResponse,
-    RebornRemoveMemberRequest, RebornUpdateMemberRoleRequest, RebornUpdateProjectRequest,
+use ironclaw_assistant::{
+    ProjectCaller, RebornAddMemberRequest, RebornCreateProjectRequest, RebornDeleteProjectRequest,
+    RebornGetProjectRequest, RebornListMembersRequest, RebornListMembersResponse,
+    RebornListProjectsRequest, RebornListProjectsResponse, RebornProjectMemberInfo,
+    RebornProjectResponse, RebornRemoveMemberRequest, RebornUpdateMemberRoleRequest,
+    RebornUpdateProjectRequest,
 };
+use ironclaw_product_contracts::project_service::{ProjectService, ProjectServiceError};
 
 /// Sentinel `create_project` name that triggers the injected fault; distinct
 /// from ordinary test project names so it never intercepts a real create.

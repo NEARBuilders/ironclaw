@@ -12,7 +12,12 @@ import os
 import re
 import time
 import uuid
+
 from aiohttp import web
+from mock_llm_trace import (
+    next_llm_trace_response,
+    register_llm_trace_routes,
+)
 
 DENIAL_PATTERN = re.compile(
     r"user denied action|user denied tool|denied:\s*",
@@ -39,12 +44,19 @@ CANNED_RESPONSES = [
     # already-run writes).
     (
         re.compile(r"produce a downloadable csv and pdf", re.IGNORECASE),
-        "Done — I saved /workspace/report.csv and /workspace/report.pdf. "
-        "Both are ready to download.",
+        "Done — I saved [report.csv](/workspace/report.csv) and "
+        "[report.pdf](sandbox:/workspace/report.pdf). Both are ready to download.",
     ),
     (
         re.compile(r"reborn write approval file (?P<label>[a-z0-9_-]+)", re.IGNORECASE),
         "Done - saved the approval test file.",
+    ),
+    (
+        re.compile(
+            r"reborn create automation rename target (?P<label>[a-z0-9_-]+)",
+            re.IGNORECASE,
+        ),
+        "Created the automation for rename testing.",
     ),
     (re.compile(r"\bhello\b|\bhi\b|\bhey\b", re.IGNORECASE), "Hello! How can I help you today?"),
     (re.compile(r"2\s*\+\s*2|two plus two", re.IGNORECASE), "The answer is 4."),
@@ -106,6 +118,8 @@ CANNED_RESPONSES = [
 ]
 DEFAULT_RESPONSE = "I understand your request."
 EMULATE_GITHUB_BEARER = "ghp_emulate_github_token"
+EMULATE_SLACK_BEARER = "emulate-slack-token"
+
 
 TOOL_FAILURE_TRIGGER = re.compile(r"issue 1780 tool failure", re.IGNORECASE)
 TRUNCATED_TOOL_CALL_TRIGGER = re.compile(
@@ -115,6 +129,18 @@ TRUNCATED_TOOL_CALL_TRIGGER = re.compile(
 EMPTY_REPLY_TRIGGER = re.compile(r"issue 1780 empty reply", re.IGNORECASE)
 LOOP_FOREVER_TRIGGER = re.compile(r"issue 1780 loop forever", re.IGNORECASE)
 MULTI_STEP_TRIGGER = re.compile(r"multi step echo then time", re.IGNORECASE)
+REBORN_EXTERNAL_TOOL_LOOP_TRIGGER = re.compile(
+    r"reborn external tool loop",
+    re.IGNORECASE,
+)
+REBORN_EXTERNAL_TOOL_FAILURE_TRIGGER = re.compile(
+    r"reborn external tool failure",
+    re.IGNORECASE,
+)
+REBORN_MIXED_INTERNAL_EXTERNAL_TRIGGER = re.compile(
+    r"reborn mixed internal external tools",
+    re.IGNORECASE,
+)
 
 # Lifecycle canary triggers for write+cleanup flows against real provider APIs.
 GITHUB_ISSUE_LIFECYCLE_TRIGGER = re.compile(
@@ -131,6 +157,31 @@ GCAL_LIFECYCLE_TRIGGER = re.compile(
 )
 GDRIVE_UPLOAD_LIFECYCLE_TRIGGER = re.compile(
     r"upload a google drive file titled",
+    re.IGNORECASE,
+)
+SLACK_DELIVERY_LIFECYCLE_TRIGGER = re.compile(
+    r"send slack canary (?P<marker>\S+) to (?P<channel>[A-Z0-9]+)",
+    re.IGNORECASE,
+)
+GITHUB_RELEASE_SLACK_TRIGGER = re.compile(
+    r"notify slack channel (?P<channel>[A-Z0-9]+) about the latest release in "
+    r"(?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+) with marker "
+    r"(?P<marker>\S+)",
+    re.IGNORECASE,
+)
+CALENDAR_DRIVE_SLACK_TRIGGER = re.compile(
+    r"prepare meeting and notify slack channel (?P<channel>[A-Z0-9]+) with marker "
+    r"(?P<marker>\S+)",
+    re.IGNORECASE,
+)
+GMAIL_SLACK_TRIGGER = re.compile(
+    r"check unread gmail and notify slack channel (?P<channel>[A-Z0-9]+) with "
+    r"marker (?P<marker>\S+)",
+    re.IGNORECASE,
+)
+SLACK_DRIVE_SLACK_TRIGGER = re.compile(
+    r"read slack channel (?P<source>[A-Z0-9]+), look up drive, and notify "
+    r"(?P<target>[A-Z0-9]+) with marker (?P<marker>\S+)",
     re.IGNORECASE,
 )
 NOTION_SEARCH_LIFECYCLE_TRIGGER = re.compile(
@@ -170,6 +221,33 @@ TOOL_CALL_PATTERNS = [
         lambda _: {"operation": "now"},
     ),
     (re.compile(r"echo (.+)", re.IGNORECASE), "echo", lambda m: {"message": m.group(1)}),
+    # Private tool installs (#5459 P1) — the three test-tools/ fixture bundles
+    # (test-tools/README.md). The provider-visible tool name sanitizes the
+    # dotted capability id's "." to "__" (`encode_provider_tool_name` in
+    # ironclaw_reborn::tool_disclosure); the model gateway's provider_tool_name
+    # validator rejects a raw "." outright ("only ASCII letters, digits, '_',
+    # and '-' are allowed"), so the mock LLM must emit the encoded form, not
+    # the dotted capability id.
+    # The combined pattern is checked first so it doesn't get shadowed by the
+    # single-tool "ascii renderer to draw a" pattern below.
+    (
+        re.compile(r"ascii renderer and market data", re.IGNORECASE),
+        "ascii-renderer__draw",
+        lambda _: [
+            {"tool_name": "ascii-renderer__draw", "arguments": {"subject": "robot"}},
+            {"tool_name": "market-data__snp500", "arguments": {}},
+        ],
+    ),
+    (
+        re.compile(r"ascii renderer to draw a (?P<subject>cat|dog|robot)", re.IGNORECASE),
+        "ascii-renderer__draw",
+        lambda m: {"subject": m.group("subject").lower()},
+    ),
+    (
+        re.compile(r"hacker news tool", re.IGNORECASE),
+        "hacker-news__top_stories",
+        lambda _: {},
+    ),
     # Reborn v2 download chips: one assistant turn writes a CSV and a PDF into
     # the project workspace. Reborn exposes this first-party tool by capability
     # id; the provider-facing tool name sanitizes dots as "__". After both
@@ -205,6 +283,29 @@ TOOL_CALL_PATTERNS = [
         lambda m: {
             "path": f"/workspace/reborn-approval-{m.group('label')}.txt",
             "content": f"approved {m.group('label')}\n",
+        },
+    ),
+    # Reborn WebUI v2 auth-gate smoke (#4633): installation parks on GitHub's
+    # required manual-token credential, then resumes through product auth.
+    (
+        re.compile(r"reborn install github for auth gate", re.IGNORECASE),
+        "builtin__extension_install",
+        lambda _: {"extension_id": "github"},
+    ),
+    (
+        re.compile(
+            r"reborn create automation rename target (?P<label>[a-z0-9_-]+)",
+            re.IGNORECASE,
+        ),
+        "builtin__trigger_create",
+        lambda m: {
+            "name": f"E2E rename original {m.group('label')}",
+            "prompt": f"E2E automation rename prompt {m.group('label')}",
+            "schedule": {
+                "kind": "once",
+                "at": "2999-06-02T00:00:00",
+                "timezone": "UTC",
+            },
         },
     ),
     (
@@ -865,6 +966,33 @@ TOOL_CALL_PATTERNS = [
 # Set via POST /__mock/set_github_api_url with {"url": "http://..."}
 _github_api_url: str = "https://api.github.com"
 _last_chat_request: dict | None = None
+_chat_requests: list[dict] = []
+_llm_fault_scripts: list[dict] = []
+
+
+def _reset_llm_fault_scripts() -> None:
+    _llm_fault_scripts.clear()
+
+
+def _latest_user_matches_fault(messages: list[dict], match_text: str) -> bool:
+    latest_user = _last_user_content(messages).lower()
+    return match_text.lower() in latest_user
+
+
+def _next_llm_fault_action(messages: list[dict]) -> dict | None:
+    for script in list(_llm_fault_scripts):
+        match_text = str(script.get("match", ""))
+        actions = script.get("actions")
+        if not match_text or not isinstance(actions, list):
+            continue
+        if not _latest_user_matches_fault(messages, match_text):
+            continue
+        if not actions:
+            continue
+        action = actions.pop(0)
+        script["applied"] = int(script.get("applied", 0)) + 1
+        return action if isinstance(action, dict) else None
+    return None
 
 
 def _new_oauth_state() -> dict:
@@ -1364,6 +1492,33 @@ def _advertised_tool_names(tools: object) -> set[str]:
     return names
 
 
+def _available_tool_names(tools: object) -> set[str]:
+    """Include deferred tools named by the runtime's tool-search catalog."""
+    names = _advertised_tool_names(tools)
+    if not isinstance(tools, list):
+        return names
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        function = tool.get("function") if isinstance(tool.get("function"), dict) else tool
+        if not isinstance(function, dict):
+            continue
+        name = function.get("name")
+        description = function.get("description")
+        if not isinstance(name, str) or not name.endswith("tool_search"):
+            continue
+        if not isinstance(description, str):
+            continue
+        for line in description.splitlines():
+            candidate = line.removeprefix("- ") if line.startswith("- ") else ""
+            if candidate and all(
+                character.isalnum() or character in "_.-" for character in candidate
+            ):
+                names.add(candidate)
+                names.add(candidate.replace(".", "__"))
+    return names
+
+
 def match_tool_call(messages: list[dict], has_tools: bool) -> list[dict] | None:
     """Return the list of tool calls to emit for the latest user message.
 
@@ -1491,8 +1646,12 @@ def _extract_tool_name(msg: dict) -> str:
     return "unknown"
 
 
-def _find_tool_results(messages: list[dict]) -> list[dict]:
-    """Collect every fresh tool result that follows the most recent user turn.
+def _find_tool_results(
+    messages: list[dict],
+    *,
+    after_latest_user: bool = True,
+) -> list[dict]:
+    """Collect tool results, optionally limited to the most recent user turn.
 
     A single assistant turn can dispatch *several* tool calls (the v2 engine
     fans them out in parallel and CodeAct can call multiple Python helpers
@@ -1501,10 +1660,11 @@ def _find_tool_results(messages: list[dict]) -> list[dict]:
     acknowledge each result instead of dropping all but the first.
     """
     last_user_idx = -1
-    for i in range(len(messages) - 1, -1, -1):
-        if messages[i].get("role") == "user":
-            last_user_idx = i
-            break
+    if after_latest_user:
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i].get("role") == "user":
+                last_user_idx = i
+                break
 
     tool_call_names: dict[str, str] = {}
     results: list[dict] = []
@@ -1527,6 +1687,7 @@ def _find_tool_results(messages: list[dict]) -> list[dict]:
                 name = tool_call_names.get(message.get("tool_call_id", ""), name)
             results.append({
                 "name": name,
+                "tool_call_id": message.get("tool_call_id"),
                 "content": message.get("content", ""),
             })
     return results
@@ -1541,6 +1702,83 @@ def _find_tool_result(messages: list[dict]) -> dict | None:
 def _find_named_tool_results(messages: list[dict], name: str) -> list[dict]:
     """Collect fresh tool results for one tool name."""
     return [result for result in _find_tool_results(messages) if result.get("name") == name]
+
+
+REBORN_SCRIPTED_TOOL_SCENARIOS = (
+    {
+        "trigger": REBORN_EXTERNAL_TOOL_LOOP_TRIGGER,
+        "batches": (
+            (("lookup_weather", {"city": "Boston"}),),
+            (("lookup_time", {"city": "Boston"}),),
+            (("lookup_fact", {"topic": "Boston"}),),
+        ),
+        "missing_text": "Reborn external tool loop missing tool definitions.",
+        "complete_prefix": "Reborn external tool loop complete: ",
+        "summary_order": ("lookup_weather", "lookup_time", "lookup_fact"),
+    },
+    {
+        "trigger": REBORN_EXTERNAL_TOOL_FAILURE_TRIGGER,
+        "batches": ((("lookup_weather", {"city": "Boston"}),),),
+        "missing_text": "Reborn external tool failure missing tool definitions.",
+        "complete_prefix": "Reborn external tool failure observed: ",
+        "summary_order": ("lookup_weather",),
+    },
+    {
+        "trigger": REBORN_MIXED_INTERNAL_EXTERNAL_TRIGGER,
+        "batches": (
+            (
+                ("builtin__echo", {"message": "mixed-internal-echo"}),
+                ("lookup_weather", {"city": "Boston"}),
+            ),
+        ),
+        "missing_text": "Reborn mixed tool run missing tool definitions.",
+        "complete_prefix": "Reborn mixed tool run complete: ",
+        "summary_order": ("builtin__echo", "lookup_weather"),
+    },
+)
+
+
+def match_reborn_scripted_tool_response(
+    messages: list[dict],
+    has_tools: bool,
+) -> dict | None:
+    """Run the matching table-driven Responses API tool scenario."""
+    scenario = next(
+        (
+            candidate
+            for candidate in REBORN_SCRIPTED_TOOL_SCENARIOS
+            if _conversation_has_user_trigger(messages, candidate["trigger"])
+        ),
+        None,
+    )
+    if scenario is None:
+        return None
+
+    result_by_name = {
+        result["name"]: result["content"] for result in _find_tool_results(messages)
+    }
+    for batch in scenario["batches"]:
+        missing_calls = [
+            {"tool_name": name, "arguments": arguments}
+            for name, arguments in batch
+            if name not in result_by_name
+        ]
+        if not missing_calls:
+            continue
+        if not result_by_name and not has_tools:
+            return {"type": "text", "text": scenario["missing_text"]}
+        return {
+            "type": "tool_call",
+            "tool_call": missing_calls[0] if len(missing_calls) == 1 else missing_calls,
+        }
+
+    summary = "; ".join(
+        f"{name}={result_by_name[name]}" for name in scenario["summary_order"]
+    )
+    return {
+        "type": "text",
+        "text": f"{scenario['complete_prefix']}{summary}",
+    }
 
 
 def _tool_results_include_denial(tool_results: list[dict]) -> bool:
@@ -2038,6 +2276,176 @@ def match_special_response(
             "text": "google_drive lifecycle complete. File uploaded and downloaded.",
         }
 
+    # ── Lifecycle canary: Slack send through the real extension ─────────
+    m = SLACK_DELIVERY_LIFECYCLE_TRIGGER.search(last_user)
+    if m and has_tools:
+        tool_results = _find_named_tool_results(messages, "slack_tool")
+        if not tool_results:
+            return {
+                "type": "tool_call",
+                "tool_call": {
+                    "tool_name": "slack_tool",
+                    "arguments": {
+                        "action": "send_message",
+                        "channel": m.group("channel"),
+                        "text": m.group("marker"),
+                    },
+                },
+            }
+        return {
+            "type": "text",
+            "text": "slack delivery lifecycle complete. Message sent exactly once.",
+        }
+
+    # ── Cross-provider canary: GitHub release → Slack ───────────────────
+    m = GITHUB_RELEASE_SLACK_TRIGGER.search(last_user)
+    if m and has_tools:
+        github_results = _find_named_tool_results(messages, "github")
+        slack_results = _find_named_tool_results(messages, "slack_tool")
+        if not github_results:
+            return {
+                "type": "tool_call",
+                "tool_call": {
+                    "tool_name": "github",
+                    "arguments": {
+                        "action": "list_releases",
+                        "owner": m.group("owner"),
+                        "repo": m.group("repo"),
+                        "limit": 1,
+                    },
+                },
+            }
+        if not slack_results:
+            return {
+                "type": "tool_call",
+                "tool_call": {
+                    "tool_name": "slack_tool",
+                    "arguments": {
+                        "action": "send_message",
+                        "channel": m.group("channel"),
+                        "text": m.group("marker"),
+                    },
+                },
+            }
+        return {
+            "type": "text",
+            "text": "github release to slack lifecycle complete.",
+        }
+
+    # ── Cross-provider canary: Calendar + Drive → Slack ─────────────────
+    m = CALENDAR_DRIVE_SLACK_TRIGGER.search(last_user)
+    if m and has_tools:
+        if not _find_named_tool_results(messages, "google_calendar"):
+            return {
+                "type": "tool_call",
+                "tool_call": {
+                    "tool_name": "google_calendar",
+                    "arguments": {
+                        "action": "list_events",
+                        "calendar_id": "primary",
+                        "time_min": "2026-01-01T00:00:00Z",
+                        "max_results": 5,
+                        "query": "PepsiCo",
+                    },
+                },
+            }
+        if not _find_named_tool_results(messages, "google_drive"):
+            return {
+                "type": "tool_call",
+                "tool_call": {
+                    "tool_name": "google_drive",
+                    "arguments": {
+                        "action": "list_files",
+                        "query": "name contains 'PepsiCo'",
+                        "page_size": 5,
+                    },
+                },
+            }
+        if not _find_named_tool_results(messages, "slack_tool"):
+            return {
+                "type": "tool_call",
+                "tool_call": {
+                    "tool_name": "slack_tool",
+                    "arguments": {
+                        "action": "send_message",
+                        "channel": m.group("channel"),
+                        "text": m.group("marker"),
+                    },
+                },
+            }
+        return {"type": "text", "text": "calendar drive to slack complete."}
+
+    # ── Cross-provider canary: Gmail → Slack ────────────────────────────
+    m = GMAIL_SLACK_TRIGGER.search(last_user)
+    if m and has_tools:
+        if not _find_named_tool_results(messages, "gmail"):
+            return {
+                "type": "tool_call",
+                "tool_call": {
+                    "tool_name": "gmail",
+                    "arguments": {
+                        "action": "list_messages",
+                        "query": "is:unread",
+                        "max_results": 5,
+                    },
+                },
+            }
+        if not _find_named_tool_results(messages, "slack_tool"):
+            return {
+                "type": "tool_call",
+                "tool_call": {
+                    "tool_name": "slack_tool",
+                    "arguments": {
+                        "action": "send_message",
+                        "channel": m.group("channel"),
+                        "text": m.group("marker"),
+                    },
+                },
+            }
+        return {"type": "text", "text": "gmail to slack complete."}
+
+    # ── Cross-provider canary: Slack → Drive → Slack ────────────────────
+    m = SLACK_DRIVE_SLACK_TRIGGER.search(last_user)
+    if m and has_tools:
+        slack_results = _find_named_tool_results(messages, "slack_tool")
+        if not slack_results:
+            return {
+                "type": "tool_call",
+                "tool_call": {
+                    "tool_name": "slack_tool",
+                    "arguments": {
+                        "action": "get_channel_history",
+                        "channel": m.group("source"),
+                        "limit": 10,
+                    },
+                },
+            }
+        if not _find_named_tool_results(messages, "google_drive"):
+            return {
+                "type": "tool_call",
+                "tool_call": {
+                    "tool_name": "google_drive",
+                    "arguments": {
+                        "action": "list_files",
+                        "query": "name contains 'Reborn QA Brief'",
+                        "page_size": 5,
+                    },
+                },
+            }
+        if len(slack_results) == 1:
+            return {
+                "type": "tool_call",
+                "tool_call": {
+                    "tool_name": "slack_tool",
+                    "arguments": {
+                        "action": "send_message",
+                        "channel": m.group("target"),
+                        "text": m.group("marker"),
+                    },
+                },
+            }
+        return {"type": "text", "text": "slack drive to slack complete."}
+
     # ── Lifecycle canary: Notion search → search again ────────────────────
     if NOTION_SEARCH_LIFECYCLE_TRIGGER.search(last_user) and has_tools:
         tool_results = _find_tool_results(messages)
@@ -2098,17 +2506,96 @@ async def _dispatch_special_response(
     return await _stream_text(request, cid, text)
 
 
+async def _broken_stream_before_text(request: web.Request, cid: str) -> web.StreamResponse:
+    resp = web.StreamResponse(
+        status=200,
+        headers={"Content-Type": "text/event-stream", "Cache-Control": "no-cache"},
+    )
+    await resp.prepare(request)
+    await resp.write(f"data: {{\"id\":\"{cid}\",\"choices\":[{{\"delta\":".encode())
+    return resp
+
+
+async def _apply_llm_fault_action(
+    request: web.Request,
+    cid: str,
+    stream: bool,
+    action: dict,
+) -> web.StreamResponse | web.Response | None:
+    action_type = action.get("type")
+    if action_type == "delay":
+        await asyncio.sleep(float(action.get("seconds", 1.0)))
+        return None
+    if action_type == "http_error":
+        status = int(action.get("status", 502))
+        return web.json_response(
+            {
+                "error": {
+                    "message": action.get("message", "scripted mock LLM failure"),
+                    "type": "server_error",
+                }
+            },
+            status=status,
+        )
+    if action_type == "broken_stream_before_text":
+        if stream:
+            return await _broken_stream_before_text(request, cid)
+        return web.json_response(
+            {
+                "error": {
+                    "message": "scripted stream fault requested for non-streaming call",
+                    "type": "server_error",
+                }
+            },
+            status=502,
+        )
+    return None
+
+
 async def chat_completions(request: web.Request) -> web.StreamResponse:
     """Handle POST /v1/chat/completions and /chat/completions."""
     global _last_chat_request
     body = await request.json()
     _last_chat_request = body
+    _chat_requests.append(body)
     messages = body.get("messages", [])
     stream = body.get("stream", False)
     tools = body.get("tools")
     has_tools = bool(tools)
-    available_tool_names = _advertised_tool_names(tools)
+    available_tool_names = _available_tool_names(tools)
     cid = f"mock-{uuid.uuid4().hex[:8]}"
+
+    trace_response = next_llm_trace_response(
+        request.app["llm_trace_state"], messages, available_tool_names
+    )
+    if trace_response is not None:
+        if trace_response["type"] == "tool_calls":
+            calls = [
+                {
+                    "id": tool_call.get("id"),
+                    "tool_name": tool_call["name"],
+                    "arguments": tool_call["arguments"],
+                }
+                for tool_call in trace_response["tool_calls"]
+            ]
+            if not stream:
+                return _tool_call_response(cid, calls)
+            return await _stream_tool_call(request, cid, calls)
+        text = trace_response["content"]
+        if not stream:
+            return _text_response(cid, text)
+        return await _stream_text(request, cid, text)
+
+    fault_action = _next_llm_fault_action(messages)
+    if fault_action:
+        fault_response = await _apply_llm_fault_action(
+            request,
+            cid,
+            stream,
+            fault_action,
+        )
+        if fault_response is not None:
+            return fault_response
 
     slow_response_delay = _conversation_slow_response_delay(messages)
     if slow_response_delay > 0:
@@ -2141,6 +2628,11 @@ async def chat_completions(request: web.Request) -> web.StreamResponse:
         GMAIL_ROUNDTRIP_TRIGGER,
         GCAL_LIFECYCLE_TRIGGER,
         GDRIVE_UPLOAD_LIFECYCLE_TRIGGER,
+        SLACK_DELIVERY_LIFECYCLE_TRIGGER,
+        GITHUB_RELEASE_SLACK_TRIGGER,
+        CALENDAR_DRIVE_SLACK_TRIGGER,
+        GMAIL_SLACK_TRIGGER,
+        SLACK_DRIVE_SLACK_TRIGGER,
         NOTION_SEARCH_LIFECYCLE_TRIGGER,
     ):
         if special and _conversation_has_user_trigger(messages, lifecycle_trigger):
@@ -2158,6 +2650,12 @@ async def chat_completions(request: web.Request) -> web.StreamResponse:
             if not stream:
                 return _tool_call_response(cid, followup)
             return await _stream_tool_call(request, cid, followup)
+
+    reborn_scripted_tool = match_reborn_scripted_tool_response(messages, has_tools)
+    if reborn_scripted_tool:
+        return await _dispatch_special_response(
+            request, cid, stream, reborn_scripted_tool
+        )
     if (
         not tool_results
         and _conversation_uses_codeact(messages)
@@ -2297,7 +2795,7 @@ def _tool_call_response(cid: str, calls: list[dict] | dict) -> web.Response:
         calls = [calls]
     tool_calls = [
         {
-            "id": f"call_{uuid.uuid4().hex[:8]}",
+            "id": tc.get("id") or f"call_{uuid.uuid4().hex[:8]}",
             "type": "function",
             "function": {
                 "name": tc["tool_name"],
@@ -2377,7 +2875,7 @@ async def _stream_tool_call(
     await resp.prepare(request)
     base = _make_base(cid)
     for idx, tc in enumerate(calls):
-        call_id = f"call_{uuid.uuid4().hex[:8]}"
+        call_id = tc.get("id") or f"call_{uuid.uuid4().hex[:8]}"
         # Header chunk: declare a new tool call slot at this index. Only
         # the very first chunk in the stream needs the assistant role.
         delta: dict = {
@@ -2469,6 +2967,13 @@ def _is_github_token_url(url: str) -> bool:
     return "github.com/login/oauth/access_token" in url.lower()
 
 
+def _is_slack_token_url(url: str) -> bool:
+    if not url:
+        return False
+    lowered = url.lower()
+    return "slack.com/api/oauth.v2.access" in lowered
+
+
 async def oauth_exchange(request: web.Request) -> web.Response:
     """Mock OAuth token exchange proxy for E2E tests.
 
@@ -2516,6 +3021,14 @@ async def oauth_exchange(request: web.Request) -> web.Response:
             access_token_field: EMULATE_GITHUB_BEARER,
             "refresh_token": "mock-github-refresh-token",
             "expires_in": 3600,
+        })
+
+    if _is_slack_token_url(data.get("token_url", "")):
+        return web.json_response({
+            access_token_field: EMULATE_SLACK_BEARER,
+            "token_type": "bot",
+            "scope": "chat:write,channels:read,channels:history,users:read",
+            "bot_user_id": "B_EMULATE_REBORN_BOT",
         })
 
     return web.json_response({
@@ -2585,6 +3098,70 @@ async def oauth_refresh(request: web.Request) -> web.Response:
 
 async def oauth_state_handler(request: web.Request) -> web.Response:
     return web.json_response(request.app["oauth_state"])
+
+
+async def google_oauth_token(request: web.Request) -> web.Response:
+    """Minimal Google token endpoint for standalone Reborn OAuth tests."""
+    data = await request.post()
+    if data.get("grant_type") != "authorization_code":
+        return web.json_response({"error": "unsupported_grant_type"}, status=400)
+    # Full-path QA uses one pre-consented reusable Google identity. Google may
+    # report the account's cumulative grants during a narrower scope-upgrade
+    # flow, so the extension-specific codes expose that deterministic union.
+    all_reborn_google_scopes = " ".join(
+        (
+            "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/gmail.send",
+            "https://www.googleapis.com/auth/gmail.modify",
+            "https://www.googleapis.com/auth/calendar.readonly",
+            "https://www.googleapis.com/auth/calendar.events",
+            "https://www.googleapis.com/auth/drive.readonly",
+            "https://www.googleapis.com/auth/drive",
+            "https://www.googleapis.com/auth/documents",
+            "https://www.googleapis.com/auth/documents.readonly",
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/spreadsheets.readonly",
+            "https://www.googleapis.com/auth/presentations",
+            "https://www.googleapis.com/auth/presentations.readonly",
+        )
+    )
+    scopes_by_code = {
+        "mock_auth_code": (
+            "https://www.googleapis.com/auth/drive.readonly "
+            "https://www.googleapis.com/auth/drive"
+        ),
+        "mock_auth_code_gmail": all_reborn_google_scopes,
+        "mock_auth_code_google_calendar": all_reborn_google_scopes,
+        "mock_auth_code_google_drive": all_reborn_google_scopes,
+        "mock_auth_code_google_docs": all_reborn_google_scopes,
+        "mock_auth_code_google_sheets": all_reborn_google_scopes,
+        "mock_auth_code_google_slides": all_reborn_google_scopes,
+    }
+    code = data.get("code")
+    scope = scopes_by_code.get(code)
+    if scope is None:
+        return web.json_response({"error": "invalid_grant"}, status=400)
+    live_access = os.environ.get("AUTH_LIVE_GOOGLE_ACCESS_TOKEN", "").strip()
+    live_refresh = os.environ.get("AUTH_LIVE_GOOGLE_REFRESH_TOKEN", "").strip()
+    if live_access:
+        response = {
+            "access_token": live_access,
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "scope": scope,
+        }
+        if live_refresh:
+            response["refresh_token"] = live_refresh
+        return web.json_response(response)
+    return web.json_response(
+        {
+            "access_token": "mock-token-mock_auth_code",
+            "refresh_token": "mock-refreshed-access-token",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "scope": scope,
+        }
+    )
 
 
 async def oauth_reset(request: web.Request) -> web.Response:
@@ -2876,6 +3453,7 @@ def main():
     app["oauth_state"] = _new_oauth_state()
     app["mcp_state"] = _new_mcp_state()
     app["gmail_state"] = _new_gmail_state()
+    register_llm_trace_routes(app)
     # Register both /v1/ and non-/v1/ paths (rig-core omits the /v1/ prefix)
     app.router.add_post("/v1/chat/completions", chat_completions)
     app.router.add_post("/chat/completions", chat_completions)
@@ -2883,6 +3461,7 @@ def main():
     app.router.add_get("/models", models)
     app.router.add_post("/oauth/exchange", oauth_exchange)
     app.router.add_post("/oauth/refresh", oauth_refresh)
+    app.router.add_post("/token", google_oauth_token)
     app.router.add_get("/__mock/oauth/state", oauth_state_handler)
     app.router.add_post("/__mock/oauth/reset", oauth_reset)
     app.router.add_get("/__mock/mcp/state", mcp_state_handler)
@@ -2900,15 +3479,73 @@ def main():
     async def get_last_chat_request(request: web.Request) -> web.Response:
         return web.json_response(_last_chat_request or {})
 
+    async def get_chat_requests(request: web.Request) -> web.Response:
+        return web.json_response({"requests": _chat_requests})
+
     async def reset_chat_requests(request: web.Request) -> web.Response:
         global _last_chat_request
         _last_chat_request = None
+        _chat_requests.clear()
+        return web.json_response({"ok": True})
+
+    async def set_llm_faults(request: web.Request) -> web.Response:
+        body = await request.json()
+        faults = body.get("faults", [])
+        if not isinstance(faults, list):
+            return web.json_response(
+                {"ok": False, "error": "faults must be a list"},
+                status=400,
+            )
+        parsed_scripts = []
+        for fault in faults:
+            if not isinstance(fault, dict):
+                return web.json_response(
+                    {"ok": False, "error": "each fault must be an object"},
+                    status=400,
+                )
+            match_text = fault.get("match")
+            actions = fault.get("actions")
+            if not isinstance(match_text, str) or not match_text:
+                return web.json_response(
+                    {"ok": False, "error": "fault.match must be a non-empty string"},
+                    status=400,
+                )
+            if not isinstance(actions, list):
+                return web.json_response(
+                    {"ok": False, "error": "fault.actions must be a list"},
+                    status=400,
+                )
+            if not all(isinstance(action, dict) for action in actions):
+                return web.json_response(
+                    {"ok": False, "error": "fault.actions entries must be objects"},
+                    status=400,
+                )
+            parsed_scripts.append(
+                {
+                    "match": match_text,
+                    "actions": [dict(action) for action in actions],
+                    "applied": 0,
+                }
+            )
+        _reset_llm_fault_scripts()
+        _llm_fault_scripts.extend(parsed_scripts)
+        return web.json_response({"ok": True, "faults": _llm_fault_scripts})
+
+    async def get_llm_faults(request: web.Request) -> web.Response:
+        return web.json_response({"faults": _llm_fault_scripts})
+
+    async def reset_llm_faults(request: web.Request) -> web.Response:
+        _reset_llm_fault_scripts()
         return web.json_response({"ok": True})
 
     app.router.add_post("/__mock/set_github_api_url", set_github_api_url)
     app.router.add_get("/__mock/github_api_url", get_github_api_url)
     app.router.add_get("/__mock/last_chat_request", get_last_chat_request)
+    app.router.add_get("/__mock/chat_requests", get_chat_requests)
     app.router.add_post("/__mock/chat_requests/reset", reset_chat_requests)
+    app.router.add_post("/__mock/llm_faults", set_llm_faults)
+    app.router.add_get("/__mock/llm_faults", get_llm_faults)
+    app.router.add_post("/__mock/llm_faults/reset", reset_llm_faults)
     # Mock MCP server endpoints
     app.router.add_post("/mcp", mcp_endpoint)
     app.router.add_post("/mcp-400", mcp_endpoint_400)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Launch IronClaw Reborn with the WebChat v2 web UI for local testing.
 #
-# Handles the setup footguns from docs/reborn-binary.md for you:
+# Handles the setup footguns from docs/internal/reborn-binary.md for you:
 #   - keeps the Reborn home OUTSIDE the repo (serve uses the cwd as the
 #     local-dev workspace root and rejects overlap with it);
 #   - configures the model route via `models set-provider`;
@@ -39,18 +39,41 @@ REBORN_PORT="${REBORN_PORT:-3000}"
 
 # This launcher prints a login URL for a browser, so a fixed port is required.
 # `serve --port 0` (kernel-picks-a-free-port) is for test harnesses only and
-# would print an unusable http://REBORN_HOST:0/v2 here.
+# would print an unusable http://REBORN_HOST:0/ here.
 if [ "$REBORN_PORT" = "0" ]; then
   echo "error: REBORN_PORT=0 (kernel-assigned port) isn't usable for browser onboarding." >&2
   echo "       Set a fixed REBORN_PORT, or run the test-harness form directly:" >&2
-  echo "       cargo run -q -p ironclaw_reborn_cli --features webui-v2-beta \\" >&2
-  echo "         --bin ironclaw-reborn -- serve --port 0" >&2
+  echo "       cargo run -q -p ironclaw \\" >&2
+  echo "         --bin ironclaw -- serve --port 0" >&2
   exit 1
 fi
 
 # Run cargo from the workspace root regardless of where the script is invoked.
 REPO_ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
+
+# Resolved by crate NAME through the shared inventory
+# (scripts/ci/lib/crate_tree.py) rather than a literal `crates/ironclaw_webui`
+# path, so the target-architecture family move (PROPOSAL §5) cannot leave this
+# pointed at a directory that no longer exists
+# (docs/reborn/target-architecture/CHECKLIST.md WS10).
+FRONTEND_DIR="$("$REPO_ROOT/scripts/ci/crate-dir.sh" ironclaw_webui "$REPO_ROOT")/frontend"
+if ! command -v pnpm >/dev/null 2>&1; then
+  if command -v corepack >/dev/null 2>&1; then
+    corepack enable pnpm
+  fi
+fi
+if ! command -v pnpm >/dev/null 2>&1; then
+  echo "error: pnpm is required to build WebUI v2 assets." >&2
+  echo "       Install Node 22 from .nvmrc and enable pnpm with: corepack enable pnpm" >&2
+  exit 1
+fi
+echo "==> Building WebUI v2 frontend assets"
+(
+  cd "$FRONTEND_DIR"
+  pnpm install --frozen-lockfile
+  pnpm build
+)
 
 export IRONCLAW_REBORN_HOME="${IRONCLAW_REBORN_HOME:-$HOME/.ironclaw-reborn-demo}"
 
@@ -83,7 +106,7 @@ if [ -z "${IRONCLAW_REBORN_WEBUI_TOKEN:-}" ]; then
   export IRONCLAW_REBORN_WEBUI_TOKEN="$(openssl rand -hex 32)"
 fi
 
-CARGO=(cargo run -q -p ironclaw_reborn_cli --features webui-v2-beta --bin ironclaw-reborn --)
+CARGO=(cargo run -q -p ironclaw --bin ironclaw --)
 
 # Configure the model route (compiles the binary on first run).
 set_provider_args=(models set-provider "$PROVIDER")
@@ -114,7 +137,7 @@ fi
 
 cat <<EOF
 
-==> Starting WebChat v2 on http://$REBORN_HOST:$REBORN_PORT/v2
+==> Starting WebChat v2 on http://$REBORN_HOST:$REBORN_PORT/
     login token : $IRONCLAW_REBORN_WEBUI_TOKEN
     login user  : $IRONCLAW_REBORN_WEBUI_USER_ID
     reborn home : $IRONCLAW_REBORN_HOME

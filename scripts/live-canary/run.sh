@@ -107,6 +107,7 @@ write_env_summary() {
     echo "python_bin=${PYTHON_BIN}"
     echo "cases=${CASES:-<default>}"
     echo "reborn_webui_v2_live_qa_harness_ref=${REBORN_WEBUI_V2_LIVE_QA_HARNESS_REF:-<checkout>}"
+    echo "reborn_webui_v2_live_qa_build_source=${REBORN_WEBUI_V2_LIVE_QA_BUILD_SOURCE:-<local>}"
     echo "skip_build=${SKIP_BUILD:-0}"
     echo "skip_python_bootstrap=${SKIP_PYTHON_BOOTSTRAP:-0}"
   } > "${ENV_FILE}"
@@ -127,9 +128,9 @@ run_cargo_test() {
   local filter="${2:-}"
 
   if [[ -n "${filter}" ]]; then
-    run_with_timeout cargo test --features libsql --test "${test_target}" "${filter}" -- --ignored --nocapture --test-threads=1
+    run_with_timeout cargo test --test "${test_target}" "${filter}" -- --ignored --nocapture --test-threads=1
   else
-    run_with_timeout cargo test --features libsql --test "${test_target}" -- --ignored --nocapture --test-threads=1
+    run_with_timeout cargo test --test "${test_target}" -- --ignored --nocapture --test-threads=1
   fi
 }
 
@@ -250,7 +251,7 @@ main() {
       ;;
     public-smoke)
       export IRONCLAW_LIVE_TEST=1
-      run_cargo_test e2e_live "${SCENARIO:-zizmor_scan}"
+      run_cargo_test e2e_live "${SCENARIO:-}"
       run_cargo_test e2e_live_mission "mission_daily_news_digest_with_followup"
       ;;
     persona-rotating)
@@ -272,14 +273,8 @@ main() {
       # run_cargo_test e2e_live "drive_auth_gate_roundtrip"
       run_cargo_test e2e_live "drive_transparent_oauth_refresh"
       ;;
-    provider-matrix)
-      export IRONCLAW_LIVE_TEST=1
-      run_cargo_test "${PROVIDER_TEST_TARGET:-e2e_live}" "${SCENARIO:-zizmor_scan}"
-      ;;
     release-public-full)
       export IRONCLAW_LIVE_TEST=1
-      run_cargo_test e2e_live "zizmor_scan"
-      run_cargo_test e2e_live "zizmor_scan_v2"
       run_cargo_test e2e_live_mission ""
       run_cargo_test e2e_live_personas ""
       ;;
@@ -335,7 +330,7 @@ main() {
       ;;
     *)
       echo "Unknown live canary lane: ${LANE}" >&2
-      echo "Known lanes: deterministic-replay, public-smoke, persona-rotating, private-oauth, provider-matrix, release-public-full, upgrade-canary, auth-smoke, auth-full, auth-channels, auth-live-seeded, auth-browser-consent, workflow-canary, reborn-webui-v2-live-qa" >&2
+      echo "Known lanes: deterministic-replay, public-smoke, persona-rotating, private-oauth, release-public-full, upgrade-canary, auth-smoke, auth-full, auth-channels, auth-live-seeded, auth-browser-consent, workflow-canary, reborn-webui-v2-live-qa" >&2
       return 2
       ;;
   esac

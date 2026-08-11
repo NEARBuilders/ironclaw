@@ -1,10 +1,10 @@
 # Reborn CLI Docker Deployment
 
-`Dockerfile.reborn` builds the standalone `ironclaw-reborn` binary with the
+`Dockerfile` builds the standalone `ironclaw` binary with the
 WebUI v2 and Slack host-beta features enabled. The image defaults to:
 
 ```text
-ironclaw-reborn serve --host ${IRONCLAW_REBORN_SERVE_HOST:-127.0.0.1} --port ${PORT:-3000}
+ironclaw serve --host ${IRONCLAW_REBORN_SERVE_HOST:-127.0.0.1} --port ${PORT:-3000}
 ```
 
 Railway supplies `PORT`; set `IRONCLAW_REBORN_SERVE_HOST=0.0.0.0` for
@@ -14,7 +14,7 @@ set `IRONCLAW_REBORN_SERVE_PORT=3000`.
 ## Build
 
 ```bash
-docker build -f Dockerfile.reborn -t ironclaw-reborn:local .
+docker build -f Dockerfile -t ironclaw-reborn:local .
 ```
 
 ## Local Run
@@ -74,12 +74,12 @@ https://<public-host>/auth/callback/google
 
 ## Railway
 
-Set the service Dockerfile path to `Dockerfile.reborn`. Railway sets `PORT`;
+Set the service Dockerfile path to `Dockerfile`. Railway sets `PORT`;
 keep `IRONCLAW_REBORN_SERVE_HOST=0.0.0.0`. The Reborn WebUI service serves
 `/api/health` for Railway's healthcheck.
 
 Leave Railway's Start Command empty for the Docker image. The image entrypoint
-builds the `ironclaw-reborn serve` arguments from `PORT` and
+builds the `ironclaw serve` arguments from `PORT` and
 `IRONCLAW_REBORN_SERVE_HOST`; Railway does not shell-expand `$VAR` placeholders
 in Docker command arguments before they reach the entrypoint.
 
@@ -93,6 +93,28 @@ IRONCLAW_REBORN_WEBUI_TOKEN=<random-hex-32-bytes-or-longer>
 IRONCLAW_REBORN_WEBUI_USER_ID=reborn-cli
 NEARAI_API_KEY=<nearai-api-key>
 ```
+
+The volume-backed sandbox profiles have distinct operator intent:
+
+- `hosted-single-tenant-volume-sandboxed` is the local-Docker profile. It is
+  for exercising the Docker worker boundary. The deployment factory enables
+  the worker's default Docker network; `--network none` is only the ad-hoc
+  transport's fail-closed construction default. Build its Python worker once
+  with `docker build -f Dockerfile.sandbox-worker -t ironclaw-worker:latest .`.
+  On Docker Desktop or Colima, keep `IRONCLAW_REBORN_HOME` under a host path
+  shared with the Docker VM (for example `/Users/...` on macOS); otherwise the
+  daemon cannot bind the per-user workspace.
+- `hosted-single-tenant-volume-sandboxed-railway` is the Railway preview
+  profile. Each command runs in a fresh inner Docker worker inside a Railway
+  Sandbox. The deployment factory enables the worker's default Docker network,
+  providing direct egress through the outer sandbox's Railway NAT. The
+  `--network none` setting remains only the ad-hoc transport's fail-closed
+  construction default. Its lifecycle requirements are documented in
+  [the Railway sandbox operator runbook](railway-sandbox-operator.md).
+
+The persisted seed config records the canonical volume-backed application
+settings. The selected profile remains an explicit Rust composition profile,
+so startup also validates that its matching sandbox process provider is wired.
 
 Minimum Railway variables for the hosted single-tenant volume profile:
 
@@ -108,14 +130,15 @@ Attach a Railway volume and mount it at `/data`, or set
 will use `$RAILWAY_VOLUME_MOUNT_PATH/ironclaw-reborn` by default when Railway
 exposes a volume mount. Without a volume, Railway deployments using
 `local-dev`, `local-dev-yolo`, `hosted-single-tenant`, or
-`hosted-single-tenant-volume` fail closed unless
+`hosted-single-tenant-volume`, `hosted-single-tenant-volume-sandboxed`, or
+`hosted-single-tenant-volume-sandboxed-railway` fail closed unless
 `IRONCLAW_REBORN_ALLOW_EPHEMERAL_RAILWAY=true` is explicitly set for a
 disposable test deployment.
 
 For managed Postgres providers with a small session-pool cap, set
 `IRONCLAW_REBORN_POSTGRES_POOL_MAX_SIZE=1` or `2` rather than relying on the
 provider to queue excess sessions.
-For `hosted-single-tenant`, `ironclaw-reborn serve` binds the WebUI listener
+For `hosted-single-tenant`, `ironclaw serve` binds the WebUI listener
 and serves `/api/health` before PostgreSQL-backed runtime assembly finishes.
 Non-health routes return `503` until the runtime router is ready. This lets
 Railway drain the old deployment and release PgBouncer session-mode
@@ -124,7 +147,7 @@ connections before the new deployment needs one for startup migrations.
 how long runtime assembly waits for PostgreSQL once the healthcheck listener is
 up; the default is 5 minutes.
 
-`ironclaw-reborn serve` exits before binding the HTTP listener if the WebUI
+`ironclaw serve` exits before binding the HTTP listener if the WebUI
 token/user variables are missing. The bundled config selects NearAI as the
 default LLM provider, so set `NEARAI_API_KEY` unless a custom mounted config
 selects a different provider.
@@ -134,6 +157,8 @@ listener. That profile grants trusted host access and `serve` refuses to bind it
 to a non-loopback host. Use `hosted-single-tenant-volume` for the mounted-volume
 single-tenant preview path that keeps the local-dev product surface with durable
 libSQL-backed state, or `hosted-single-tenant` for Postgres-backed hosted state.
+Use the sandboxed aliases only with their documented local-Docker or Railway
+preview operator model; neither is a production multi-replica profile.
 
 Set `IRONCLAW_REBORN_HOME` to a mounted volume path if local files should
 survive redeploys. The hosted single-tenant profile stores runtime/control-plane
@@ -191,29 +216,52 @@ IRONCLAW_REBORN_GOOGLE_OAUTH_REDIRECT_URI=https://<railway-domain>/api/reborn/pr
 
 ## Slack
 
-Slack routes are compiled into the image, but they are disabled by the default
-config. On Railway, prefer the env toggle so the seeded config can stay
-unchanged:
+Slack routes are compiled into the image and mounted unconditionally. No
+environment variable and no `config.toml` key enables or disables Slack for a
+deployment, so there is nothing Slack-specific to add to the Railway service
+variables or to a mounted config file. The Slack webhook answers
+`503 temporarily_unavailable` until the Slack extension's ingress signing
+secret is registered.
 
-```bash
-IRONCLAW_REBORN_SLACK_ENABLED=true
-```
+Once the container is running, open the WebUI at `/extensions`, install the
+Slack extension, and complete its setup. Slack app ids, the bot token, the
+signing secret, and OAuth client credentials are all configured there after
+the container starts. There is no shared-channel configuration: inviting the
+bot into a channel is what enables it, the bot answers each participant as
+themselves, and every user pairs by completing the Slack OAuth connect from
+Extensions — there is no shared subject user, per-channel subject route, or
+channel allowlist to configure.
 
-The env var overrides only the Slack route enablement gate. `true`/`1` enables
-Slack, while `false`/`0` forces Slack off for the deployment.
+There is no `IRONCLAW_REBORN_SLACK_ENABLED` toggle — the enablement gate it fed
+was removed in #6116, and nothing has read the variable since. Do not add a
+`[slack]` section either: the retired setup keys (`signing_secret_env`,
+`bot_token_env`, `installation_id`, `team_id`, `api_app_id`, `channel_routes`,
+…) make `ironclaw serve` **refuse to start**.
 
-You can also enable Slack by editing `$IRONCLAW_REBORN_HOME/config.toml` or
-mounting a config file with:
-
-```toml
-[slack]
-enabled = true
-```
-
-Then configure Slack app ids, the bot token, signing secret, and channel
-mappings from WebUI channel setup after the container starts.
+A volume seeded before #6116 may still carry a `[slack]` section. What happens
+on boot depends on what the section holds. `enabled` on its own is inert and
+keeps booting (with a deprecation notice in the serve log). The one shape the
+entrypoint migrates for you is the old shipped default — an explicit
+`enabled = false` next to `signing_secret_env`/`bot_token_env`: those two
+fields are stripped on start and the container boots. Every other combination
+that includes a retired setup key — `enabled = true` beside them, the legacy
+fields without an explicit `enabled = false` line, or any of the other setup
+keys listed above — is left alone deliberately and fails startup with a
+migration pointer, rather than a live-looking channel config being rewritten
+underneath you.
 
 Set the WebUI identity environment variables as usual.
 
 Do not store OAuth, Slack, or LLM secrets in `config.toml`. Slack bot tokens
-and signing secrets are stored from WebUI channel setup.
+and signing secrets are stored from the WebUI extension setup.
+
+Migrating an existing config file: a mounted or previously seeded
+`config.toml` that still carries a `[slack]` or `[telegram]` section keeps
+parsing. Outside the one entrypoint-migrated shape above (`enabled = false`
+beside `signing_secret_env`/`bot_token_env`), a leftover Slack *setup* field
+(`installation_id`, `team_id`, `api_app_id`, `slack_user_id`, `user_id`,
+`shared_subject_user_id`, `channel_routes`, `signing_secret_env`,
+`bot_token_env`) fails container startup with a migration pointer rather than
+being silently ignored; a section left with only inert keys still starts, and
+logs a deprecation notice. Delete the section from the mounted file — nothing
+reads it.

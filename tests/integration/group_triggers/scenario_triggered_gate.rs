@@ -16,7 +16,7 @@
 
 use super::reborn_support::group::{HarnessResult, RebornIntegrationGroup};
 use super::reborn_support::reply::RebornScriptedReply;
-use ironclaw_host_api::TenantId;
+use ironclaw_host_api::ids::TenantId;
 use ironclaw_turns::{ResumeTurnPrecondition, TurnStatus};
 use serde_json::json;
 
@@ -124,7 +124,7 @@ pub async fn run_deny(g: &RebornIntegrationGroup) -> HarnessResult<()> {
 ///
 /// Drives a triggered fire to a real `BlockedApproval` gate like
 /// [`run_approve`], then resumes the SAME `run_id` under a mismatched tenant
-/// scope. `InMemoryTurnStateStore::resume_turn_once` checks `record.scope !=
+/// scope. The turn-state store's `resume_turn_once` checks `record.scope !=
 /// request.scope` BEFORE consulting gate/precondition/actor, so this
 /// deterministically hits `TurnError::ScopeNotFound` and reinserts the
 /// taken-out record unconditionally — the gate's `BlockedApproval` state is
@@ -185,7 +185,7 @@ pub async fn run_wrong_scope_resume_rejected(g: &RebornIntegrationGroup) -> Harn
         .err()
         .ok_or("expected mis-scoped resume to be rejected with ScopeNotFound, but it queued")?;
     // Pin the EXACT `TurnError::ScopeNotFound` Display string
-    // (`crates/ironclaw_turns/src/status.rs:403-404`), not just `.is_err()` —
+    // (`crates/kernel/ironclaw_turns/src/status.rs:403-404`), not just `.is_err()` —
     // a discriminating negative assertion.
     if err.to_string() != "turn run not found" {
         return Err(format!(

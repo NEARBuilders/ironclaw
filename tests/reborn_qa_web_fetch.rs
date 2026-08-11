@@ -26,9 +26,9 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use ironclaw_host_api::CapabilityId;
+use ironclaw_host_api::ids::CapabilityId;
 use ironclaw_host_runtime::HTTP_CAPABILITY_ID;
-use ironclaw_loop_support::HostManagedModelResponse;
+use ironclaw_loop_host::HostManagedModelResponse;
 use ironclaw_turns::TurnStatus;
 use parity_qa_support::binary_e2e::RebornBinaryE2EHarness;
 use parity_qa_support::model_replay::{

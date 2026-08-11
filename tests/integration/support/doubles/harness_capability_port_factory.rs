@@ -1,11 +1,11 @@
 /// Test double substituting the production `LoopCapabilityPortFactory` wiring
-/// (`LocalDevLoopCapabilityPortFactory` / `HostRuntimeLoopCapabilityPortFactory`)
+/// (`RefreshingLoopCapabilityPortFactory` / `HostRuntimeLoopCapabilityPortFactory`)
 /// for the Echo (`RecordingTestCapabilityPort`) backend.
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use ironclaw_loop_support::LoopCapabilityPortFactory;
-use ironclaw_turns::run_profile::{AgentLoopHostError, LoopCapabilityPort, LoopRunContext};
+use ironclaw_loop_contracts::{AgentLoopHostError, LoopCapabilityPort, LoopRunContext};
+use ironclaw_loop_host::LoopCapabilityPortFactory;
 
 use super::recording_test_capability_port::RecordingTestCapabilityPort;
 

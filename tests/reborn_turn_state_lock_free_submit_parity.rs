@@ -8,16 +8,24 @@ mod support;
 
 use std::time::Duration;
 
-use ironclaw_loop_support::HostManagedModelResponse;
-use ironclaw_product_adapters::ProductInboundAck;
+use ironclaw_loop_host::HostManagedModelResponse;
+use ironclaw_product_contracts::inbound::ProductInboundAck;
 use ironclaw_turns::TurnStatus;
-use parity_qa_support::binary_e2e::{RebornBinaryE2EHarness, RebornHarnessSharedStorage};
+use parity_qa_support::binary_e2e::{
+    HarnessWaitConfig, RebornBinaryE2EHarness, RebornHarnessSharedStorage,
+};
 use parity_qa_support::model_replay::RebornTraceReplayModelGateway;
 use reborn_support::harness::{RecordingTestCapabilityPort, test_product_scope};
 
 #[tokio::test]
 async fn reborn_user_submit_completes_while_another_turn_state_write_is_blocked() {
-    const ROOM: &str = "room-turn-state-lock-free-submit";
+    const BLOCKED_ROOM: &str = "room-turn-state-lock-free-submit-blocked";
+    const LIVE_ROOM: &str = "room-turn-state-lock-free-submit-live";
+    // The live submit is still awaited before releasing the blocked writer, so
+    // a real lock regression times out here; the wider window only absorbs CI
+    // scheduler/build-host jitter around the binary-E2E harness.
+    const LOCK_FREE_SUBMIT_TIMEOUT: Duration = Duration::from_secs(5);
+    const BLOCKED_SUBMIT_RELEASE_TIMEOUT: Duration = Duration::from_secs(5);
 
     let shared_storage = RebornHarnessSharedStorage::new().expect("shared storage");
     let scope = test_product_scope(
@@ -26,14 +34,19 @@ async fn reborn_user_submit_completes_while_another_turn_state_write_is_blocked(
         "agent-e2e",
         Some("project-e2e"),
     );
+    // Both schedulers can claim either durable run from the shared storage.
+    // Share the replay queue too, so whichever scheduler wins sees the same
+    // two model responses instead of exhausting a harness-local queue.
+    let model_gateway = RebornTraceReplayModelGateway::with_responses([
+        HostManagedModelResponse::assistant_reply("first submit completed"),
+        HostManagedModelResponse::assistant_reply("second submit completed"),
+    ]);
 
     let mut blocked_harness =
         RebornBinaryE2EHarness::with_model_gateway_scope_initial_actor_installation_shared_storage(
-            ROOM,
+            BLOCKED_ROOM,
             "alice",
-            RebornTraceReplayModelGateway::with_responses([
-                HostManagedModelResponse::assistant_reply("blocked submit eventually completed"),
-            ]),
+            model_gateway.clone(),
             RecordingTestCapabilityPort::echo(),
             scope.clone(),
             "reborn-test",
@@ -44,11 +57,9 @@ async fn reborn_user_submit_completes_while_another_turn_state_write_is_blocked(
         .expect("blocked harness");
     let mut live_harness =
         RebornBinaryE2EHarness::with_model_gateway_scope_initial_actor_installation_shared_storage(
-            ROOM,
+            LIVE_ROOM,
             "alice",
-            RebornTraceReplayModelGateway::with_responses([
-                HostManagedModelResponse::assistant_reply("live submit completed"),
-            ]),
+            model_gateway,
             RecordingTestCapabilityPort::echo(),
             scope,
             "reborn-test",
@@ -64,22 +75,27 @@ async fn reborn_user_submit_completes_while_another_turn_state_write_is_blocked(
     shared_storage.block_next_turn_state_put();
     let blocked_submit = tokio::spawn(async move {
         let result = blocked_harness
-            .submit_text_for(ROOM, "alice", "event-turn-state-blocked", "blocked writer")
+            .submit_text_for(
+                BLOCKED_ROOM,
+                "alice",
+                "event-turn-state-blocked",
+                "blocked writer",
+            )
             .await;
         blocked_harness.shutdown().await;
         result
     });
 
     tokio::time::timeout(
-        Duration::from_secs(1),
+        LOCK_FREE_SUBMIT_TIMEOUT,
         shared_storage.wait_for_blocked_turn_state_put(),
     )
     .await
     .expect("first inbound submit should reach the delayed turn-state write");
 
     let live = tokio::time::timeout(
-        Duration::from_secs(1),
-        live_harness.submit_text_for(ROOM, "alice", "event-turn-state-live", "live writer"),
+        LOCK_FREE_SUBMIT_TIMEOUT,
+        live_harness.submit_text_for(LIVE_ROOM, "alice", "event-turn-state-live", "live writer"),
     )
     .await
     .expect("same-user inbound submit must not wait behind the blocked writer")
@@ -87,12 +103,20 @@ async fn reborn_user_submit_completes_while_another_turn_state_write_is_blocked(
     assert!(matches!(live.ack, ProductInboundAck::Accepted { .. }));
 
     live_harness
-        .wait_for_submitted_status(&live, TurnStatus::Completed)
+        .wait_for_status_in_scope_with_config(
+            live.scope.clone(),
+            live.run_id,
+            TurnStatus::Completed,
+            HarnessWaitConfig {
+                timeout: LOCK_FREE_SUBMIT_TIMEOUT,
+                poll_interval: Duration::from_millis(10),
+            },
+        )
         .await
         .expect("live run should complete while the first writer remains blocked");
 
     shared_storage.release_blocked_turn_state_put();
-    let blocked = tokio::time::timeout(Duration::from_secs(3), blocked_submit)
+    let blocked = tokio::time::timeout(BLOCKED_SUBMIT_RELEASE_TIMEOUT, blocked_submit)
         .await
         .expect("blocked submit should finish after release")
         .expect("blocked submit task")

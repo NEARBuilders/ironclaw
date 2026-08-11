@@ -7,8 +7,16 @@ set -euo pipefail
 # Only run the check if relevant files are staged
 STAGED=$(git diff --cached --name-only)
 
+# The WIT branch is depth-agnostic on purpose. `wit/` lives inside the
+# `ironclaw_wasm` crate, and WS7 moved that crate into its family directory
+# (`crates/lanes/ironclaw_wasm/`, PROPOSAL §5). A flat path literal here fails
+# *silently* — the hook keeps exiting 0 and version bumps stop being checked —
+# so the branch matches the crate at any depth under `crates/`, exactly as
+# `platform-and-compat.yml`'s `has_direct_wasm_abi_risk` filter already does.
+# Pinned by `scripts/ci/test_pre_commit_staged_paths.py` against the real
+# inventory, so a rename (which the regex cannot follow) still fails loudly.
 NEEDS_CHECK=false
-if echo "$STAGED" | grep -qE '^wit/|^channels-src/|^tools-src/'; then
+if echo "$STAGED" | grep -qE '^crates/([^/]+/)*ironclaw_wasm/wit/|^channels-src/|^tools-src/'; then
     NEEDS_CHECK=true
 fi
 
@@ -23,15 +31,7 @@ if $NEEDS_CHECK; then
     fi
 fi
 
-# i18n parity: when any language pack changes, all languages must stay in sync.
-if echo "$STAGED" | grep -qE '^crates/ironclaw_gateway/static/i18n/.*\.js$'; then
-    echo "pre-commit: checking i18n parity..."
-    if ! ./scripts/check-i18n-parity.sh; then
-        echo ""
-        echo "Commit blocked: i18n parity check failed."
-        echo "Every key added to en.js must also be added to all other language files (zh-CN.js, ko.js, ...)."
-        echo "Placeholder tokens like {name} must match across all languages."
-        echo "To bypass: git commit --no-verify"
-        exit 1
-    fi
-fi
+# Reborn WebUI i18n parity (crates/ironclaw_webui/frontend/src/i18n/*.ts) is
+# enforced by the frontend's own tooling (`pnpm lint`/`pnpm test` in the
+# `webui-v2-js-lint` CI job), not by this shell hook — the v1 gateway's
+# `.js` language packs were deleted under Tier B.

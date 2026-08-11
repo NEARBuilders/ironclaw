@@ -55,8 +55,8 @@ MOCK_PROJECTS = [
             "engineering, and sales."
         ),
         "metadata": {"goals": ["Ship v2.0 by June 15", "Hit launch signups"]},
-        "state": "active",
-        "role": "owner",
+        "state": "archived",
+        "role": "viewer",
         "created_at": "2026-04-11T08:45:00Z",
         "updated_at": "2026-04-12T08:45:00Z",
     },
@@ -70,6 +70,7 @@ async def _open_mocked_projects_page(reborn_v2_server, reborn_v2_browser):
     try:
         page = await context.new_page()
         project_requests: list[str] = []
+        project_list_queries: list[dict[str, list[str]]] = []
         thread_create_requests: list[dict] = []
         project_thread_requests: list[str] = []
         project_file_requests: list[str] = []
@@ -89,7 +90,16 @@ async def _open_mocked_projects_page(reborn_v2_server, reborn_v2_browser):
 
             if path == "/api/webchat/v2/projects" and request.method == "GET":
                 project_requests.append(path)
-                await fulfill_json(route, {"projects": MOCK_PROJECTS})
+                project_list_queries.append(parse_qs(parsed.query))
+                await fulfill_json(
+                    route,
+                    {
+                        "projects": MOCK_PROJECTS,
+                        "total_projects": 503,
+                        "active_projects": 502,
+                        "archived_projects": 1,
+                    },
+                )
                 return
 
             prefix = "/api/webchat/v2/projects/"
@@ -218,7 +228,7 @@ async def _open_mocked_projects_page(reborn_v2_server, reborn_v2_browser):
         await page.route("**/api/webchat/v2/projects**", handle_projects)
         await page.route("**/api/webchat/v2/threads**", handle_threads)
         await page.goto(
-            f"{reborn_v2_server}/v2/projects?token={REBORN_V2_AUTH_TOKEN}"
+            f"{reborn_v2_server}/projects?token={REBORN_V2_AUTH_TOKEN}"
         )
 
         try:
@@ -235,6 +245,7 @@ async def _open_mocked_projects_page(reborn_v2_server, reborn_v2_browser):
             "context": context,
             "page": page,
             "project_requests": project_requests,
+            "project_list_queries": project_list_queries,
             "thread_create_requests": thread_create_requests,
             "project_thread_requests": project_thread_requests,
             "project_file_requests": project_file_requests,
@@ -284,9 +295,62 @@ async def test_reborn_legacy_projects_overview_search_and_open_workspace(
         await expect(page.locator(SEL_V2["project_workspace_title"])).to_have_text(
             "AI Research Intelligence"
         )
-        await page.wait_for_url(f"**/v2/projects/{MOCK_PROJECT_ID}**", timeout=5000)
+        await page.wait_for_url(f"**/projects/{MOCK_PROJECT_ID}**", timeout=5000)
         assert "/api/webchat/v2/projects" in project_requests
         assert f"/api/webchat/v2/projects/{MOCK_PROJECT_ID}" in project_requests
+    finally:
+        await harness["context"].close()
+
+
+async def test_reborn_projects_overview_shows_only_api_backed_fields(
+    reborn_v2_server, reborn_v2_browser
+):
+    harness = await _open_mocked_projects_page(reborn_v2_server, reborn_v2_browser)
+    try:
+        page = harness["page"]
+        await expect(page.locator(SEL_V2["projects_summary"])).to_be_visible()
+        research_card = page.locator(
+            SEL_V2["project_card_for"].format(id=MOCK_PROJECT_ID)
+        )
+        archived_card = page.locator(
+            SEL_V2["project_card_for"].format(id=PRODUCT_PROJECT_ID)
+        )
+
+        await expect(
+            page.locator(SEL_V2["projects_summary_value_for"].format(kind="projects"))
+        ).to_have_text("503")
+        await expect(
+            page.locator(SEL_V2["projects_summary_value_for"].format(kind="active"))
+        ).to_have_text("502")
+        await expect(
+            page.locator(SEL_V2["projects_summary_value_for"].format(kind="archived"))
+        ).to_have_text("1")
+
+        await expect(research_card).to_contain_text("Active")
+        await expect(research_card).to_contain_text("Owner")
+        await expect(
+            research_card.locator(SEL_V2["project_updated_at"])
+        ).to_have_attribute("datetime", MOCK_PROJECTS[1]["updated_at"])
+        await expect(archived_card).to_contain_text("Archived")
+        await expect(archived_card).to_contain_text("Viewer")
+        await expect(
+            archived_card.locator(SEL_V2["project_updated_at"])
+        ).to_have_attribute("datetime", MOCK_PROJECTS[2]["updated_at"])
+        assert {"limit": ["500"]} in harness["project_list_queries"]
+
+        for fabricated_copy in [
+            "Healthy",
+            "No recent activity",
+            "Threads today: 0",
+            "Pending gates: 0",
+            "Failures in 24h: 0",
+            "$0.00 spend today",
+            "Attention queue",
+            "Spend today",
+        ]:
+            await expect(
+                page.get_by_text(fabricated_copy, exact=True)
+            ).to_have_count(0)
     finally:
         await harness["context"].close()
 
@@ -327,7 +391,7 @@ async def test_reborn_legacy_project_creation_opens_seeded_chat_thread(
         page = harness["page"]
 
         await page.get_by_role("button", name="New project").click()
-        await page.wait_for_url("**/v2/chat/thread-project-scoped", timeout=10000)
+        await page.wait_for_url("**/chat/thread-project-scoped", timeout=10000)
 
         composer = page.locator(SEL_V2["chat_composer"])
         await expect(composer).to_be_visible(timeout=10000)
@@ -358,7 +422,7 @@ async def test_reborn_legacy_project_workspace_starts_scoped_chat_thread(
         ).to_be_visible(timeout=10000)
 
         await page.get_by_role("button", name="New conversation").click()
-        await page.wait_for_url("**/v2/chat/thread-project-scoped", timeout=10000)
+        await page.wait_for_url("**/chat/thread-project-scoped", timeout=10000)
         await expect(page.locator(SEL_V2["chat_composer"])).to_be_visible(timeout=10000)
 
         assert len(harness["thread_create_requests"]) == 1

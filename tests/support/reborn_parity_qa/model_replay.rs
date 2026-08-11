@@ -5,15 +5,15 @@ use std::{
 };
 
 use async_trait::async_trait;
-use ironclaw_host_api::{CapabilityId, ProviderToolName};
-use ironclaw_loop_support::{
-    HostManagedModelError, HostManagedModelErrorKind, HostManagedModelGateway,
-    HostManagedModelMessageRole, HostManagedModelRequest, HostManagedModelResponse,
-};
-use ironclaw_turns::run_profile::{
+use ironclaw_host_api::ids::{CapabilityId, ProviderToolName};
+use ironclaw_loop_contracts::{
     AgentLoopHostError, CapabilityCallCandidate, CapabilityInputRef, CapabilitySurfaceVersion,
     LoopCapabilityPort, ParentLoopOutput, ProviderToolCall, ProviderToolCallReplay,
     ProviderToolDefinition, RegisterProviderToolCallRequest, VisibleCapabilityRequest,
+};
+use ironclaw_loop_host::{
+    HostManagedModelError, HostManagedModelErrorKind, HostManagedModelGateway,
+    HostManagedModelMessageRole, HostManagedModelRequest, HostManagedModelResponse,
 };
 use thiserror::Error;
 
@@ -84,6 +84,22 @@ pub enum RebornModelReplayStep {
         calls: Vec<RebornScriptedProviderToolCall>,
         expected_tool_results: Vec<ExpectedToolResult>,
     },
+    /// Returns a model gateway error, simulating a provider failure (5xx,
+    /// unavailable, rejected request, …). Used to exercise the no-borking
+    /// failure path: the loop must surface a sanitized, retryable run failure
+    /// rather than a borking executor error.
+    ModelError {
+        kind: HostManagedModelErrorKind,
+        message: String,
+    },
+    /// Same as [`Self::ModelError`] but only matches requests whose messages
+    /// contain `request_contains`, so a scripted run can fail one specific
+    /// model call and answer others normally.
+    ModelErrorForRequest {
+        request_contains: String,
+        kind: HostManagedModelErrorKind,
+        message: String,
+    },
 }
 
 #[allow(dead_code)]
@@ -139,6 +155,10 @@ enum ReplayOutput {
         delay: Duration,
     },
     ProviderToolCalls(Vec<RebornScriptedProviderToolCall>),
+    ModelError {
+        kind: HostManagedModelErrorKind,
+        message: String,
+    },
 }
 
 impl RebornTraceReplayModelGateway {
@@ -248,6 +268,20 @@ impl RebornTraceReplayModelGateway {
                         request_contains: Some(request_contains),
                         expected_tool_results,
                     },
+                    RebornModelReplayStep::ModelError { kind, message } => ReplayStep {
+                        output: ReplayOutput::ModelError { kind, message },
+                        request_contains: None,
+                        expected_tool_results: Vec::new(),
+                    },
+                    RebornModelReplayStep::ModelErrorForRequest {
+                        request_contains,
+                        kind,
+                        message,
+                    } => ReplayStep {
+                        output: ReplayOutput::ModelError { kind, message },
+                        request_contains: Some(request_contains),
+                        expected_tool_results: Vec::new(),
+                    },
                 })
                 .collect(),
         )
@@ -312,6 +346,9 @@ impl HostManagedModelGateway for RebornTraceReplayModelGateway {
                 HostManagedModelErrorKind::InvalidRequest,
                 "trace replay provider tool calls require capability-aware model streaming",
             )),
+            ReplayOutput::ModelError { kind, message } => {
+                Err(HostManagedModelError::safe(kind, message))
+            }
         }
     }
 
@@ -350,6 +387,9 @@ impl HostManagedModelGateway for RebornTraceReplayModelGateway {
             }
             ReplayOutput::ProviderToolCalls(calls) => {
                 provider_tool_calls_response(&request, capabilities, calls).await
+            }
+            ReplayOutput::ModelError { kind, message } => {
+                Err(HostManagedModelError::safe(kind, message))
             }
         }
     }
@@ -407,12 +447,22 @@ async fn assert_provider_tools(
     capabilities: Arc<dyn LoopCapabilityPort>,
     capability_ids: &[CapabilityId],
 ) -> Result<(), HostManagedModelError> {
-    let definitions = provider_tool_definitions(&capabilities).await?;
-    for capability_id in capability_ids {
-        if !definitions
-            .iter()
-            .any(|definition| &definition.capability_id == capability_id)
-        {
+    // Hosted-MCP packages publish discovered tools asynchronously (bounded
+    // discovery retries under #6520), so re-check the surface briefly before
+    // failing — the contract is "advertised before the reply", not "at the
+    // first instant of the model call". Still fails if a tool never appears.
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let definitions = provider_tool_definitions(&capabilities).await?;
+        let missing = capability_ids.iter().find(|capability_id| {
+            !definitions
+                .iter()
+                .any(|definition| &definition.capability_id == *capability_id)
+        });
+        let Some(capability_id) = missing else {
+            return Ok(());
+        };
+        if tokio::time::Instant::now() >= deadline {
             return Err(HostManagedModelError::safe(
                 HostManagedModelErrorKind::InvalidRequest,
                 format!(
@@ -421,8 +471,8 @@ async fn assert_provider_tools(
                 ),
             ));
         }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    Ok(())
 }
 
 async fn provider_tool_definitions(
@@ -476,6 +526,7 @@ fn replay_step_summary(step: &ReplayStep) -> String {
         }
         ReplayOutput::DelayedResponse { .. } => "delayed_response",
         ReplayOutput::ProviderToolCalls(_) => "provider_tool_calls",
+        ReplayOutput::ModelError { .. } => "model_error",
     };
     let request_contains = step
         .request_contains
@@ -501,7 +552,7 @@ async fn provider_tool_calls_response(
             .find(|definition| definition.capability_id == call.capability_id)
             .ok_or_else(|| {
                 HostManagedModelError::safe(
-                    HostManagedModelErrorKind::InvalidRequest,
+                    HostManagedModelErrorKind::InvalidOutput,
                     format!(
                         "scripted capability {} was not advertised to the model",
                         call.capability_id.as_str()

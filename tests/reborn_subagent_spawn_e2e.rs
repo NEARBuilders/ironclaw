@@ -8,9 +8,9 @@ mod support;
 
 use std::time::Duration;
 
-use ironclaw_host_api::CapabilityId;
+use ironclaw_host_api::ids::CapabilityId;
 use ironclaw_host_runtime::READ_FILE_CAPABILITY_ID;
-use ironclaw_loop_support::{
+use ironclaw_loop_host::{
     DEFAULT_SPAWN_SUBAGENT_CAPABILITY_ID, HostManagedModelMessageRole, HostManagedModelResponse,
 };
 use ironclaw_turns::TurnStatus;
