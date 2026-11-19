@@ -37,6 +37,7 @@ jobs:
       include_docker: false
 
   nightly-alert:
+    timeout-minutes: 60
     name: Nightly Deep CI Alert
     runs-on: ubuntu-latest
     if: always() && github.event_name == 'schedule'

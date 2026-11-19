@@ -28,6 +28,7 @@ env:
 
 jobs:
   changes:
+    timeout-minutes: 60
     name: Detect code changes
     runs-on: ubuntu-latest
     outputs:
@@ -74,6 +75,7 @@ jobs:
           fi
 
   clippy-matrix:
+    timeout-minutes: 60
     name: Configure clippy matrix
     needs: changes
     if: needs.changes.outputs.has_code == 'true'
@@ -93,6 +95,7 @@ jobs:
           fi
 
   format:
+    timeout-minutes: 60
     name: Formatting
     needs: changes
     if: needs.changes.outputs.has_code == 'true'
@@ -110,6 +113,7 @@ jobs:
         run: cargo fmt --all -- --check
 
   gateway-js-syntax:
+    timeout-minutes: 60
     name: Gateway JS syntax
     needs: changes
     if: needs.changes.outputs.has_code == 'true'
@@ -129,6 +133,7 @@ jobs:
             -exec node --check {} +
 
   deny-check:
+    timeout-minutes: 60
     name: cargo-deny
     needs: changes
     if: needs.changes.outputs.has_code == 'true'
@@ -142,6 +147,7 @@ jobs:
         uses: EmbarkStudios/cargo-deny-action@3fd3802e88374d3fe9159b834c7714ec57d6c979 # v2
 
   clippy:
+    timeout-minutes: 60
     name: Clippy (${{ matrix.name }})
     needs: [changes, clippy-matrix]
     if: needs.changes.outputs.has_code == 'true'
@@ -167,6 +173,7 @@ jobs:
         run: cargo clippy --all --tests --examples ${{ matrix.flags }} -- -D warnings
 
   clippy-windows:
+    timeout-minutes: 60
     name: Clippy Windows (${{ matrix.name }})
     needs: [changes, clippy-matrix]
     if: needs.changes.outputs.has_code == 'true' && github.event_name == 'push'
@@ -192,6 +199,7 @@ jobs:
         run: cargo clippy --all --tests --examples ${{ matrix.flags }} -- -D warnings
 
   reborn-cli-smoke:
+    timeout-minutes: 60
     name: Reborn CLI smoke tests
     needs: changes
     if: needs.changes.outputs.has_reborn_cli == 'true'
@@ -222,6 +230,7 @@ jobs:
         run: cargo test -p ironclaw_architecture reborn
 
   no-panics:
+    timeout-minutes: 60
     name: No panics in production code
     needs: changes
     if: needs.changes.outputs.has_code == 'true' && github.event_name != 'push'
@@ -241,6 +250,7 @@ jobs:
         run: python3 scripts/check_no_panics.py --base "$BASE_SHA" --head HEAD
 
   gateway-boundaries:
+    timeout-minutes: 60
     name: Gateway platform/feature boundaries
     needs: changes
     if: needs.changes.outputs.has_code == 'true' || needs.changes.outputs.has_boundary_check == 'true'
@@ -259,6 +269,7 @@ jobs:
         run: python3 scripts/check_gateway_boundaries.py test
 
   code-style:
+    timeout-minutes: 60
     name: Code Style (fmt + clippy)
     runs-on: ubuntu-latest
     if: always()
