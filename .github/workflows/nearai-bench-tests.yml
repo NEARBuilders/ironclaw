@@ -25,6 +25,11 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded PR checks; keep every non-PR invocation independent.
+concurrency:
+  group: nearai-bench-tests.yml-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   parser:
     name: parser regex + guard fixtures

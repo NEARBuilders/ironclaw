@@ -43,6 +43,7 @@ env:
 
 jobs:
   coverage:
+    timeout-minutes: 60
     name: Coverage (${{ matrix.name }})
     runs-on: ubuntu-latest
     env:
@@ -241,6 +242,7 @@ jobs:
           if-no-files-found: ignore
 
   coverage-gate:
+    timeout-minutes: 60
     name: Coverage
     runs-on: ubuntu-latest
     if: always()

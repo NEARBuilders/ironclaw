@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   review:
+    timeout-minutes: 60
     name: Claude Code Review
     if: >
       github.event.issue.pull_request &&

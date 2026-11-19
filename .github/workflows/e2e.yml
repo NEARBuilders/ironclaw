@@ -22,6 +22,7 @@ concurrency:
 
 jobs:
   matrix-config:
+    timeout-minutes: 60
     name: Configure E2E matrix
     runs-on: ubuntu-latest
     outputs:
@@ -114,6 +115,7 @@ jobs:
           if-no-files-found: ignore
 
   e2e:
+    timeout-minutes: 60
     name: E2E Tests
     runs-on: ubuntu-latest
     if: always()

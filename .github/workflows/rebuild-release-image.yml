@@ -17,6 +17,7 @@ env:
 
 jobs:
   build:
+    timeout-minutes: 60
     name: Rebuild Historical Image
     runs-on: ubuntu-24.04
     permissions:

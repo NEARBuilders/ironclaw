@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   regression-test:
+    timeout-minutes: 60
     name: Regression test enforcement
     runs-on: ubuntu-latest
     steps:

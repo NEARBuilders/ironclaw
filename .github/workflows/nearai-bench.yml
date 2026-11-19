@@ -43,6 +43,7 @@ jobs:
   parse:
     # Tightened from `startsWith(body, '/benchmark')` to whole-word
     # match — `/benchmarking-something` no longer enters the parse path.
+    timeout-minutes: 60
     if: >-
       github.event.issue.pull_request != null
       && (

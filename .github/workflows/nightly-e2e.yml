@@ -24,6 +24,7 @@ jobs:
       mode: full
 
   nightly-alert:
+    timeout-minutes: 60
     name: Nightly E2E Alert
     runs-on: ubuntu-latest
     if: always() && github.event_name == 'schedule'

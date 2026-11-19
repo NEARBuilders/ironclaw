@@ -46,6 +46,7 @@ on:
 jobs:
   # Run 'dist plan' (or host) to determine what tasks we need to do
   plan:
+    timeout-minutes: 60
     runs-on: "ubuntu-22.04"
     outputs:
       val: ${{ steps.plan.outputs.manifest }}
@@ -95,6 +96,7 @@ jobs:
 
   # Build and packages all the platform-specific things
   build-local-artifacts:
+    timeout-minutes: 60
     name: build-local-artifacts (${{ join(matrix.targets, ', ') }})
     # Wait for WASM extensions so we can patch manifests with SHA256 checksums
     # before build.rs bakes them into the embedded catalog.
@@ -218,6 +220,7 @@ jobs:
 
   # Build and package all the platform-agnostic(ish) things
   build-global-artifacts:
+    timeout-minutes: 60
     needs:
       - plan
       - build-local-artifacts
@@ -267,6 +270,7 @@ jobs:
             ${{ env.BUILD_MANIFEST_NAME }}
   # Build WASM extension bundles (tar.gz with .wasm + .capabilities.json)
   build-wasm-extensions:
+    timeout-minutes: 60
     needs:
       - plan
     if: ${{ needs.plan.outputs.publishing == 'true' }}
@@ -397,6 +401,7 @@ jobs:
 
   # Determines if we should publish/announce
   host:
+    timeout-minutes: 60
     needs:
       - plan
       - build-local-artifacts
@@ -486,6 +491,7 @@ jobs:
   # Commit patched manifest SHA256 checksums back to main so the repo
   # stays in sync with the released artifacts.
   update-registry-checksums:
+    timeout-minutes: 60
     needs:
       - plan
       - host
@@ -561,6 +567,7 @@ jobs:
           fi
 
   announce:
+    timeout-minutes: 60
     needs:
       - plan
       - host

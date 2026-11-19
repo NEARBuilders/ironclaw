@@ -9,6 +9,7 @@ jobs:
 
   # Release unpublished packages.
   release-plz-release:
+    timeout-minutes: 60
     if: ${{ github.repository_owner == 'nearai' }}
     name: Release-plz release
     runs-on: ubuntu-latest
@@ -45,6 +46,7 @@ jobs:
 
   # Create a PR with the new versions and changelog, preparing the next release.
   release-plz-pr:
+    timeout-minutes: 60
     if: ${{ github.repository_owner == 'nearai' }}
     name: Release-plz PR
     runs-on: ubuntu-latest
